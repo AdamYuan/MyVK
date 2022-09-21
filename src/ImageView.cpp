@@ -20,13 +20,6 @@ Ptr<ImageView> ImageView::Create(const Ptr<ImageBase> &image, VkImageViewType vi
 	return Create(image, create_info);
 }
 
-#ifdef MYVK_ENABLE_GLFW
-Ptr<ImageView> ImageView::Create(const Ptr<SwapchainImage> &swapchain_image) {
-	return Create(swapchain_image, VK_IMAGE_VIEW_TYPE_2D, swapchain_image->GetSwapchainPtr()->GetImageFormat(),
-	              VK_IMAGE_ASPECT_COLOR_BIT);
-}
-#endif
-
 Ptr<ImageView> ImageView::Create(const Ptr<ImageBase> &image, VkImageViewType view_type,
                                  VkImageAspectFlags aspect_mask) {
 	return Create(image, view_type, image->GetFormat(), aspect_mask, 0, image->GetMipLevels(), 0,

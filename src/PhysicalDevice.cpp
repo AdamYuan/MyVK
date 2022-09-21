@@ -1,5 +1,4 @@
 #include "myvk/PhysicalDevice.hpp"
-#include "myvk/Surface.hpp"
 
 namespace myvk {
 void PhysicalDevice::initialize(const Ptr<Instance> &instance, VkPhysicalDevice physical_device) {
@@ -31,14 +30,4 @@ std::vector<Ptr<PhysicalDevice>> PhysicalDevice::Fetch(const Ptr<Instance> &inst
 	}
 	return ret;
 }
-
-#ifdef MYVK_ENABLE_GLFW
-bool PhysicalDevice::GetSurfaceSupport(uint32_t queue_family_index, const Ptr<Surface> &surface) const {
-	VkBool32 support;
-	if (vkGetPhysicalDeviceSurfaceSupportKHR(m_physical_device, queue_family_index, surface->GetHandle(), &support) !=
-	    VK_SUCCESS)
-		return false;
-	return support;
-}
-#endif
 } // namespace myvk

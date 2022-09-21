@@ -5,10 +5,26 @@ namespace myvk {
 Ptr<ImagelessFramebuffer>
 ImagelessFramebuffer::Create(const Ptr<RenderPass> &render_pass,
                              const std::vector<VkFramebufferAttachmentImageInfo> &attachment_image_infos) {
-	auto ret = std::make_shared<ImagelessFramebuffer>();
-	ret->m_render_pass_ptr = render_pass;
 	return Create(render_pass, attachment_image_infos,
 	              {attachment_image_infos[0].width, attachment_image_infos[0].height}, 1);
+}
+
+Ptr<ImagelessFramebuffer> ImagelessFramebuffer::Create(const Ptr<myvk::RenderPass> &render_pass,
+                                                       const std::vector<Ptr<ImageView>> &template_image_views) {
+	uint32_t count = template_image_views.size();
+	std::vector<VkFramebufferAttachmentImageInfo> infos(count);
+	for (uint32_t i = 0; i < count; ++i)
+		infos[i] = template_image_views[i]->GetFramebufferAttachmentImageInfo();
+	return Create(render_pass, infos);
+}
+
+Ptr<ImagelessFramebuffer> ImagelessFramebuffer::Create(const Ptr<myvk::RenderPass> &render_pass,
+                                                       const std::vector<Ptr<ImageBase>> &template_images) {
+	uint32_t count = template_images.size();
+	std::vector<VkFramebufferAttachmentImageInfo> infos(count);
+	for (uint32_t i = 0; i < count; ++i)
+		infos[i] = template_images[i]->GetFramebufferAttachmentImageInfo();
+	return Create(render_pass, infos);
 }
 
 Ptr<ImagelessFramebuffer>

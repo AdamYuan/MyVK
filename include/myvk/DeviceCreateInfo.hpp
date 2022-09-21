@@ -38,6 +38,12 @@ private:
 	friend class Device;
 
 public:
+	inline DeviceCreateInfo() = default;
+	inline DeviceCreateInfo(const Ptr<PhysicalDevice> &physical_device, const QueueSelectorFunc &queue_selector_func,
+	                        const std::vector<const char *> &extensions, bool use_allocator = true,
+	                        bool use_pipeline_cache = true) {
+		Initialize(physical_device, queue_selector_func, extensions, use_allocator, use_pipeline_cache);
+	}
 	void Initialize(const Ptr<PhysicalDevice> &physical_device, const QueueSelectorFunc &queue_selector_func,
 	                const std::vector<const char *> &extensions, bool use_allocator = true,
 	                bool use_pipeline_cache = true);

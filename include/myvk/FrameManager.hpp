@@ -14,23 +14,26 @@
 
 namespace myvk {
 class FrameManager : public DeviceObjectBase {
-private:
-	bool m_resized{false};
-	uint32_t m_current_frame{0}, m_current_image_index, m_frame_count;
+public:
+	using ResizeFunc = std::function<void(const FrameManager &)>;
 
-	Ptr<Swapchain> m_swapchain;
-	std::vector<Ptr<SwapchainImage>> m_swapchain_images;
-	std::vector<Ptr<ImageView>> m_swapchain_image_views;
-	std::vector<const Fence *> m_image_fences;
+private:
+	mutable bool m_resized{false};
+	mutable uint32_t m_current_frame{0}, m_current_image_index, m_frame_count;
+	mutable ResizeFunc m_resize_func;
+
+	mutable Ptr<Swapchain> m_swapchain;
+	mutable std::vector<Ptr<SwapchainImage>> m_swapchain_images;
+	mutable std::vector<Ptr<ImageView>> m_swapchain_image_views;
+	mutable std::vector<const Fence *> m_image_fences;
+
 	std::vector<Ptr<Fence>> m_frame_fences;
 	std::vector<Ptr<Semaphore>> m_render_done_semaphores, m_acquire_done_semaphores;
 	std::vector<Ptr<myvk::CommandBuffer>> m_frame_command_buffers;
 
-	std::function<void(const FrameManager &)> m_resize_func;
-
 	void initialize(const Ptr<Queue> &graphics_queue, const Ptr<PresentQueue> &present_queue, bool use_vsync,
 	                uint32_t frame_count = 3, VkImageUsageFlags image_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-	void recreate_swapchain();
+	void recreate_swapchain() const;
 
 public:
 	static Ptr<FrameManager> Create(const Ptr<Queue> &graphics_queue, const Ptr<PresentQueue> &present_queue,
@@ -41,11 +44,11 @@ public:
 
 	inline const Ptr<myvk::Device> &GetDevicePtr() const override { return m_swapchain->GetDevicePtr(); }
 
-	void SetResizeFunc(const std::function<void(const FrameManager &)> &resize_func) { m_resize_func = resize_func; }
-	void Resize() { m_resized = true; }
+	void SetResizeFunc(const ResizeFunc &resize_func) const { m_resize_func = resize_func; }
+	void Resize() const { m_resized = true; }
 
-	bool NewFrame();
-	void Render();
+	bool NewFrame() const;
+	void Render() const;
 
 	void WaitIdle() const;
 

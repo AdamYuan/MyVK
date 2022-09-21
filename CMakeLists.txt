@@ -46,22 +46,20 @@ target_include_directories(MyVK_Vulkan PUBLIC include)
 target_link_libraries(MyVK_Vulkan PUBLIC MyVK_Dep_Vulkan)
 
 add_library(MyVK_GLFW STATIC
-        # Direct sources
-        src/Surface.cpp
-        src/Swapchain.cpp
-        src/SwapchainImage.cpp
-        src/FrameManager.cpp
-        # Affected sources
-        src/Instance.cpp
-        src/PhysicalDevice.cpp
-        src/ImageView.cpp
+        src/glfw/Surface.cpp
+        src/glfw/Swapchain.cpp
+        src/glfw/SwapchainImage.cpp
+        src/glfw/FrameManager.cpp
+        src/glfw/Instance.cpp
+        src/glfw/PhysicalDevice.cpp
+        src/glfw/ImageView.cpp
         )
 add_library(myvk::glfw ALIAS MyVK_GLFW)
 target_compile_definitions(MyVK_GLFW PUBLIC MYVK_ENABLE_GLFW)
 target_link_libraries(MyVK_GLFW PUBLIC MyVK_Vulkan MyVK_Dep_GLFW)
 
 add_library(MyVK_ImGui STATIC
-        src/ImGuiRenderer.cpp
+        src/imgui/ImGuiRenderer.cpp
         )
 add_library(myvk::imgui ALIAS MyVK_ImGui)
 target_compile_definitions(MyVK_ImGui PUBLIC MYVK_ENABLE_IMGUI)

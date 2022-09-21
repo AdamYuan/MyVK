@@ -2,7 +2,7 @@
 
 namespace myvk {
 
-void FrameManager::recreate_swapchain() {
+void FrameManager::recreate_swapchain() const {
 	GLFWwindow *window = m_swapchain->GetPresentQueuePtr()->GetSurfacePtr()->GetGlfwWindow();
 	int width = 0, height = 0;
 	glfwGetFramebufferSize(window, &width, &height);
@@ -46,7 +46,7 @@ void FrameManager::initialize(const Ptr<Queue> &graphics_queue, const Ptr<Presen
 	}
 }
 
-bool FrameManager::NewFrame() {
+bool FrameManager::NewFrame() const {
 	m_frame_fences[m_current_frame]->Wait();
 
 	VkResult result =
@@ -70,7 +70,7 @@ bool FrameManager::NewFrame() {
 	return true;
 }
 
-void FrameManager::Render() {
+void FrameManager::Render() const {
 	m_frame_fences[m_current_frame]->Reset();
 	m_frame_command_buffers[m_current_frame]->Submit(
 	    {{m_acquire_done_semaphores[m_current_frame], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT}},

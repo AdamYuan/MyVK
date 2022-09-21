@@ -12,6 +12,10 @@ inline void ImGuiInit(GLFWwindow *window) {
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForVulkan(window, true);
 }
+inline void ImGuiNewFrame() {
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+}
 } // namespace myvk
 
 #endif // MYVK_IMGUIHELPER_HPP

@@ -50,6 +50,12 @@ public:
 		                                     new_layout, src_queue_family, dst_queue_family);
 	}
 
+	inline VkFramebufferAttachmentImageInfo GetFramebufferAttachmentImageInfo() const {
+		VkFramebufferAttachmentImageInfo ret{m_image_ptr->GetFramebufferAttachmentImageInfo()};
+		ret.layerCount = m_subresource_range.layerCount;
+		return ret;
+	}
+
 	~ImageView() override;
 };
 } // namespace myvk

@@ -78,7 +78,7 @@ public:
 	                                      VkImageLayout new_layout, uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                      uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const;
 
-	VkFramebufferAttachmentImageInfo GetFramebufferAttachmentImageInfo() const {
+	inline VkFramebufferAttachmentImageInfo GetFramebufferAttachmentImageInfo() const {
 		VkFramebufferAttachmentImageInfo ret = {VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO};
 		ret.usage = m_usage;
 		ret.width = m_extent.width;
