@@ -15,7 +15,7 @@ int main() {
 	myvk::Ptr<myvk::Queue> generic_queue;
 	myvk::Ptr<myvk::PresentQueue> present_queue;
 	{
-		auto instance = myvk::Instance::CreateWithGlfwExtensions(false);
+		auto instance = myvk::Instance::CreateWithGlfwExtensions(true);
 		auto surface = myvk::Surface::Create(instance, window);
 		device = myvk::Device::Create({myvk::PhysicalDevice::Fetch(instance)[0],
 		                               myvk::GenericPresentQueueSelector{&generic_queue, surface, &present_queue},
@@ -74,6 +74,7 @@ int main() {
 		}
 	}
 
+	frame_manager->WaitIdle();
 	glfwTerminate();
 	return 0;
 }
