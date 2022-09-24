@@ -15,6 +15,7 @@ class Device {
 private:
 	Ptr<PhysicalDevice> m_physical_device_ptr;
 
+	PhysicalDeviceFeatures m_features;
 	VkDevice m_device{VK_NULL_HANDLE};
 	VkPipelineCache m_pipeline_cache{VK_NULL_HANDLE};
 	VmaAllocator m_allocator{VK_NULL_HANDLE};
@@ -30,13 +31,11 @@ public:
 	static Ptr<Device> Create(const Ptr<PhysicalDevice> &physical_device, const QueueSelectorFunc &queue_selector_func,
 	                          const PhysicalDeviceFeatures &features, const std::vector<const char *> &extensions);
 
-	VmaAllocator GetAllocatorHandle() const { return m_allocator; }
-
-	VkPipelineCache GetPipelineCacheHandle() const { return m_pipeline_cache; }
-
-	const Ptr<PhysicalDevice> &GetPhysicalDevicePtr() const { return m_physical_device_ptr; }
-
-	VkDevice GetHandle() const { return m_device; }
+	inline VmaAllocator GetAllocatorHandle() const { return m_allocator; }
+	inline VkPipelineCache GetPipelineCacheHandle() const { return m_pipeline_cache; }
+	inline const Ptr<PhysicalDevice> &GetPhysicalDevicePtr() const { return m_physical_device_ptr; }
+	inline VkDevice GetHandle() const { return m_device; }
+	inline const PhysicalDeviceFeatures &GetEnabledFeatures() const { return m_features; }
 
 	VkResult WaitIdle() const;
 

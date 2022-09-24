@@ -46,6 +46,7 @@ Ptr<Device> Device::Create(const Ptr<PhysicalDevice> &physical_device, const Que
 		return nullptr;
 	if (ret->create_pipeline_cache() != VK_SUCCESS)
 		return nullptr;
+	ret->m_features = features;
 	queue_resolver.FetchDeviceQueues(ret);
 	return ret;
 }

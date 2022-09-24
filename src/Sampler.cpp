@@ -25,7 +25,7 @@ Ptr<Sampler> Sampler::Create(const Ptr<Device> &device, VkFilter filter, VkSampl
 	create_info.compareOp = VK_COMPARE_OP_NEVER;
 	create_info.minLod = 0.0f;
 	create_info.maxLod = (float)mipmap_level;
-	if (device->GetPhysicalDevicePtr()->GetFeatures().vk10.samplerAnisotropy) {
+	if (device->GetEnabledFeatures().vk10.samplerAnisotropy) {
 		create_info.anisotropyEnable = request_anisotropy ? VK_TRUE : VK_FALSE;
 		create_info.maxAnisotropy = max_anisotropy;
 	} else {
@@ -58,7 +58,7 @@ Ptr<Sampler> Sampler::CreateClampToBorder(const Ptr<Device> &device, VkFilter fi
 	create_info.compareOp = VK_COMPARE_OP_NEVER;
 	create_info.minLod = 0.0f;
 	create_info.maxLod = (float)mipmap_level;
-	if (device->GetPhysicalDevicePtr()->GetFeatures().vk10.samplerAnisotropy) {
+	if (device->GetEnabledFeatures().vk10.samplerAnisotropy) {
 		create_info.anisotropyEnable = request_anisotropy ? VK_TRUE : VK_FALSE;
 		create_info.maxAnisotropy = max_anisotropy;
 	} else {
