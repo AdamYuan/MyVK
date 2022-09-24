@@ -1,9 +1,9 @@
 #ifndef MYVK_DEVICE_HPP
 #define MYVK_DEVICE_HPP
 
-#include "DeviceCreateInfo.hpp"
 #include "PhysicalDevice.hpp"
 #include "Ptr.hpp"
+#include "QueueSelector.hpp"
 #include "Surface.hpp"
 #include "vk_mem_alloc.h"
 #include "volk.h"
@@ -22,13 +22,13 @@ private:
 	VkResult create_allocator();
 
 	VkResult create_device(const std::vector<VkDeviceQueueCreateInfo> &queue_create_infos,
-	                       const std::vector<const char *> &extensions, void *p_next);
+	                       const std::vector<const char *> &extensions, const PhysicalDeviceFeatures &features);
 
 	VkResult create_pipeline_cache();
 
 public:
-	// TODO: enable custom device features
-	static Ptr<Device> Create(const DeviceCreateInfo &device_create_info, void *p_next = nullptr);
+	static Ptr<Device> Create(const Ptr<PhysicalDevice> &physical_device, const QueueSelectorFunc &queue_selector_func,
+	                          const std::vector<const char *> &extensions, const PhysicalDeviceFeatures &features);
 
 	VmaAllocator GetAllocatorHandle() const { return m_allocator; }
 

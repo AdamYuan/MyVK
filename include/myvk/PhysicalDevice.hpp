@@ -2,53 +2,89 @@
 #define MYVK_PHYSICAL_DEVICE_HPP
 
 #include "Instance.hpp"
+#include "QueueSelector.hpp"
 
 #include "volk.h"
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 #include <vulkan/vulkan.h>
 
 namespace myvk {
 class Surface;
-class PhysicalDevice {
+struct PhysicalDeviceProperties {
+	VkPhysicalDeviceProperties vk10{};
+	VkPhysicalDeviceVulkan11Properties vk11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES, &vk12};
+	VkPhysicalDeviceVulkan12Properties vk12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES, nullptr};
+	// VkPhysicalDeviceVulkan13Properties vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+	inline PhysicalDeviceProperties() = default;
+	inline PhysicalDeviceProperties(const PhysicalDeviceProperties &r)
+	    : vk10{r.vk10}, vk11{r.vk11}, vk12{r.vk12} /* , vk13{r.vk13}*/ {
+		vk11.pNext = &vk12;
+		vk12.pNext = nullptr;
+	}
+	inline PhysicalDeviceProperties &operator=(const PhysicalDeviceProperties &r) {
+		vk10 = r.vk10;
+		vk11 = r.vk11;
+		vk12 = r.vk12;
+		// vk13 = r.vk13;
+		vk11.pNext = &vk12;
+		vk12.pNext = nullptr;
+		return *this;
+	}
+};
+struct PhysicalDeviceFeatures {
+	VkPhysicalDeviceFeatures vk10{};
+	VkPhysicalDeviceVulkan11Features vk11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, &vk12};
+	VkPhysicalDeviceVulkan12Features vk12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, nullptr};
+	// VkPhysicalDeviceVulkan13Features vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+	inline PhysicalDeviceFeatures() = default;
+	inline PhysicalDeviceFeatures(const PhysicalDeviceFeatures &r)
+	    : vk10{r.vk10}, vk11{r.vk11}, vk12{r.vk12} /*, vk13{r.vk13}*/ {
+		vk11.pNext = &vk12;
+		vk12.pNext = nullptr;
+	}
+	inline PhysicalDeviceFeatures &operator=(const PhysicalDeviceFeatures &r) {
+		vk10 = r.vk10;
+		vk11 = r.vk11;
+		vk12 = r.vk12;
+		// vk13 = r.vk13;
+		vk11.pNext = &vk12;
+		vk12.pNext = nullptr;
+		return *this;
+	}
+};
+class PhysicalDevice : private std::enable_shared_from_this<PhysicalDevice> {
 private:
 	Ptr<Instance> m_instance_ptr;
 
 	VkPhysicalDevice m_physical_device{VK_NULL_HANDLE};
 
-	VkPhysicalDeviceMemoryProperties m_memory_properties;
-	VkPhysicalDeviceFeatures m_features;
-	VkPhysicalDeviceVulkan11Features m_vk11_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
-	                                                 &m_vk12_features};
-	VkPhysicalDeviceVulkan12Features m_vk12_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-	                                                 &m_vk13_features};
-	VkPhysicalDeviceVulkan13Features m_vk13_features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
-	VkPhysicalDeviceProperties m_properties;
-	VkPhysicalDeviceVulkan11Properties m_vk11_properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
-	                                                     &m_vk12_properties};
-	VkPhysicalDeviceVulkan12Properties m_vk12_properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
-	                                                     &m_vk13_properties};
-	VkPhysicalDeviceVulkan13Properties m_vk13_properties{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+	VkPhysicalDeviceMemoryProperties m_memory_properties{};
+	PhysicalDeviceFeatures m_features;
+	PhysicalDeviceProperties m_properties;
 	std::vector<VkQueueFamilyProperties> m_queue_family_properties;
-
-	void initialize(const Ptr<Instance> &instance, VkPhysicalDevice physical_device);
+	std::map<std::string, uint32_t> m_extensions;
 
 public:
+	PhysicalDevice(const Ptr<Instance> &instance, VkPhysicalDevice physical_device);
 	static std::vector<Ptr<PhysicalDevice>> Fetch(const Ptr<Instance> &instance);
 
-	const Ptr<Instance> &GetInstancePtr() const { return m_instance_ptr; }
-	VkPhysicalDevice GetHandle() const { return m_physical_device; }
-	const VkPhysicalDeviceMemoryProperties &GetMemoryProperties() const { return m_memory_properties; }
-	const VkPhysicalDeviceProperties &GetProperties() const { return m_properties; }
-	const VkPhysicalDeviceVulkan11Properties &GetVk11Properties() const { return m_vk11_properties; }
-	const VkPhysicalDeviceVulkan12Properties &GetVk12Properties() const { return m_vk12_properties; }
-	const VkPhysicalDeviceVulkan13Properties &GetVk13Properties() const { return m_vk13_properties; }
-	const VkPhysicalDeviceFeatures &GetFeatures() const { return m_features; }
-	const VkPhysicalDeviceVulkan11Features &GetVk11Features() const { return m_vk11_features; }
-	const VkPhysicalDeviceVulkan12Features &GetVk12Features() const { return m_vk12_features; }
-	const VkPhysicalDeviceVulkan13Features &GetVk13Features() const { return m_vk13_features; }
-	const std::vector<VkQueueFamilyProperties> &GetQueueFamilyProperties() const { return m_queue_family_properties; }
-	bool GetSurfaceSupport(uint32_t queue_family_index, const Ptr<Surface> &surface) const;
+	inline const Ptr<Instance> &GetInstancePtr() const { return m_instance_ptr; }
+	inline VkPhysicalDevice GetHandle() const { return m_physical_device; }
+	inline const PhysicalDeviceProperties &GetProperties() const { return m_properties; }
+	inline const PhysicalDeviceFeatures &GetFeatures() const { return m_features; }
+	inline const VkPhysicalDeviceMemoryProperties &GetMemoryProperties() const { return m_memory_properties; }
+	inline const std::vector<VkQueueFamilyProperties> &GetQueueFamilyProperties() const {
+		return m_queue_family_properties;
+	}
+	bool GetExtensionSupport(const std::string &extension_name, uint32_t *p_version = nullptr) const;
+	bool GetQueueSupport(const QueueSelectorFunc &queue_selector_func) const;
+	PhysicalDeviceFeatures GetDefaultFeatures() const;
+#ifdef MYVK_ENABLE_GLFW
+	bool GetQueueSurfaceSupport(uint32_t queue_family_index, const Ptr<Surface> &surface) const;
+#endif
 };
 } // namespace myvk
 

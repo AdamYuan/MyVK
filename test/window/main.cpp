@@ -1,9 +1,9 @@
-#include <myvk/FrameManager.hpp>
-#include <myvk/GLFWHelper.hpp>
-#include <myvk/ImGuiHelper.hpp>
-#include <myvk/ImGuiRenderer.hpp>
-#include <myvk/Instance.hpp>
-#include <myvk/Queue.hpp>
+#include "myvk/FrameManager.hpp"
+#include "myvk/GLFWHelper.hpp"
+#include "myvk/ImGuiHelper.hpp"
+#include "myvk/ImGuiRenderer.hpp"
+#include "myvk/Instance.hpp"
+#include "myvk/Queue.hpp"
 
 constexpr uint32_t kFrameCount = 3;
 
@@ -15,11 +15,12 @@ int main() {
 	myvk::Ptr<myvk::Queue> generic_queue;
 	myvk::Ptr<myvk::PresentQueue> present_queue;
 	{
-		auto instance = myvk::Instance::CreateWithGlfwExtensions(true);
+		auto instance = myvk::Instance::CreateWithGlfwExtensions();
 		auto surface = myvk::Surface::Create(instance, window);
-		device = myvk::Device::Create({myvk::PhysicalDevice::Fetch(instance)[0],
-		                               myvk::GenericPresentQueueSelector{&generic_queue, surface, &present_queue},
-		                               {VK_KHR_SWAPCHAIN_EXTENSION_NAME}});
+		auto physical_device = myvk::PhysicalDevice::Fetch(instance)[0];
+		device = myvk::Device::Create(physical_device,
+		                              myvk::GenericPresentQueueSelector{&generic_queue, surface, &present_queue},
+		                              {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME}, physical_device->GetDefaultFeatures());
 	}
 
 	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);

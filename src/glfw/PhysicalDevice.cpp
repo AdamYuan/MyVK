@@ -2,7 +2,7 @@
 #include "myvk/Surface.hpp"
 
 namespace myvk {
-bool PhysicalDevice::GetSurfaceSupport(uint32_t queue_family_index, const Ptr<Surface> &surface) const {
+bool PhysicalDevice::GetQueueSurfaceSupport(uint32_t queue_family_index, const Ptr<Surface> &surface) const {
 	VkBool32 support;
 	if (vkGetPhysicalDeviceSurfaceSupportKHR(m_physical_device, queue_family_index, surface->GetHandle(), &support) !=
 	    VK_SUCCESS)

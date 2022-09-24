@@ -21,7 +21,6 @@ add_library(MyVK_Vulkan STATIC
         src/PhysicalDevice.cpp
         src/Queue.cpp
         src/QueueSelector.cpp
-        src/DeviceCreateInfo.cpp
         src/Fence.cpp
         src/Semaphore.cpp
         src/ImageView.cpp
@@ -53,6 +52,7 @@ add_library(MyVK_GLFW STATIC
         src/glfw/Instance.cpp
         src/glfw/PhysicalDevice.cpp
         src/glfw/ImageView.cpp
+        src/glfw/QueueSelector.cpp
         )
 add_library(myvk::glfw ALIAS MyVK_GLFW)
 target_compile_definitions(MyVK_GLFW PUBLIC MYVK_ENABLE_GLFW)
@@ -78,7 +78,7 @@ endif ()
 
 # Testings
 if (MYVK_TESTING)
-    add_executable(MyVK_Test test/main.cpp)
-    target_link_libraries(MyVK_Test PRIVATE myvk::vulkan myvk::glfw myvk::imgui)
+    add_executable(MyVK_TestWindow test/window/main.cpp)
+    target_link_libraries(MyVK_TestWindow PRIVATE myvk::vulkan myvk::glfw myvk::imgui)
 endif ()
 
