@@ -37,11 +37,21 @@ public:
 	inline QueueSelection(const Ptr<Surface> &surface, Ptr<PresentQueue> *p_present_queue, uint32_t family,
 	                      uint32_t index_specifier)
 	    : m_p_queue{(Ptr<Queue> *)p_present_queue}, m_surface{surface}, m_family{family}, m_index_specifier{
-	                                                                                         index_specifier} {}
+	                                                                                          index_specifier} {}
 #endif
 };
 
 using QueueSelectorFunc = std::function<std::vector<QueueSelection>(const Ptr<PhysicalDevice> &)>;
+
+// default queue selectors
+class GenericQueueSelector {
+private:
+	Ptr<Queue> *m_p_generic_queue;
+
+public:
+	inline explicit GenericQueueSelector(Ptr<Queue> *p_generic_queue) : m_p_generic_queue{p_generic_queue} {}
+	std::vector<QueueSelection> operator()(const Ptr<PhysicalDevice> &) const;
+};
 
 #ifdef MYVK_ENABLE_GLFW
 // default queue selectors

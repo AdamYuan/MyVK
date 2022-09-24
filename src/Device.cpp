@@ -27,7 +27,7 @@ Device::~Device() {
 }
 
 Ptr<Device> Device::Create(const Ptr<PhysicalDevice> &physical_device, const QueueSelectorFunc &queue_selector_func,
-                           const std::vector<const char *> &extensions, const PhysicalDeviceFeatures &features) {
+                           const PhysicalDeviceFeatures &features, const std::vector<const char *> &extensions) {
 	auto ret = std::make_shared<Device>();
 	ret->m_physical_device_ptr = physical_device;
 

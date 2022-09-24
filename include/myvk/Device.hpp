@@ -28,7 +28,7 @@ private:
 
 public:
 	static Ptr<Device> Create(const Ptr<PhysicalDevice> &physical_device, const QueueSelectorFunc &queue_selector_func,
-	                          const std::vector<const char *> &extensions, const PhysicalDeviceFeatures &features);
+	                          const PhysicalDeviceFeatures &features, const std::vector<const char *> &extensions);
 
 	VmaAllocator GetAllocatorHandle() const { return m_allocator; }
 

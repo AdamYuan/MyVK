@@ -15,7 +15,8 @@ private:
 	VkDebugUtilsMessengerEXT m_debug_messenger{VK_NULL_HANDLE};
 
 public:
-	static Ptr<Instance> Create(const VkInstanceCreateInfo &create_info);
+	static Ptr<Instance> Create(const std::vector<const char *> &extensions, bool use_validation_layer = false,
+	                            PFN_vkDebugUtilsMessengerCallbackEXT debug_callback = nullptr);
 #ifdef MYVK_ENABLE_GLFW
 	static Ptr<Instance> CreateWithGlfwExtensions(bool use_validation_layer = false,
 	                                              PFN_vkDebugUtilsMessengerCallbackEXT debug_callback = nullptr);
