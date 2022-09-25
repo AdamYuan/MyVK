@@ -14,7 +14,7 @@
 #include "Sampler.hpp"
 
 namespace myvk {
-class ImGuiRenderer {
+class ImGuiRenderer : public Base {
 private:
 	Ptr<Image> m_font_texture;
 	Ptr<ImageView> m_font_texture_view;
@@ -39,6 +39,7 @@ private:
 	                        uint32_t current_frame) const;
 
 public:
+	inline ~ImGuiRenderer() override = default;
 	void Initialize(const Ptr<CommandPool> &command_pool, const Ptr<RenderPass> &render_pass, uint32_t subpass,
 	                uint32_t frame_count);
 

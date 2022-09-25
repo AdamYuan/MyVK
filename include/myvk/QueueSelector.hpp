@@ -41,7 +41,7 @@ public:
 #endif
 };
 
-using QueueSelectorFunc = std::function<std::vector<QueueSelection>(const Ptr<PhysicalDevice> &)>;
+using QueueSelectorFunc = std::function<std::vector<QueueSelection>(const Ptr<const PhysicalDevice> &)>;
 
 // default queue selectors
 class GenericQueueSelector {
@@ -50,7 +50,7 @@ private:
 
 public:
 	inline explicit GenericQueueSelector(Ptr<Queue> *p_generic_queue) : m_p_generic_queue{p_generic_queue} {}
-	std::vector<QueueSelection> operator()(const Ptr<PhysicalDevice> &) const;
+	std::vector<QueueSelection> operator()(const Ptr<const PhysicalDevice> &) const;
 };
 
 #ifdef MYVK_ENABLE_GLFW
@@ -64,7 +64,7 @@ private:
 public:
 	GenericPresentQueueSelector(Ptr<Queue> *p_generic_queue, const Ptr<Surface> &surface,
 	                            Ptr<PresentQueue> *p_present_queue);
-	std::vector<QueueSelection> operator()(const Ptr<PhysicalDevice> &) const;
+	std::vector<QueueSelection> operator()(const Ptr<const PhysicalDevice> &) const;
 };
 
 // default queue selectors
@@ -77,7 +77,7 @@ private:
 public:
 	GenericPresentTransferQueueSelector(Ptr<Queue> *p_generic_queue, Ptr<Queue> *p_transfer_queue,
 	                                    const Ptr<Surface> &surface, Ptr<PresentQueue> *p_present_queue);
-	std::vector<QueueSelection> operator()(const Ptr<PhysicalDevice> &) const;
+	std::vector<QueueSelection> operator()(const Ptr<const PhysicalDevice> &) const;
 };
 #endif
 

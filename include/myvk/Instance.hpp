@@ -1,6 +1,7 @@
 #ifndef MYVK_INSTANCE_HPP
 #define MYVK_INSTANCE_HPP
 
+#include "Base.hpp"
 #include "Ptr.hpp"
 #include "volk.h"
 #include <memory>
@@ -9,7 +10,7 @@
 namespace myvk {
 constexpr const char *kValidationLayers[] = {"VK_LAYER_KHRONOS_validation"};
 
-class Instance {
+class Instance : public Base {
 private:
 	VkInstance m_instance{VK_NULL_HANDLE};
 	VkDebugUtilsMessengerEXT m_debug_messenger{VK_NULL_HANDLE};
@@ -24,7 +25,7 @@ public:
 
 	VkInstance GetHandle() const { return m_instance; }
 
-	~Instance();
+	~Instance() override;
 };
 } // namespace myvk
 

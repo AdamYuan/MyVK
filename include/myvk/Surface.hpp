@@ -3,14 +3,16 @@
 #ifndef MYVK_SURFACE_HPP
 #define MYVK_SURFACE_HPP
 
-#include "volk.h"
+#include <volk.h>
 
-#include "GLFW/glfw3.h"
+#include <GLFW/glfw3.h>
+
+#include "Base.hpp"
 #include "Instance.hpp"
 #include <memory>
 
 namespace myvk {
-class Surface {
+class Surface : public Base {
 private:
 	Ptr<Instance> m_instance_ptr;
 	GLFWwindow *m_window{nullptr};
@@ -24,7 +26,7 @@ public:
 
 	GLFWwindow *GetGlfwWindow() const { return m_window; }
 
-	~Surface();
+	~Surface() override;
 };
 } // namespace myvk
 

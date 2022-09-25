@@ -4,7 +4,7 @@
 
 namespace myvk {
 
-std::vector<QueueSelection> GenericQueueSelector::operator()(const Ptr<PhysicalDevice> &physical_device) const {
+std::vector<QueueSelection> GenericQueueSelector::operator()(const Ptr<const PhysicalDevice> &physical_device) const {
 	const auto &families = physical_device->GetQueueFamilyProperties();
 	if (families.empty())
 		return {};

@@ -11,7 +11,7 @@
 #include <vector>
 
 namespace myvk {
-class Device {
+class Device : public Base {
 private:
 	Ptr<PhysicalDevice> m_physical_device_ptr;
 
@@ -39,7 +39,7 @@ public:
 
 	VkResult WaitIdle() const;
 
-	~Device();
+	~Device() override;
 };
 } // namespace myvk
 

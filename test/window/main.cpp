@@ -4,6 +4,7 @@
 #include "myvk/ImGuiRenderer.hpp"
 #include "myvk/Instance.hpp"
 #include "myvk/Queue.hpp"
+#include "myvk/RenderGraph.hpp"
 
 constexpr uint32_t kFrameCount = 3;
 

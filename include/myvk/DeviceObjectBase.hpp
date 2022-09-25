@@ -5,10 +5,10 @@
 #include "Ptr.hpp"
 
 namespace myvk {
-class DeviceObjectBase {
+class DeviceObjectBase : public Base {
 public:
 	virtual const Ptr<Device> &GetDevicePtr() const = 0;
-	virtual ~DeviceObjectBase() = default;
+	~DeviceObjectBase() override = default;
 };
 } // namespace myvk
 

@@ -9,7 +9,8 @@ GenericPresentQueueSelector::GenericPresentQueueSelector(Ptr<Queue> *p_generic_q
                                                          Ptr<PresentQueue> *p_present_queue)
     : m_p_generic_queue(p_generic_queue), m_surface(surface), m_p_present_queue(p_present_queue) {}
 
-std::vector<QueueSelection> GenericPresentQueueSelector::operator()(const Ptr<PhysicalDevice> &physical_device) const {
+std::vector<QueueSelection>
+GenericPresentQueueSelector::operator()(const Ptr<const PhysicalDevice> &physical_device) const {
 	const auto &families = physical_device->GetQueueFamilyProperties();
 	if (families.empty())
 		return {};
@@ -52,7 +53,7 @@ GenericPresentTransferQueueSelector::GenericPresentTransferQueueSelector(Ptr<Que
       m_p_present_queue(p_present_queue) {}
 
 std::vector<QueueSelection>
-GenericPresentTransferQueueSelector::operator()(const Ptr<PhysicalDevice> &physical_device) const {
+GenericPresentTransferQueueSelector::operator()(const Ptr<const PhysicalDevice> &physical_device) const {
 
 	const auto &families = physical_device->GetQueueFamilyProperties();
 	if (families.empty())

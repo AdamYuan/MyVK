@@ -1,6 +1,7 @@
 #ifndef MYVK_PHYSICAL_DEVICE_HPP
 #define MYVK_PHYSICAL_DEVICE_HPP
 
+#include "Base.hpp"
 #include "Instance.hpp"
 #include "QueueSelector.hpp"
 
@@ -55,7 +56,7 @@ struct PhysicalDeviceFeatures {
 		return *this;
 	}
 };
-class PhysicalDevice : private std::enable_shared_from_this<PhysicalDevice> {
+class PhysicalDevice : public Base {
 private:
 	Ptr<Instance> m_instance_ptr;
 
@@ -69,6 +70,7 @@ private:
 
 public:
 	PhysicalDevice(const Ptr<Instance> &instance, VkPhysicalDevice physical_device);
+	inline ~PhysicalDevice() override = default;
 	static std::vector<Ptr<PhysicalDevice>> Fetch(const Ptr<Instance> &instance);
 
 	inline const Ptr<Instance> &GetInstancePtr() const { return m_instance_ptr; }

@@ -59,7 +59,7 @@ PhysicalDeviceFeatures PhysicalDevice::GetDefaultFeatures() const {
 	return ret;
 }
 bool PhysicalDevice::GetQueueSupport(const QueueSelectorFunc &queue_selector_func) const {
-	return !queue_selector_func(shared_from_this()).empty();
+	return !queue_selector_func(GetSelfPtr<PhysicalDevice>()).empty();
 }
 
 } // namespace myvk

@@ -39,6 +39,7 @@ add_library(MyVK_Vulkan STATIC
         src/QueryPool.cpp
         src/FramebufferBase.cpp
         src/ImagelessFramebuffer.cpp
+        src/RenderGraph.cpp
         )
 add_library(myvk::vulkan ALIAS MyVK_Vulkan)
 target_include_directories(MyVK_Vulkan PUBLIC include)
