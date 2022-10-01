@@ -7,7 +7,7 @@
 #include "myvk/ShaderModule.hpp"
 
 namespace myvk {
-void ImGuiRenderer::Initialize(const Ptr<CommandPool> &command_pool, const Ptr<RenderPass> &render_pass,
+void ImGuiRenderer::initialize(const Ptr<CommandPool> &command_pool, const Ptr<RenderPass> &render_pass,
                                uint32_t subpass, uint32_t frame_count) {
 	create_font_texture(command_pool);
 	create_descriptor(render_pass->GetDevicePtr());

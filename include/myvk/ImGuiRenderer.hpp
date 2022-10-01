@@ -38,10 +38,17 @@ private:
 	void setup_render_state(const Ptr<CommandBuffer> &command_buffer, int fb_width, int fb_height,
 	                        uint32_t current_frame) const;
 
+	void initialize(const Ptr<CommandPool> &command_pool, const Ptr<RenderPass> &render_pass, uint32_t subpass,
+	                uint32_t frame_count);
+
 public:
 	inline ~ImGuiRenderer() override = default;
-	void Initialize(const Ptr<CommandPool> &command_pool, const Ptr<RenderPass> &render_pass, uint32_t subpass,
-	                uint32_t frame_count);
+	inline static Ptr<ImGuiRenderer> Create(const Ptr<CommandPool> &command_pool, const Ptr<RenderPass> &render_pass,
+	                                        uint32_t subpass, uint32_t frame_count) {
+		auto ret = std::make_shared<ImGuiRenderer>();
+		ret->initialize(command_pool, render_pass, subpass, frame_count);
+		return ret;
+	}
 
 	void CmdDrawPipeline(const Ptr<CommandBuffer> &command_buffer, uint32_t current_frame) const;
 };

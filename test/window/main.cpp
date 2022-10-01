@@ -39,8 +39,8 @@ int main() {
 		render_pass = myvk::RenderPass::Create(device, state);
 	}
 
-	myvk::ImGuiRenderer imgui_renderer;
-	imgui_renderer.Initialize(myvk::CommandPool::Create(generic_queue), render_pass, 1, kFrameCount);
+	auto imgui_renderer =
+	    myvk::ImGuiRenderer::Create(myvk::CommandPool::Create(generic_queue), render_pass, 1, kFrameCount);
 
 	auto framebuffer = myvk::ImagelessFramebuffer::Create(render_pass, {frame_manager->GetSwapchainImageViews()[0]});
 	frame_manager->SetResizeFunc([&framebuffer, &render_pass](const myvk::FrameManager &frame_manager) {
@@ -68,7 +68,7 @@ int main() {
 			                                   {{{0.5f, 0.5f, 0.5f, 1.0f}}});
 			// m_ray_tracer->CmdDrawPipeline(command_buffer, current_frame);
 			command_buffer->CmdNextSubpass();
-			imgui_renderer.CmdDrawPipeline(command_buffer, current_frame);
+			imgui_renderer->CmdDrawPipeline(command_buffer, current_frame);
 			command_buffer->CmdEndRenderPass();
 			command_buffer->End();
 
