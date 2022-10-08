@@ -36,7 +36,7 @@ enum class RenderGraphInputUsage {
 };
 
 #define CASE(NAME) case RenderGraphInputUsage::NAME:
-inline constexpr bool RenderGraphInputUsageDescriptorEnabled(RenderGraphInputUsage usage) {
+inline constexpr bool RenderGraphInputUsageIsDescriptor(RenderGraphInputUsage usage) {
 	switch (usage) {
 	case RenderGraphInputUsage::kInputAttachment:
 	case RenderGraphInputUsage::kSampledImage:
@@ -50,6 +50,27 @@ inline constexpr bool RenderGraphInputUsageDescriptorEnabled(RenderGraphInputUsa
 		return true;
 	default:
 		return false;
+	}
+}
+
+inline constexpr VkDescriptorType RenderGraphInputUsageGetDescriptorType(RenderGraphInputUsage usage) {
+	switch (usage) {
+	case RenderGraphInputUsage::kInputAttachment:
+		return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+	case RenderGraphInputUsage::kSampledImage:
+		return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	case RenderGraphInputUsage::kStorageImageR:
+	case RenderGraphInputUsage::kStorageImageW:
+	case RenderGraphInputUsage::kStorageImageRW:
+		return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	case RenderGraphInputUsage::kUniformBuffer:
+		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	case RenderGraphInputUsage::kStorageBufferR:
+	case RenderGraphInputUsage::kStorageBufferW:
+	case RenderGraphInputUsage::kStorageBufferRW:
+		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	default:
+		return VK_DESCRIPTOR_TYPE_MAX_ENUM;
 	}
 }
 
@@ -697,20 +718,39 @@ public:
 	friend class RenderGraph;
 };
 
+struct RenderGraphSamplerInfo {
+	VkFilter filter;
+	VkSamplerMipmapMode mipmap_mode;
+	VkSamplerAddressMode address_mode;
+	inline bool operator<(const RenderGraphSamplerInfo &r) const {
+		return std::tie(filter, mipmap_mode, address_mode) < std::tie(r.filter, r.mipmap_mode, r.address_mode);
+	}
+};
+
+struct RenderGraphInputDescriptorInfo {
+	VkShaderStageFlags stage_flags;
+	RenderGraphSamplerInfo sampler_info;
+	Ptr<Sampler> sampler;
+};
+
 class RenderGraphInput {
 private:
 	Ptr<const RenderGraphResourceBase> m_resource;
-	Ptr<Sampler> m_image_sampler;
 	RenderGraphInputUsage m_usage;
+	RenderGraphInputDescriptorInfo m_descriptor_info;
+
+	friend class RenderGraphDescriptorPassBase;
 
 public:
+	inline RenderGraphInput(Ptr<const RenderGraphResourceBase> resource, RenderGraphInputUsage usage)
+	    : m_resource{std::move(resource)}, m_usage{usage}, m_descriptor_info{} {}
 	inline RenderGraphInput(Ptr<const RenderGraphResourceBase> resource, RenderGraphInputUsage usage,
-	                        Ptr<Sampler> image_sampler)
-	    : m_resource{std::move(resource)}, m_usage{usage}, m_image_sampler{std::move(image_sampler)} {}
+	                        RenderGraphInputDescriptorInfo descriptor_info)
+	    : m_resource{std::move(resource)}, m_usage{usage}, m_descriptor_info{std::move(descriptor_info)} {}
 
 	inline const Ptr<const RenderGraphResourceBase> &GetResource() const { return m_resource; }
 	inline RenderGraphInputUsage GetUsage() const { return m_usage; }
-	inline const Ptr<Sampler> &GetImageSampler() const { return m_image_sampler; }
+	inline const RenderGraphInputDescriptorInfo &GetDescriptorInfo() const { return m_descriptor_info; }
 };
 
 inline constexpr bool RenderGraphInputGroupDefaultClass(RenderGraphInputUsage) { return true; }
@@ -731,14 +771,54 @@ public:
 		return *this;
 	}
 	inline const std::vector<RenderGraphInput> &GetInputs() const { return m_inputs; }
+	inline uint32_t GetSize() const { return m_inputs.size(); }
 
 	template <RenderGraphInputUsage Usage, RenderGraphResourceType Type, RenderGraphResourceState State, bool IsAlias,
-	          typename = std::enable_if_t<RenderGraphInputUsageForType<Type>(Usage)>>
+	          typename = std::enable_if_t<RenderGraphInputUsageForType<Type>(Usage) &&
+	                                      !RenderGraphInputUsageIsDescriptor(Usage)>>
 	inline RenderGraphInputGroup &PushBack(const std::string &name,
 	                                       const Ptr<const RenderGraphResource<Type, State, IsAlias>> &resource) {
 		assert(m_input_map.find(name) == m_input_map.end());
 		m_input_map[name] = m_inputs.size();
 		m_inputs.push_back({resource, Usage});
+		return *this;
+	}
+
+	template <RenderGraphInputUsage Usage, RenderGraphResourceType Type, RenderGraphResourceState State, bool IsAlias,
+	          typename = std::enable_if_t<RenderGraphInputUsageForType<Type>(Usage) &&
+	                                      RenderGraphInputUsageIsDescriptor(Usage) &&
+	                                      Usage != RenderGraphInputUsage::kSampledImage>>
+	inline RenderGraphInputGroup &PushBack(const std::string &name,
+	                                       const Ptr<const RenderGraphResource<Type, State, IsAlias>> &resource,
+	                                       VkShaderStageFlags stage_flags) {
+		assert(m_input_map.find(name) == m_input_map.end());
+		m_input_map[name] = m_inputs.size();
+		RenderGraphInput input{resource, Usage};
+		m_inputs.push_back({resource, Usage, {stage_flags}});
+		return *this;
+	}
+
+	template <RenderGraphInputUsage Usage, RenderGraphResourceType Type, RenderGraphResourceState State, bool IsAlias,
+	          typename = std::enable_if_t<RenderGraphInputUsageForType<Type>(Usage) &&
+	                                      Usage == RenderGraphInputUsage::kSampledImage>>
+	inline RenderGraphInputGroup &PushBack(const std::string &name,
+	                                       const Ptr<const RenderGraphResource<Type, State, IsAlias>> &resource,
+	                                       VkShaderStageFlags stage_flags, const RenderGraphSamplerInfo &sampler_info) {
+		assert(m_input_map.find(name) == m_input_map.end() && sampler_info != nullptr);
+		m_input_map[name] = m_inputs.size();
+		m_inputs.push_back({resource, Usage, {stage_flags, sampler_info}});
+		return *this;
+	}
+
+	template <RenderGraphInputUsage Usage, RenderGraphResourceType Type, RenderGraphResourceState State, bool IsAlias,
+	          typename = std::enable_if_t<RenderGraphInputUsageForType<Type>(Usage) &&
+	                                      Usage == RenderGraphInputUsage::kSampledImage>>
+	inline RenderGraphInputGroup &PushBack(const std::string &name,
+	                                       const Ptr<const RenderGraphResource<Type, State, IsAlias>> &resource,
+	                                       VkShaderStageFlags stage_flags, const Ptr<Sampler> &sampler) {
+		assert(m_input_map.find(name) == m_input_map.end());
+		m_input_map[name] = m_inputs.size();
+		m_inputs.push_back({resource, Usage, {stage_flags, 0, sampler}});
 		return *this;
 	}
 
@@ -765,10 +845,13 @@ public:
 
 	RenderGraphInput &operator[](const std::string &name) { return m_inputs[m_input_map.at(name)]; }
 	const RenderGraphInput &operator[](const std::string &name) const { return m_inputs[m_input_map.at(name)]; }
+
+	RenderGraphInput &operator[](uint32_t idx) { return m_inputs[idx]; }
+	const RenderGraphInput &operator[](uint32_t idx) const { return m_inputs[idx]; }
 };
 
 enum class RenderGraphPassType { kGraphics, kCompute, kGroup, kCustom, kFinal };
-class RenderGraphPassBase : public Base {
+class RenderGraphPassBase : public DeviceObjectBase {
 public:
 	using OwnerWeakPtr = std::variant<std::weak_ptr<RenderGraph>, std::weak_ptr<const RenderGraphPassBase>>;
 
@@ -818,6 +901,64 @@ protected:
 		    GetSelfPtr<RenderGraphPassBase>(), resources, image_view_type, image_aspects);
 	}
 
+private:
+	inline static constexpr uint32_t make_inputs_counter() { return 0; }
+	template <typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const RenderGraphInput &, Args... args) {
+		return make_inputs_counter(args...) + 1u;
+	}
+	template <typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const std::optional<RenderGraphInput> &optional_input,
+	                                                     Args... args) {
+		return make_inputs_counter(args...) + optional_input.has_value();
+	}
+	template <typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const std::vector<RenderGraphInput> &vector, Args... args) {
+		return make_inputs_counter(args...) + vector.size();
+	}
+	template <bool InputUsageClass(RenderGraphInputUsage), typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const RenderGraphInputGroup<InputUsageClass> &group,
+	                                                     Args... args) {
+		return make_inputs_counter(args...) + group.GetSize();
+	}
+
+	inline static void make_inputs_filler(RenderGraphInput *begin) {}
+	template <typename... Args>
+	inline static void make_inputs_filler(RenderGraphInput *begin, const RenderGraphInput &input, Args... args) {
+		*begin = input;
+		make_inputs_filler(begin + 1, args...);
+	}
+	template <typename... Args>
+	inline static void make_inputs_filler(RenderGraphInput *begin,
+	                                      const std::optional<RenderGraphInput> &optional_input, Args... args) {
+		if (optional_input.has_value()) {
+			*begin = optional_input.value();
+			make_inputs_filler(begin + 1, args...);
+		} else
+			make_inputs_filler(begin, args...);
+	}
+	template <typename... Args>
+	inline static void make_inputs_counter(RenderGraphInput *begin, const std::vector<RenderGraphInput> &vector,
+	                                       Args... args) {
+		std::copy(vector.begin(), vector.end(), begin);
+		make_inputs_filler(begin + vector.size(), args...);
+	}
+	template <bool InputUsageClass(RenderGraphInputUsage), typename... Args>
+	inline static void make_inputs_counter(RenderGraphInput *begin, const RenderGraphInputGroup<InputUsageClass> &group,
+	                                       Args... args) {
+		std::copy(group.GetInputs().begin(), group.GetInputs().end(), begin);
+		make_inputs_filler(begin + group.GetSize(), args...);
+	}
+
+protected:
+	// TODO: Optimize MakeInputs() and GetInputs() interface
+	template <typename... Args> inline std::vector<RenderGraphInput> MakeInputs(Args... args) {
+		uint32_t count{make_inputs_counter(args...)};
+		std::vector<RenderGraphInput> ret(count);
+		make_inputs_filler(ret.data(), args...);
+		return ret;
+	}
+
 public:
 	inline explicit RenderGraphPassBase(const OwnerWeakPtr &owner)
 	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner.index()
@@ -829,7 +970,7 @@ public:
 	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner->m_render_graph_weak_ptr} {}
 	inline explicit RenderGraphPassBase(const std::weak_ptr<const RenderGraphPassBase> &owner)
 	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner.lock()->m_render_graph_weak_ptr} {} */
-	virtual ~RenderGraphPassBase() = default;
+	~RenderGraphPassBase() override = default;
 	// Disable Copy and Move
 	inline RenderGraphPassBase(const RenderGraphPassBase &r) = delete;
 	inline RenderGraphPassBase &operator=(const RenderGraphPassBase &r) = delete;
@@ -846,6 +987,7 @@ public:
 		return IsSecondary() ? std::get<1>(m_owner_weak_ptr).lock() : nullptr;
 	}
 	inline Ptr<RenderGraph> LockRenderGraph() const { return m_render_graph_weak_ptr.lock(); }
+	const Ptr<Device> &GetDevicePtr() const final;
 };
 
 class RenderGraphInfo {
@@ -886,16 +1028,15 @@ private:
 	std::map<std::string, Ptr<RenderGraphPassBase>> m_passes;
 	std::map<std::string, RenderGraphInput> m_outputs;
 
-	inline void update(const std::function<void(RenderGraphInfo &)> &builder) {
-		RenderGraphInfo info{GetSelfPtr<RenderGraph>()};
-		builder(info);
-		m_passes = std::move(info.m_passes);
-		m_outputs = std::move(info.m_outputs);
-		SetRecompile();
-	}
+	std::map<RenderGraphSamplerInfo, std::weak_ptr<Sampler>> m_sampler_cache;
 
 	bool m_recompile_flag{true};
-	void Compile();
+
+	Ptr<Sampler> get_sampler(const RenderGraphSamplerInfo &sampler_info);
+	void update(const std::function<void(RenderGraphInfo &)> &builder);
+	void compile();
+
+	friend class RenderGraphDescriptorPassBase;
 
 public:
 	inline explicit RenderGraph(Ptr<Device> device_ptr) : m_device_ptr{std::move(device_ptr)} {}
@@ -923,23 +1064,22 @@ public:
 
 class RenderGraphDescriptorPassBase : public RenderGraphPassBase {
 private:
-	RenderGraphInputGroup<RenderGraphInputUsageDescriptorEnabled> m_descriptor_group;
+	RenderGraphInputGroup<RenderGraphInputUsageIsDescriptor> m_descriptor_group;
 
 	Ptr<DescriptorSetLayout> m_descriptor_layout;
 	std::vector<Ptr<DescriptorSet>> m_descriptor_sets;
 
-	void create_descriptors(); // TODO: Implement this
+	void create_descriptors_layout();
 
 public:
 	inline explicit RenderGraphDescriptorPassBase(
-	    const OwnerWeakPtr &owner, RenderGraphInputGroup<RenderGraphInputUsageDescriptorEnabled> &&descriptor_group)
+	    const OwnerWeakPtr &owner, RenderGraphInputGroup<RenderGraphInputUsageIsDescriptor> &&descriptor_group)
 	    : RenderGraphPassBase(owner), m_descriptor_group{std::move(descriptor_group)} {
-		create_descriptors();
+		create_descriptors_layout();
 	}
 
 	inline const auto &GetDescriptorGroup() const { return m_descriptor_group; }
 	// auto &GetDescriptorGroup() { return m_descriptor_group; }
-	// virtual void OnDescriptorCreated() {} // TODO: Better design
 
 	inline const auto &GetDescriptorLayout() const { return m_descriptor_layout; }
 	inline const auto &GetDescriptorSet(uint32_t frame) const {
@@ -949,11 +1089,11 @@ public:
 	bool UseDescriptors() const final { return true; }
 };
 
-class RenderGraphGraphicsPassBase : public RenderGraphDescriptorPassBase {
+class RenderGraphGraphicsPassBase : virtual public RenderGraphPassBase {
 public:
 	inline RenderGraphPassType GetType() const final { return RenderGraphPassType::kGraphics; }
 };
-class RenderGraphComputePassBase : public RenderGraphDescriptorPassBase {
+class RenderGraphComputePassBase : virtual public RenderGraphPassBase {
 public:
 	inline RenderGraphPassType GetType() const final { return RenderGraphPassType::kCompute; }
 };
@@ -976,7 +1116,7 @@ public:
 	friend class RenderGraphPassGroupBase;
 };
 
-class RenderGraphPassGroupBase : public RenderGraphPassBase {
+class RenderGraphPassGroupBase : virtual public RenderGraphPassBase {
 private:
 	std::vector<Ptr<RenderGraphPassBase>> m_passes;
 
