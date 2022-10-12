@@ -38,17 +38,4 @@ Ptr<Sampler> RenderGraphBase::get_sampler(const RenderGraphSamplerInfo &sampler_
 	m_sampler_cache[sampler_info] = ret;
 	return ret;
 }
-/* void RenderGraph::compile() {
-	if (!m_recompile_flag)
-		return;
-	m_recompile_flag = false;
-	// Then ?
-}
-void RenderGraph::update(const std::function<void(RenderGraphInfo &)> &builder) {
-	RenderGraphInfo info{GetSelfPtr<RenderGraph>()};
-	builder(info);
-	m_passes = std::move(info.m_passes);
-	m_outputs = std::move(info.m_outputs);
-	SetRecompile();
-} */
 } // namespace myvk

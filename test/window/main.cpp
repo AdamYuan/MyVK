@@ -26,6 +26,11 @@ int main() {
 
 	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
 
+	auto render_graph = myvk::RenderGraph<>::Create(device, [&](myvk::RenderGraphInfo &info) {
+		auto swapchain_image = myvk::RenderGraphSwapchainImage::Create(frame_manager);
+		info.SetOutput<myvk::RenderGraphInputUsage::kPresent>("canvas", swapchain_image);
+	});
+
 	myvk::Ptr<myvk::RenderPass> render_pass;
 	{
 		myvk::RenderPassState state{2, 1};

@@ -4,7 +4,7 @@
 #include "Ptr.hpp"
 
 namespace myvk {
-class Base : private std::enable_shared_from_this<Base> {
+class Base : public std::enable_shared_from_this<Base> {
 protected:
 	template <typename T> inline Ptr<const T> GetSelfPtr() const {
 		return std::dynamic_pointer_cast<const T>(shared_from_this());
