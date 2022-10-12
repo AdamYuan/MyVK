@@ -26,7 +26,7 @@ void RenderGraphDescriptorPassBase::create_descriptors_layout() {
 	m_descriptor_layout = myvk::DescriptorSetLayout::Create(GetDevicePtr(), bindings);
 }
 
-Ptr<Sampler> RenderGraph::get_sampler(const RenderGraphSamplerInfo &sampler_info) {
+Ptr<Sampler> RenderGraphBase::get_sampler(const RenderGraphSamplerInfo &sampler_info) {
 	auto cache_it = m_sampler_cache.find(sampler_info);
 	if (cache_it != m_sampler_cache.end()) {
 		auto cache = cache_it->second.lock();
@@ -38,7 +38,7 @@ Ptr<Sampler> RenderGraph::get_sampler(const RenderGraphSamplerInfo &sampler_info
 	m_sampler_cache[sampler_info] = ret;
 	return ret;
 }
-void RenderGraph::compile() {
+/* void RenderGraph::compile() {
 	if (!m_recompile_flag)
 		return;
 	m_recompile_flag = false;
@@ -50,5 +50,5 @@ void RenderGraph::update(const std::function<void(RenderGraphInfo &)> &builder) 
 	m_passes = std::move(info.m_passes);
 	m_outputs = std::move(info.m_outputs);
 	SetRecompile();
-}
+} */
 } // namespace myvk

@@ -38,15 +38,15 @@ enum class RenderGraphInputUsage {
 #define CASE(NAME) case RenderGraphInputUsage::NAME:
 inline constexpr bool RenderGraphInputUsageIsDescriptor(RenderGraphInputUsage usage) {
 	switch (usage) {
-	case RenderGraphInputUsage::kInputAttachment:
-	case RenderGraphInputUsage::kSampledImage:
-	case RenderGraphInputUsage::kStorageImageR:
-	case RenderGraphInputUsage::kStorageImageW:
-	case RenderGraphInputUsage::kStorageImageRW:
-	case RenderGraphInputUsage::kUniformBuffer:
-	case RenderGraphInputUsage::kStorageBufferR:
-	case RenderGraphInputUsage::kStorageBufferW:
-	case RenderGraphInputUsage::kStorageBufferRW:
+		CASE(kInputAttachment)
+		CASE(kSampledImage)
+		CASE(kStorageImageR)
+		CASE(kStorageImageW)
+		CASE(kStorageImageRW)
+		CASE(kUniformBuffer)
+		CASE(kStorageBufferR)
+		CASE(kStorageBufferW)
+		CASE(kStorageBufferRW)
 		return true;
 	default:
 		return false;
@@ -55,19 +55,19 @@ inline constexpr bool RenderGraphInputUsageIsDescriptor(RenderGraphInputUsage us
 
 inline constexpr VkDescriptorType RenderGraphInputUsageGetDescriptorType(RenderGraphInputUsage usage) {
 	switch (usage) {
-	case RenderGraphInputUsage::kInputAttachment:
+		CASE(kInputAttachment)
 		return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-	case RenderGraphInputUsage::kSampledImage:
+		CASE(kSampledImage)
 		return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	case RenderGraphInputUsage::kStorageImageR:
-	case RenderGraphInputUsage::kStorageImageW:
-	case RenderGraphInputUsage::kStorageImageRW:
+		CASE(kStorageImageR)
+		CASE(kStorageImageW)
+		CASE(kStorageImageRW)
 		return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	case RenderGraphInputUsage::kUniformBuffer:
+		CASE(kUniformBuffer)
 		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	case RenderGraphInputUsage::kStorageBufferR:
-	case RenderGraphInputUsage::kStorageBufferW:
-	case RenderGraphInputUsage::kStorageBufferRW:
+		CASE(kStorageBufferR)
+		CASE(kStorageBufferW)
+		CASE(kStorageBufferRW)
 		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	default:
 		return VK_DESCRIPTOR_TYPE_MAX_ENUM;
@@ -76,17 +76,17 @@ inline constexpr VkDescriptorType RenderGraphInputUsageGetDescriptorType(RenderG
 
 inline constexpr bool RenderGraphInputUsageIsReadOnly(RenderGraphInputUsage usage) {
 	switch (usage) {
-		CASE(kPresent)          //
-		CASE(kPreserve)         //
-		CASE(kDepthAttachmentR) //
-		CASE(kInputAttachment)  //
-		CASE(kSampledImage)     //
-		CASE(kStorageImageR)    //
-		CASE(kUniformBuffer)    //
-		CASE(kStorageBufferR)   //
-		CASE(kIndexBuffer)      //
-		CASE(kVertexBuffer)     //
-		CASE(kTransferSrc)      //
+		CASE(kPresent)
+		CASE(kPreserve)
+		CASE(kDepthAttachmentR)
+		CASE(kInputAttachment)
+		CASE(kSampledImage)
+		CASE(kStorageImageR)
+		CASE(kUniformBuffer)
+		CASE(kStorageBufferR)
+		CASE(kIndexBuffer)
+		CASE(kVertexBuffer)
+		CASE(kTransferSrc)
 		return true;
 	default:
 		return false;
@@ -95,15 +95,15 @@ inline constexpr bool RenderGraphInputUsageIsReadOnly(RenderGraphInputUsage usag
 
 inline constexpr bool RenderGraphInputUsageForBuffer(RenderGraphInputUsage usage) {
 	switch (usage) {
-		CASE(kPreserve)        //
-		CASE(kUniformBuffer)   //
-		CASE(kStorageBufferR)  //
-		CASE(kStorageBufferW)  //
-		CASE(kStorageBufferRW) //
-		CASE(kIndexBuffer)     //
-		CASE(kVertexBuffer)    //
-		CASE(kTransferSrc)     //
-		CASE(kTransferDst)     //
+		CASE(kPreserve)
+		CASE(kUniformBuffer)
+		CASE(kStorageBufferR)
+		CASE(kStorageBufferW)
+		CASE(kStorageBufferRW)
+		CASE(kIndexBuffer)
+		CASE(kVertexBuffer)
+		CASE(kTransferSrc)
+		CASE(kTransferDst)
 		return true;
 	default:
 		return false;
@@ -112,101 +112,52 @@ inline constexpr bool RenderGraphInputUsageForBuffer(RenderGraphInputUsage usage
 
 inline constexpr bool RenderGraphInputUsageForImage(RenderGraphInputUsage usage) {
 	switch (usage) {
-		CASE(kPreserve)          //
-		CASE(kPresent)           //
-		CASE(kColorAttachment)   //
-		CASE(kDepthAttachmentR)  //
-		CASE(kDepthAttachmentRW) //
-		CASE(kInputAttachment)   //
-		CASE(kSampledImage)      //
-		CASE(kStorageImageR)     //
-		CASE(kStorageImageW)     //
-		CASE(kStorageImageRW)    //
-		CASE(kTransferSrc)       //
-		CASE(kTransferDst)       //
+		CASE(kPreserve)
+		CASE(kPresent)
+		CASE(kColorAttachment)
+		CASE(kDepthAttachmentR)
+		CASE(kDepthAttachmentRW)
+		CASE(kInputAttachment)
+		CASE(kSampledImage)
+		CASE(kStorageImageR)
+		CASE(kStorageImageW)
+		CASE(kStorageImageRW)
+		CASE(kTransferSrc)
+		CASE(kTransferDst)
 		return true;
 	default:
 		return false;
 	}
 }
 
+inline constexpr bool RenderGraphInputUsageGetImageLayout(RenderGraphInputUsage usage) {
+	switch (usage) {
+		CASE(kPresent)
+		return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		CASE(kColorAttachment)
+		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		CASE(kDepthAttachmentR)
+		CASE(kDepthAttachmentRW)
+		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		CASE(kInputAttachment)
+		CASE(kSampledImage)
+		return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		CASE(kStorageImageR)
+		CASE(kStorageImageW)
+		CASE(kStorageImageRW)
+		return VK_IMAGE_LAYOUT_GENERAL;
+		CASE(kTransferSrc)
+		return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		CASE(kTransferDst)
+		return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	default:
+		return VK_IMAGE_LAYOUT_UNDEFINED;
+	}
+}
+
 #undef CASE
 
-/* #define USAGE_TO_BASE(NAME) \
-    RenderGraphInputUsage { (int)(NAME) }
-#define USAGE_TO_READ_ONLY(NAME) \
-    RenderGraphInputUsageReadOnly { (int)(NAME) }
-#define ADD(NAME) NAME = (int)RenderGraphInputUsage::NAME,
-enum class RenderGraphInputUsageReadOnly {
-    ADD(kPresent)              //
-    ADD(kPreserve)             //
-    ADD(kDepthAttachmentLoadR) //
-    ADD(kInputAttachment)      //
-    ADD(kSampledImage)         //
-    ADD(kStorageImageR)        //
-    ADD(kUniformBuffer)        //
-    ADD(kStorageBufferR)       //
-    ADD(kIndexBuffer)          //
-    ADD(kVertexBuffer)         //
-    ADD(kTransferSrc)          //
-};
-
-enum class RenderGraphInputUsageClearAttachment {
-    ADD(kColorAttachmentClear) //
-    ADD(kDepthAttachmentClear) //
-};
-
-enum class RenderGraphInputUsageImage {
-    ADD(kPreserve)                //
-    ADD(kPresent)                 //
-    ADD(kColorAttachmentClear)    //
-    ADD(kColorAttachmentDontCare) //
-    ADD(kColorAttachmentLoad)     //
-    ADD(kDepthAttachmentClear)    //
-    ADD(kDepthAttachmentLoadR)    //
-    ADD(kDepthAttachmentLoadRW)   //
-    ADD(kInputAttachment)         //
-    ADD(kSampledImage)            //
-    ADD(kStorageImageR)           //
-    ADD(kStorageImageW)           //
-    ADD(kStorageImageRW)          //
-    ADD(kTransferSrc)             //
-    ADD(kTransferDst)             //
-};
-
-enum class RenderGraphInputUsageImageReadOnly {
-    ADD(kPreserve)             //
-    ADD(kPresent)              //
-    ADD(kDepthAttachmentLoadR) //
-    ADD(kInputAttachment)      //
-    ADD(kSampledImage)         //
-    ADD(kStorageImageR)        //
-    ADD(kTransferSrc)          //
-};
-
-enum class RenderGraphInputUsageBuffer {
-    ADD(kPreserve)        //
-    ADD(kUniformBuffer)   //
-    ADD(kStorageBufferR)  //
-    ADD(kStorageBufferW)  //
-    ADD(kStorageBufferRW) //
-    ADD(kIndexBuffer)     //
-    ADD(kVertexBuffer)    //
-    ADD(kTransferSrc)     //
-    ADD(kTransferDst)     //
-};
-
-enum class RenderGraphInputUsageBufferReadOnly {
-    ADD(kPreserve)       //
-    ADD(kUniformBuffer)  //
-    ADD(kStorageBufferR) //
-    ADD(kIndexBuffer)    //
-    ADD(kVertexBuffer)   //
-    ADD(kTransferSrc)    //
-};
-#undef ADD */
-
-class RenderGraph;
+class RenderGraphBase;
 
 enum class RenderGraphResourceType { kImage, kBuffer };
 enum class RenderGraphResourceState { NONE, kManaged, kExternal /*, kStatic*/ };
@@ -287,7 +238,7 @@ public:
 		return m_buffers.size() == 1 ? m_buffers[0] : m_buffers[frame];
 	}
 
-	friend class RenderGraph;
+	friend class RenderGraphBase;
 };
 
 using RenderGraphExternalBufferBase =
@@ -503,7 +454,7 @@ public:
 	inline RenderGraphAttachmentLoadOp GetLoadOp() const final { return m_load_op; }
 	inline const VkClearValue &GetClearValue() const final { return m_clear_value; }
 
-	friend class RenderGraph;
+	friend class RenderGraphBase;
 };
 
 using RenderGraphExternalImageBase =
@@ -715,7 +666,7 @@ public:
 	}
 	inline const VkClearValue &GetClearValue() const final { return GetResources()[0]->GetClearValue(); }
 
-	friend class RenderGraph;
+	friend class RenderGraphBase;
 };
 
 struct RenderGraphSamplerInfo {
@@ -853,10 +804,10 @@ public:
 enum class RenderGraphPassType { kGraphics, kCompute, kGroup, kCustom, kFinal };
 class RenderGraphPassBase : public DeviceObjectBase {
 public:
-	using OwnerWeakPtr = std::variant<std::weak_ptr<RenderGraph>, std::weak_ptr<const RenderGraphPassBase>>;
+	using OwnerWeakPtr = std::variant<std::weak_ptr<RenderGraphBase>, std::weak_ptr<const RenderGraphPassBase>>;
 
 private:
-	std::weak_ptr<RenderGraph> m_render_graph_weak_ptr;
+	std::weak_ptr<RenderGraphBase> m_render_graph_weak_ptr;
 	OwnerWeakPtr m_owner_weak_ptr;
 
 protected:
@@ -986,19 +937,19 @@ public:
 	inline Ptr<const RenderGraphPassBase> LockParentPass() const {
 		return IsSecondary() ? std::get<1>(m_owner_weak_ptr).lock() : nullptr;
 	}
-	inline Ptr<RenderGraph> LockRenderGraph() const { return m_render_graph_weak_ptr.lock(); }
+	inline Ptr<RenderGraphBase> LockRenderGraph() const { return m_render_graph_weak_ptr.lock(); }
 	const Ptr<Device> &GetDevicePtr() const final;
 };
 
 class RenderGraphInfo {
 private:
-	std::weak_ptr<const RenderGraph> m_owner;
+	std::weak_ptr<const RenderGraphBase> m_owner;
 
 	std::map<std::string, Ptr<RenderGraphPassBase>> m_passes;
 	std::map<std::string, RenderGraphInput> m_outputs;
 
 public:
-	inline explicit RenderGraphInfo(std::weak_ptr<const RenderGraph> owner) : m_owner{std::move(owner)} {}
+	inline explicit RenderGraphInfo(std::weak_ptr<const RenderGraphBase> owner) : m_owner{std::move(owner)} {}
 
 	template <typename PassT, typename... Args,
 	          typename = std::enable_if_t<std::is_base_of_v<RenderGraphPassBase, PassT>>>
@@ -1018,10 +969,12 @@ public:
 		m_outputs[name] = {resource, Usage};
 	}
 
-	friend class RenderGraph;
+	friend class RenderGraphBase;
 };
 
-class RenderGraph final : public DeviceObjectBase {
+using RenderGraphBuilderFunc = std::function<void(RenderGraphInfo &)>;
+
+class RenderGraphBase : public DeviceObjectBase {
 private:
 	Ptr<Device> m_device_ptr;
 
@@ -1033,21 +986,21 @@ private:
 	bool m_recompile_flag{true};
 
 	Ptr<Sampler> get_sampler(const RenderGraphSamplerInfo &sampler_info);
-	void update(const std::function<void(RenderGraphInfo &)> &builder);
-	void compile();
 
 	friend class RenderGraphDescriptorPassBase;
 
-public:
-	inline explicit RenderGraph(Ptr<Device> device_ptr) : m_device_ptr{std::move(device_ptr)} {}
-	inline ~RenderGraph() final = default;
+protected:
+	template <typename Scheduler> inline void Compile(Scheduler &scheduler) {}
 
-	inline static Ptr<RenderGraph> Create(const Ptr<Device> &device_ptr,
-	                                      const std::function<void(RenderGraphInfo &)> &builder) {
-		auto ret = std::make_shared<RenderGraph>(device_ptr);
-		ret->update(builder);
-		return ret;
+public:
+	inline explicit RenderGraphBase(Ptr<Device> device_ptr, const RenderGraphBuilderFunc &builder)
+	    : m_device_ptr{std::move(device_ptr)} {
+		RenderGraphInfo info{GetSelfPtr<RenderGraphBase>()};
+		builder(info);
+		m_passes = std::move(info.m_passes);
+		m_outputs = std::move(info.m_outputs);
 	}
+	inline ~RenderGraphBase() override = default;
 
 	template <typename PassT = RenderGraphPassBase,
 	          typename = std::enable_if_t<std::is_base_of_v<RenderGraphPassBase, PassT>>>
@@ -1056,10 +1009,26 @@ public:
 	}
 
 	inline void SetRecompile() { m_recompile_flag = true; }
+	const Ptr<Device> &GetDevicePtr() const final { return m_device_ptr; }
+};
+
+class RenderGraphDefaultScheduler {};
+
+template <typename Scheduler = RenderGraphDefaultScheduler> class RenderGraph final : public RenderGraphBase {
+private:
+	Scheduler m_scheduler;
+
+public:
+	inline explicit RenderGraph(Ptr<Device> device_ptr, const RenderGraphBuilderFunc &builder)
+	    : RenderGraphBase{std::move(device_ptr), builder} {}
+	inline ~RenderGraph() final = default;
+
+	inline static Ptr<RenderGraph> Create(const Ptr<Device> &device_ptr, const RenderGraphBuilderFunc &builder) {
+		auto ret = std::make_shared<RenderGraph>(device_ptr, builder);
+		return ret;
+	}
 
 	void CmdRun(const Ptr<CommandBuffer> &command_buffer, uint32_t frame);
-
-	const Ptr<Device> &GetDevicePtr() const final { return m_device_ptr; }
 };
 
 class RenderGraphDescriptorPassBase : public RenderGraphPassBase {
@@ -1143,9 +1112,6 @@ public:
 	~RenderGraphPassGroupBase() override = default;
 	RenderGraphPassType GetType() const final { return RenderGraphPassType::kGroup; }
 };
-
-#undef USAGE_TO_BASE
-#undef USAGE_TO_READ_ONLY
 
 } // namespace myvk
 
