@@ -1,10 +1,12 @@
+#include <iostream>
+
 #include "myvk/FrameManager.hpp"
 #include "myvk/GLFWHelper.hpp"
 #include "myvk/ImGuiHelper.hpp"
 #include "myvk/ImGuiRenderer.hpp"
 #include "myvk/Instance.hpp"
 #include "myvk/Queue.hpp"
-#include "myvk/RenderGraph.hpp"
+#include "myvk/RenderGraph2.hpp"
 
 constexpr uint32_t kFrameCount = 3;
 
@@ -24,12 +26,21 @@ int main() {
 		    physical_device->GetDefaultFeatures(), {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 	}
 
-	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
+	myvk::render_graph::RGResourcePool<myvk::render_graph::RenderGraphBase> object_pool;
+	auto managed_buffer = object_pool.CreateBuffer<myvk::render_graph::RGManagedBuffer>("draw_list");
+	std::cout << managed_buffer->GetName() << std::endl;
+	printf("%p %p\n", managed_buffer, object_pool.GetBuffer("draw_list"));
+	myvk::render_graph::RGBufferAlias alias{managed_buffer};
+	std::cout << managed_buffer << " " << alias.GetResource<myvk::render_graph::RGManagedBuffer>() << std::endl;
+	myvk::render_graph::RGBufferAlias alias2{&alias};
+	std::cout << managed_buffer << " " << alias2.GetResource<myvk::render_graph::RGManagedBuffer>() << std::endl;
+	object_pool.DeleteBuffer("draw_list");
+	std::cout << managed_buffer << " " << object_pool.GetBuffer("draw_list") << std::endl;
 
-	auto render_graph = myvk::RenderGraph<>::Create(device, [&](myvk::RenderGraphInfo &info) {
-		auto swapchain_image = myvk::RenderGraphSwapchainImage::Create(frame_manager);
-		info.SetOutput<myvk::RenderGraphInputUsage::kPresent>("canvas", swapchain_image);
-	});
+	myvk::render_graph::RGInputPool<myvk::render_graph::RenderGraphBase, myvk::render_graph::RGInputUsageAll>
+	    input_pool;
+
+	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
 
 	myvk::Ptr<myvk::RenderPass> render_pass;
 	{

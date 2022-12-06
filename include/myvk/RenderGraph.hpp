@@ -160,8 +160,25 @@ inline constexpr bool RenderGraphInputUsageGetImageLayout(RenderGraphInputUsage 
 
 class RenderGraphBase;
 
+class RenderGraphObjectBase {
+private:
+	RenderGraphBase *m_render_graph_ptr;
+
+public:
+	inline explicit RenderGraphObjectBase(RenderGraphBase *render_graph_ptr) : m_render_graph_ptr{render_graph_ptr} {}
+	inline virtual ~RenderGraphObjectBase() = default;
+
+	inline RenderGraphBase *GetRenderGraphPtr() const { return m_render_graph_ptr; }
+
+	// Disable Copy and Move
+	inline RenderGraphObjectBase(const RenderGraphObjectBase &r) = delete;
+	inline RenderGraphObjectBase &operator=(const RenderGraphObjectBase &r) = delete;
+	inline RenderGraphObjectBase(RenderGraphObjectBase &&r) = delete;
+	inline RenderGraphObjectBase &operator=(RenderGraphObjectBase &&r) = delete;
+};
+
 enum class RenderGraphResourceType { kImage, kBuffer };
-enum class RenderGraphResourceState { NONE, kManaged, kExternal /*, kStatic*/ };
+enum class RenderGraphResourceState { kManaged, kExternal /*, kStatic*/ };
 
 template <RenderGraphResourceType Type>
 inline constexpr bool RenderGraphInputUsageForType(RenderGraphInputUsage usage) {
@@ -172,14 +189,15 @@ inline constexpr bool RenderGraphInputUsageForType(RenderGraphInputUsage usage) 
 	}
 }
 
-class RenderGraphResourceBase : public Base {
+class RenderGraphResourceBase : public RenderGraphObjectBase {
 private:
-	std::weak_ptr<const RenderGraphPassBase> m_producer;
+	const RenderGraphPassBase *m_producer_pass_ptr;
 
 public:
-	inline RenderGraphResourceBase() = default;
-	inline explicit RenderGraphResourceBase(std::weak_ptr<const RenderGraphPassBase> producer)
-	    : m_producer{std::move(producer)} {}
+	inline explicit RenderGraphResourceBase(const RenderGraphPassBase *producer_pass_ptr)
+	    : m_producer_pass_ptr{producer_pass_ptr}, RenderGraphObjectBase(producer_pass_ptr->GetRenderGraphPtr()) {}
+	inline explicit RenderGraphResourceBase(RenderGraphBase *render_graph_ptr)
+	    : m_producer_pass_ptr{nullptr}, RenderGraphObjectBase(render_graph_ptr) {}
 
 	virtual RenderGraphResourceType GetType() const = 0;
 	virtual RenderGraphResourceState GetState() const = 0;
@@ -187,86 +205,328 @@ public:
 	// virtual bool IsPerFrame() const = 0;
 	// virtual void Resize(uint32_t width, uint32_t height) {}
 
-	inline Ptr<const RenderGraphPassBase> LockProducer() const { return m_producer.lock(); }
+	inline const RenderGraphPassBase *GetProducerPtr() const { return m_producer_pass_ptr; }
 
-	virtual ~RenderGraphResourceBase() = default;
+	~RenderGraphResourceBase() override = default;
 };
 
-template <RenderGraphResourceType Type, RenderGraphResourceState State = RenderGraphResourceState::NONE,
-          bool IsAlias = false /* , RenderGraphInputUsage StaticUsage = RenderGraphInputUsage::NONE*/>
-class RenderGraphResource;
+/* template <typename R> struct RenderGraphResourceTraits {
+    inline static constexpr bool IsResource = std::is_base_of_v<RenderGraphResourceBase, std::decay_t<R>>;
+    inline static constexpr RenderGraphResourceType Type =
+        std::is_base_of_v<RenderGraphResource<RenderGraphResourceType::kImage>, std::decay_t<R>>
+            ? RenderGraphResourceType::kImage
+            : RenderGraphResourceType::kBuffer;
+    inline static constexpr bool IsImage = Type == RenderGraphResourceType::kImage;
+    inline static constexpr bool IsBuffer = Type == RenderGraphResourceType::kBuffer;
+    inline static constexpr RenderGraphResourceState State =
+        (std::is_base_of_v<
+             RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, false>,
+             std::decay_t<R>> ||
+         std::is_base_of_v<
+             RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged, false>,
+             std::decay_t<R>> ||
+         std::is_base_of_v<
+             RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>,
+             std::decay_t<R>> ||
+         std::is_base_of_v<
+             RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged, true>,
+             std::decay_t<R>>)
+            ? RenderGraphResourceState::kManaged
+            : ((std::is_base_of_v<
+                    RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal, false>,
+                    std::decay_t<R>> ||
+                std::is_base_of_v<
+                    RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal, false>,
+                    std::decay_t<R>> ||
+                std::is_base_of_v<
+                    RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal, true>,
+                    std::decay_t<R>> ||
+                std::is_base_of_v<
+                    RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal, true>,
+                    std::decay_t<R>>)
+                   ? RenderGraphResourceState::kExternal
+                   : RenderGraphResourceState::NONE);
+    inline static constexpr bool IsManaged = State == RenderGraphResourceState::kManaged;
+    inline static constexpr bool IsExternal = State == RenderGraphResourceState::kExternal;
+    inline static constexpr bool IsAlias =
+        std::is_base_of_v<
+            RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>,
+            std::decay_t<R>> ||
+        std::is_base_of_v<
+            RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged, true>,
+            std::decay_t<R>> ||
+        std::is_base_of_v<
+            RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal, true>,
+            std::decay_t<R>> ||
+        std::is_base_of_v<
+            RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal, true>,
+            std::decay_t<R>>;
+    inline static constexpr bool IsManagedImageAlias = std::is_base_of_v<
+        RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>,
+        std::decay_t<R>>;
+}; */
 
-template <typename R> struct RenderGraphResourceTraits {
-	inline static constexpr bool IsResource = std::is_base_of_v<RenderGraphResourceBase, std::decay_t<R>>;
-	inline static constexpr RenderGraphResourceType Type =
-	    std::is_base_of_v<RenderGraphResource<RenderGraphResourceType::kImage>, std::decay_t<R>>
-	        ? RenderGraphResourceType::kImage
-	        : RenderGraphResourceType::kBuffer;
-	inline static constexpr bool IsImage = Type == RenderGraphResourceType::kImage;
-	inline static constexpr bool IsBuffer = Type == RenderGraphResourceType::kBuffer;
-	inline static constexpr RenderGraphResourceState State =
-	    (std::is_base_of_v<
-	         RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, false>,
-	         std::decay_t<R>> ||
-	     std::is_base_of_v<
-	         RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged, false>,
-	         std::decay_t<R>> ||
-	     std::is_base_of_v<
-	         RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>,
-	         std::decay_t<R>> ||
-	     std::is_base_of_v<
-	         RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged, true>,
-	         std::decay_t<R>>)
-	        ? RenderGraphResourceState::kManaged
-	        : ((std::is_base_of_v<
-	                RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal, false>,
-	                std::decay_t<R>> ||
-	            std::is_base_of_v<
-	                RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal, false>,
-	                std::decay_t<R>> ||
-	            std::is_base_of_v<
-	                RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal, true>,
-	                std::decay_t<R>> ||
-	            std::is_base_of_v<
-	                RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal, true>,
-	                std::decay_t<R>>)
-	               ? RenderGraphResourceState::kExternal
-	               : RenderGraphResourceState::NONE);
-	inline static constexpr bool IsManaged = State == RenderGraphResourceState::kManaged;
-	inline static constexpr bool IsExternal = State == RenderGraphResourceState::kExternal;
-	inline static constexpr bool IsAlias =
-	    std::is_base_of_v<
-	        RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>,
-	        std::decay_t<R>> ||
-	    std::is_base_of_v<
-	        RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged, true>,
-	        std::decay_t<R>> ||
-	    std::is_base_of_v<
-	        RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal, true>,
-	        std::decay_t<R>> ||
-	    std::is_base_of_v<
-	        RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal, true>,
-	        std::decay_t<R>>;
-	inline static constexpr bool IsManagedImageAlias = std::is_base_of_v<
-	    RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>,
-	    std::decay_t<R>>;
+struct RenderGraphSamplerInfo {
+	VkFilter filter;
+	VkSamplerMipmapMode mipmap_mode;
+	VkSamplerAddressMode address_mode;
+	inline bool operator<(const RenderGraphSamplerInfo &r) const {
+		return std::tie(filter, mipmap_mode, address_mode) < std::tie(r.filter, r.mipmap_mode, r.address_mode);
+	}
 };
+struct RenderGraphInputDescriptorInfo {
+	VkShaderStageFlags stage_flags;
+	RenderGraphSamplerInfo sampler_info;
+	Ptr<Sampler> sampler;
+};
+class RenderGraphInput {
+private:
+	const RenderGraphResourceBase *m_resource_ptr;
+	RenderGraphInputUsage m_usage;
+	RenderGraphInputDescriptorInfo m_descriptor_info;
 
-// Buffer
-using RenderGraphBufferBase = RenderGraphResource<RenderGraphResourceType::kBuffer>;
-template <> class RenderGraphResource<RenderGraphResourceType::kBuffer> : virtual public RenderGraphResourceBase {
+	friend class RenderGraphDescriptorPassBase;
+
 public:
-	~RenderGraphResource() override = default;
+	inline RenderGraphInput(const RenderGraphResourceBase *resource_ptr, RenderGraphInputUsage usage)
+	    : m_resource_ptr{resource_ptr}, m_usage{usage}, m_descriptor_info{} {}
+	inline RenderGraphInput(const RenderGraphResourceBase *resource_ptr, RenderGraphInputUsage usage,
+	                        RenderGraphInputDescriptorInfo descriptor_info)
+	    : m_resource_ptr{resource_ptr}, m_usage{usage}, m_descriptor_info{std::move(descriptor_info)} {}
+
+	inline const RenderGraphResourceBase *GetResource() const { return m_resource_ptr; }
+	inline RenderGraphInputUsage GetUsage() const { return m_usage; }
+	inline const RenderGraphInputDescriptorInfo &GetDescriptorInfo() const { return m_descriptor_info; }
+};
+
+enum class RenderGraphPassType { kGraphics, kCompute, kGroup, kCustom };
+class RenderGraphPassBase : public RenderGraphObjectBase {
+public:
+	using OwnerPtr = std::variant<RenderGraphBase *, const RenderGraphPassBase *>;
+
+private:
+	OwnerPtr m_owner_ptr;
+
+protected:
+	/* template <typename R, typename = std::enable_if_t<RenderGraphResourceTraits<R>::IsResource>>
+	inline auto MakeOutput(const Ptr<R> &resource) const {
+	    constexpr auto State = RenderGraphResourceTraits<R>::State;
+	    constexpr auto Type = RenderGraphResourceTraits<R>::Type;
+	    if constexpr (State != RenderGraphResourceState::NONE) {
+	        return std::make_shared<RenderGraphResource<Type, State, true>>(GetSelfPtr<RenderGraphPassBase>(),
+	                                                                        resource);
+	    } else {
+	        Ptr<RenderGraphResource<Type>> ret;
+	        if (resource->GetState() == RenderGraphResourceState::kExternal) {
+	            if (resource->IsAlias())
+	                ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
+	                    std::dynamic_pointer_cast<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
+	                        GetSelfPtr<RenderGraphPassBase>(), resource));
+	            else
+	                ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
+	                    std::dynamic_pointer_cast<
+	                        RenderGraphResource<Type, RenderGraphResourceState::kExternal, false>>(
+	                        GetSelfPtr<RenderGraphPassBase>(), resource));
+	        } else if (resource->GetState() == RenderGraphResourceState::kManaged) {
+	            if (resource->IsAlias())
+	                ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
+	                    std::dynamic_pointer_cast<RenderGraphResource<Type, RenderGraphResourceState::kManaged, true>>(
+	                        GetSelfPtr<RenderGraphPassBase>(), resource));
+	            else
+	                ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
+	                    std::dynamic_pointer_cast<RenderGraphResource<Type, RenderGraphResourceState::kManaged, false>>(
+	                        GetSelfPtr<RenderGraphPassBase>(), resource));
+	        }
+	        return ret;
+	    }
+	}
+
+	inline auto MakeOutput(
+	    const std::vector<std::variant<
+	        Ptr<const RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>>,
+	        Ptr<const RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, false>>>>
+	        &resources,
+	    VkImageViewType image_view_type, VkImageAspectFlags image_aspects) const {
+	    return std::make_shared<
+	        RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>>(
+	        GetSelfPtr<RenderGraphPassBase>(), resources, image_view_type, image_aspects);
+	} */
+
+private:
+	inline static constexpr uint32_t make_inputs_counter() { return 0; }
+	template <typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const RenderGraphInput &, Args... args) {
+		return make_inputs_counter(args...) + 1u;
+	}
+	template <typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const std::optional<RenderGraphInput> &optional_input,
+	                                                     Args... args) {
+		return make_inputs_counter(args...) + optional_input.has_value();
+	}
+	template <typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const std::vector<RenderGraphInput> &vector, Args... args) {
+		return make_inputs_counter(args...) + vector.size();
+	}
+	template <bool InputUsageClass(RenderGraphInputUsage), typename... Args>
+	inline static constexpr uint32_t make_inputs_counter(const RenderGraphInputGroup<InputUsageClass> &group,
+	                                                     Args... args) {
+		return make_inputs_counter(args...) + group.GetSize();
+	}
+
+	inline static void make_inputs_filler(RenderGraphInput *begin) {}
+	template <typename... Args>
+	inline static void make_inputs_filler(RenderGraphInput *begin, const RenderGraphInput &input, Args... args) {
+		*begin = input;
+		make_inputs_filler(begin + 1, args...);
+	}
+	template <typename... Args>
+	inline static void make_inputs_filler(RenderGraphInput *begin,
+	                                      const std::optional<RenderGraphInput> &optional_input, Args... args) {
+		if (optional_input.has_value()) {
+			*begin = optional_input.value();
+			make_inputs_filler(begin + 1, args...);
+		} else
+			make_inputs_filler(begin, args...);
+	}
+	template <typename... Args>
+	inline static void make_inputs_counter(RenderGraphInput *begin, const std::vector<RenderGraphInput> &vector,
+	                                       Args... args) {
+		std::copy(vector.begin(), vector.end(), begin);
+		make_inputs_filler(begin + vector.size(), args...);
+	}
+	template <bool InputUsageClass(RenderGraphInputUsage), typename... Args>
+	inline static void make_inputs_counter(RenderGraphInput *begin, const RenderGraphInputGroup<InputUsageClass> &group,
+	                                       Args... args) {
+		std::copy(group.GetInputs().begin(), group.GetInputs().end(), begin);
+		make_inputs_filler(begin + group.GetSize(), args...);
+	}
+
+protected:
+	// TODO: Optimize MakeInputs() and GetInputs() interface
+	template <typename... Args> inline std::vector<RenderGraphInput> MakeInputs(Args... args) {
+		uint32_t count{make_inputs_counter(args...)};
+		std::vector<RenderGraphInput> ret(count);
+		make_inputs_filler(ret.data(), args...);
+		return ret;
+	}
+
+public:
+	inline explicit RenderGraphPassBase(const OwnerPtr &owner)
+	    : m_owner_ptr{owner},
+	      RenderGraphObjectBase(owner.index() ? std::get<1>(owner)->GetRenderGraphPtr() : std::get<0>(owner)) {}
+	/* inline explicit RenderGraphPassBase(const std::weak_ptr<const RenderGraph> &owner)
+	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner} {}
+	inline explicit RenderGraphPassBase(const Ptr<const RenderGraphPassBase> &owner)
+	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner->m_render_graph_weak_ptr} {}
+	inline explicit RenderGraphPassBase(const std::weak_ptr<const RenderGraphPassBase> &owner)
+	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner.lock()->m_render_graph_weak_ptr} {} */
+	~RenderGraphPassBase() override = default;
+
+	virtual RenderGraphPassType GetType() const = 0;
+	virtual bool UseDescriptors() const { return false; }
+	virtual void CmdRun(const Ptr<CommandBuffer> &command_buffer, uint32_t frame) = 0;
+	virtual std::vector<RenderGraphInput> GetInputs() const = 0;
+
+	inline bool IsSecondary() const { return m_owner_ptr.index(); }
+	inline const RenderGraphPassBase *GetParentPassPtr() const {
+		return IsSecondary() ? std::get<1>(m_owner_ptr) : nullptr;
+	}
+};
+
+// Resources
+class RenderGraphBufferBase : public RenderGraphResourceBase {
+public:
+	inline explicit RenderGraphBufferBase(const RenderGraphPassBase *producer_pass_ptr)
+	    : RenderGraphResourceBase(producer_pass_ptr) {}
+	inline explicit RenderGraphBufferBase(RenderGraphBase *render_graph_ptr)
+	    : RenderGraphResourceBase(render_graph_ptr) {}
+	~RenderGraphBufferBase() override = default;
+
 	inline RenderGraphResourceType GetType() const final { return RenderGraphResourceType::kBuffer; }
 	inline bool IsAlias() const override { return false; }
 	virtual const Ptr<BufferBase> &GetBuffer(uint32_t frame = 0) const = 0;
 };
 
-using RenderGraphManagedBuffer =
-    RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged>;
-template <>
-class RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kManaged> final
-    : public RenderGraphBufferBase {
+enum class RenderGraphAttachmentLoadOp { kClear, kLoad, kDontCare };
+class RenderGraphImageBase : public RenderGraphResourceBase {
+public:
+	inline explicit RenderGraphImageBase(const RenderGraphPassBase *producer_pass_ptr)
+	    : RenderGraphResourceBase(producer_pass_ptr) {}
+	inline explicit RenderGraphImageBase(RenderGraphBase *render_graph_ptr)
+	    : RenderGraphResourceBase(render_graph_ptr) {}
+	~RenderGraphImageBase() override = default;
+
+	inline RenderGraphResourceType GetType() const final { return RenderGraphResourceType::kImage; }
+	inline bool IsAlias() const override { return false; }
+	virtual const Ptr<ImageView> &GetImageView(uint32_t frame = 0) const = 0;
+
+	virtual RenderGraphAttachmentLoadOp GetLoadOp() const = 0;
+	virtual const VkClearValue &GetClearValue() const = 0;
+};
+
+class RenderGraphExternalBufferBase : public RenderGraphBufferBase {
+public:
+	inline explicit RenderGraphExternalBufferBase(RenderGraphBase *render_graph_ptr)
+	    : RenderGraphBufferBase(render_graph_ptr) {}
+	~RenderGraphExternalBufferBase() override = default;
+
+	inline RenderGraphResourceState GetState() const final { return RenderGraphResourceState::kExternal; }
+};
+
+class RenderGraphExternalImageBase : public RenderGraphImageBase {
+public:
+	inline explicit RenderGraphExternalImageBase(RenderGraphBase *render_graph_ptr)
+	    : RenderGraphImageBase(render_graph_ptr) {}
+	~RenderGraphExternalImageBase() override = default;
+
+	inline RenderGraphResourceState GetState() const final { return RenderGraphResourceState::kExternal; }
+
+private:
+	RenderGraphAttachmentLoadOp m_load_op{RenderGraphAttachmentLoadOp::kDontCare};
+	VkClearValue m_clear_value{};
+
+public:
+	template <RenderGraphAttachmentLoadOp LoadOp,
+	          typename = std::enable_if_t<LoadOp != RenderGraphAttachmentLoadOp::kClear>>
+	inline void SetLoadOp() {
+		m_load_op = LoadOp;
+	}
+	template <RenderGraphAttachmentLoadOp LoadOp,
+	          typename = std::enable_if_t<LoadOp == RenderGraphAttachmentLoadOp::kClear>>
+	inline void SetLoadOp(const VkClearValue &clear_value) {
+		m_load_op = LoadOp;
+		m_clear_value = clear_value;
+	}
+
+	inline RenderGraphAttachmentLoadOp GetLoadOp() const final { return m_load_op; }
+	inline const VkClearValue &GetClearValue() const final { return m_clear_value; }
+};
+
+#ifdef MYVK_ENABLE_GLFW
+class RenderGraphSwapchainImage final : public RenderGraphExternalImageBase {
+private:
+	Ptr<FrameManager> m_frame_manager;
+
+public:
+	inline explicit RenderGraphSwapchainImage(RenderGraphBase *render_graph_ptr, Ptr<FrameManager> frame_manager)
+	    : RenderGraphExternalImageBase(render_graph_ptr), m_frame_manager{std::move(frame_manager)} {}
+	~RenderGraphSwapchainImage() final = default;
+
+	/* inline static Ptr<RenderGraphSwapchainImage> Create(const Ptr<FrameManager> &frame_manager) {
+	    return std::make_shared<RenderGraphSwapchainImage>(frame_manager);
+	} */
+
+	// inline bool IsPerFrame() const final { return true; }
+
+	inline const Ptr<ImageView> &GetImageView(uint32_t frame = 0) const final {
+		return m_frame_manager->GetCurrentSwapchainImageView();
+	}
+};
+#endif
+
+namespace _render_graph_resource_managed {
+
+class RenderGraphManagedBuffer final : public RenderGraphBufferBase {
 public:
 	using SizeFunc = std::function<uint32_t(uint32_t, uint32_t)>;
 
@@ -280,16 +540,12 @@ public:
 	inline RenderGraphResourceState GetState() const final { return RenderGraphResourceState::kManaged; }
 	// inline bool IsPerFrame() const final { return true; }
 
-	inline explicit RenderGraphResource(uint32_t size) : m_size{size} {}
-	template <class SizeFunc> inline explicit RenderGraphResource(SizeFunc func) : m_size_func{func}, m_size{0} {}
-	~RenderGraphResource() final = default;
-
-	inline static Ptr<RenderGraphManagedBuffer> Create(uint32_t size) {
-		return std::make_shared<RenderGraphManagedBuffer>(size);
-	}
-	template <class SizeFunc> inline static Ptr<RenderGraphManagedBuffer> Create(SizeFunc &&size_func) {
-		return std::make_shared<RenderGraphManagedBuffer>(std::forward(size_func));
-	}
+	inline explicit RenderGraphManagedBuffer(RenderGraphBase *render_graph_ptr, uint32_t size)
+	    : RenderGraphBufferBase(render_graph_ptr), m_size{size} {}
+	template <class SizeFunc>
+	inline explicit RenderGraphManagedBuffer(RenderGraphBase *render_graph_ptr, SizeFunc func)
+	    : RenderGraphBufferBase(render_graph_ptr), m_size_func{func}, m_size{0} {}
+	inline ~RenderGraphManagedBuffer() final = default;
 
 	const Ptr<BufferBase> &GetBuffer(uint32_t frame = 0) const final {
 		return m_buffers.size() == 1 ? m_buffers[0] : m_buffers[frame];
@@ -298,49 +554,9 @@ public:
 	friend class RenderGraphBase;
 };
 
-using RenderGraphExternalBufferBase =
-    RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal>;
-template <>
-class RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kExternal>
-    : virtual public RenderGraphBufferBase {
-public:
-	~RenderGraphResource() override = default;
+} // namespace _render_graph_resource_managed
 
-	inline RenderGraphResourceState GetState() const final { return RenderGraphResourceState::kExternal; }
-};
-
-/* template <RenderGraphInputUsage StaticUsage>
-using RenderGraphStaticBuffer =
-    RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kStatic, false, StaticUsage>;
-
-template <RenderGraphInputUsage StaticUsage>
-class RenderGraphResource<RenderGraphResourceType::kBuffer, RenderGraphResourceState::kStatic, false, StaticUsage> final
-    : public RenderGraphBufferBase {
-    static_assert(RenderGraphInputUsageIsReadOnly(StaticUsage) && RenderGraphInputUsageForBuffer(StaticUsage));
-
-private:
-    Ptr<BufferBase> m_buffer;
-
-public:
-    explicit RenderGraphResource(Ptr<BufferBase> buffer) : m_buffer{std::move(buffer)} {}
-    ~RenderGraphResource() final = default;
-
-    inline RenderGraphResourceState GetState() const final { return RenderGraphResourceState::kStatic; }
-    // inline bool IsPerFrame() const final { return false; }
-
-    inline static Ptr<RenderGraphResource> Create(const Ptr<BufferBase> &buffer) {
-        return std::make_shared<RenderGraphResource>(buffer);
-    }
-
-    inline const Ptr<BufferBase> &GetBuffer(uint32_t frame = 0) const final { return m_buffer; }
-    inline RenderGraphInputUsage GetUsage() const { return StaticUsage; }
-}; */
-
-template <RenderGraphResourceState State>
-using RenderGraphBufferAlias = RenderGraphResource<RenderGraphResourceType::kBuffer, State, true>;
-
-template <RenderGraphResourceState State>
-class RenderGraphResource<RenderGraphResourceType::kBuffer, State, true> final : public RenderGraphBufferBase {
+template <RenderGraphResourceState State> class RenderGraphBufferAlias : public RenderGraphBufferBase {
 private:
 	Ptr<const RenderGraphBufferBase> m_resource;
 
@@ -371,19 +587,6 @@ public:
 };
 
 // Image
-enum class RenderGraphAttachmentLoadOp { kClear, kLoad, kDontCare };
-
-using RenderGraphImageBase = RenderGraphResource<RenderGraphResourceType::kImage>;
-template <> class RenderGraphResource<RenderGraphResourceType::kImage> : virtual public RenderGraphResourceBase {
-public:
-	~RenderGraphResource() override = default;
-	inline RenderGraphResourceType GetType() const final { return RenderGraphResourceType::kImage; }
-	inline bool IsAlias() const override { return false; }
-	virtual const Ptr<ImageView> &GetImageView(uint32_t frame = 0) const = 0;
-
-	virtual RenderGraphAttachmentLoadOp GetLoadOp() const = 0;
-	virtual const VkClearValue &GetClearValue() const = 0;
-};
 
 // TODO: Use this
 /* class RenderGraphAttachmentBase {
@@ -515,59 +718,6 @@ public:
 
 	friend class RenderGraphBase;
 };
-
-using RenderGraphExternalImageBase =
-    RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal>;
-template <>
-class RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kExternal>
-    : virtual public RenderGraphImageBase {
-public:
-	~RenderGraphResource() override = default;
-
-	inline RenderGraphResourceState GetState() const final { return RenderGraphResourceState::kExternal; }
-
-private:
-	RenderGraphAttachmentLoadOp m_load_op{RenderGraphAttachmentLoadOp::kDontCare};
-	VkClearValue m_clear_value{};
-
-public:
-	template <RenderGraphAttachmentLoadOp LoadOp,
-	          typename = std::enable_if_t<LoadOp != RenderGraphAttachmentLoadOp::kClear>>
-	inline void SetLoadOp() {
-		m_load_op = LoadOp;
-	}
-	template <RenderGraphAttachmentLoadOp LoadOp,
-	          typename = std::enable_if_t<LoadOp == RenderGraphAttachmentLoadOp::kClear>>
-	inline void SetLoadOp(const VkClearValue &clear_value) {
-		m_load_op = LoadOp;
-		m_clear_value = clear_value;
-	}
-
-	inline RenderGraphAttachmentLoadOp GetLoadOp() const final { return m_load_op; }
-	inline const VkClearValue &GetClearValue() const final { return m_clear_value; }
-};
-
-#ifdef MYVK_ENABLE_GLFW
-class RenderGraphSwapchainImage final : public RenderGraphExternalImageBase {
-private:
-	Ptr<FrameManager> m_frame_manager;
-
-public:
-	inline explicit RenderGraphSwapchainImage(Ptr<FrameManager> frame_manager)
-	    : m_frame_manager{std::move(frame_manager)} {}
-	~RenderGraphSwapchainImage() final = default;
-
-	inline static Ptr<RenderGraphSwapchainImage> Create(const Ptr<FrameManager> &frame_manager) {
-		return std::make_shared<RenderGraphSwapchainImage>(frame_manager);
-	}
-
-	// inline bool IsPerFrame() const final { return true; }
-
-	inline const Ptr<ImageView> &GetImageView(uint32_t frame = 0) const final {
-		return m_frame_manager->GetCurrentSwapchainImageView();
-	}
-};
-#endif
 
 /* template <RenderGraphInputUsage StaticUsage>
 using RenderGraphStaticImage =
@@ -728,43 +878,6 @@ public:
 	friend class RenderGraphBase;
 };
 
-struct RenderGraphSamplerInfo {
-	VkFilter filter;
-	VkSamplerMipmapMode mipmap_mode;
-	VkSamplerAddressMode address_mode;
-	inline bool operator<(const RenderGraphSamplerInfo &r) const {
-		return std::tie(filter, mipmap_mode, address_mode) < std::tie(r.filter, r.mipmap_mode, r.address_mode);
-	}
-};
-
-struct RenderGraphInputDescriptorInfo {
-	VkShaderStageFlags stage_flags;
-	RenderGraphSamplerInfo sampler_info;
-	Ptr<Sampler> sampler;
-};
-
-class RenderGraphInput {
-private:
-	Ptr<const RenderGraphResourceBase> m_resource;
-	RenderGraphInputUsage m_usage;
-	RenderGraphInputDescriptorInfo m_descriptor_info;
-
-	friend class RenderGraphDescriptorPassBase;
-
-public:
-	template <typename R, typename = std::enable_if_t<RenderGraphResourceTraits<R>::IsResource>>
-	inline RenderGraphInput(Ptr<R> resource, RenderGraphInputUsage usage)
-	    : m_resource{std::move(resource)}, m_usage{usage}, m_descriptor_info{} {}
-	template <typename R, typename = std::enable_if_t<RenderGraphResourceTraits<R>::IsResource>>
-	inline RenderGraphInput(Ptr<R> resource, RenderGraphInputUsage usage,
-	                        RenderGraphInputDescriptorInfo descriptor_info)
-	    : m_resource{std::move(resource)}, m_usage{usage}, m_descriptor_info{std::move(descriptor_info)} {}
-
-	inline const Ptr<const RenderGraphResourceBase> &GetResource() const { return m_resource; }
-	inline RenderGraphInputUsage GetUsage() const { return m_usage; }
-	inline const RenderGraphInputDescriptorInfo &GetDescriptorInfo() const { return m_descriptor_info; }
-};
-
 inline constexpr bool RenderGraphInputGroupDefaultClass(RenderGraphInputUsage) { return true; }
 template <bool InputUsageClass(RenderGraphInputUsage)> class RenderGraphInputGroup {
 private:
@@ -860,148 +973,6 @@ public:
 
 	RenderGraphInput &operator[](uint32_t idx) { return m_inputs[idx]; }
 	const RenderGraphInput &operator[](uint32_t idx) const { return m_inputs[idx]; }
-};
-
-enum class RenderGraphPassType { kGraphics, kCompute, kGroup, kCustom, kFinal };
-class RenderGraphPassBase : public DeviceObjectBase {
-public:
-	using OwnerWeakPtr = std::variant<std::weak_ptr<RenderGraphBase>, std::weak_ptr<const RenderGraphPassBase>>;
-
-private:
-	std::weak_ptr<RenderGraphBase> m_render_graph_weak_ptr;
-	OwnerWeakPtr m_owner_weak_ptr;
-
-protected:
-	template <typename R, typename = std::enable_if_t<RenderGraphResourceTraits<R>::IsResource>>
-	inline auto MakeOutput(const Ptr<R> &resource) const {
-		constexpr auto State = RenderGraphResourceTraits<R>::State;
-		constexpr auto Type = RenderGraphResourceTraits<R>::Type;
-		if constexpr (State != RenderGraphResourceState::NONE) {
-			return std::make_shared<RenderGraphResource<Type, State, true>>(GetSelfPtr<RenderGraphPassBase>(),
-			                                                                resource);
-		} else {
-			Ptr<RenderGraphResource<Type>> ret;
-			if (resource->GetState() == RenderGraphResourceState::kExternal) {
-				if (resource->IsAlias())
-					ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
-					    std::dynamic_pointer_cast<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
-					        GetSelfPtr<RenderGraphPassBase>(), resource));
-				else
-					ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
-					    std::dynamic_pointer_cast<
-					        RenderGraphResource<Type, RenderGraphResourceState::kExternal, false>>(
-					        GetSelfPtr<RenderGraphPassBase>(), resource));
-			} else if (resource->GetState() == RenderGraphResourceState::kManaged) {
-				if (resource->IsAlias())
-					ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
-					    std::dynamic_pointer_cast<RenderGraphResource<Type, RenderGraphResourceState::kManaged, true>>(
-					        GetSelfPtr<RenderGraphPassBase>(), resource));
-				else
-					ret = std::make_shared<RenderGraphResource<Type, RenderGraphResourceState::kExternal, true>>(
-					    std::dynamic_pointer_cast<RenderGraphResource<Type, RenderGraphResourceState::kManaged, false>>(
-					        GetSelfPtr<RenderGraphPassBase>(), resource));
-			}
-			return ret;
-		}
-	}
-	inline auto MakeOutput(
-	    const std::vector<std::variant<
-	        Ptr<const RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>>,
-	        Ptr<const RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, false>>>>
-	        &resources,
-	    VkImageViewType image_view_type, VkImageAspectFlags image_aspects) const {
-		return std::make_shared<
-		    RenderGraphResource<RenderGraphResourceType::kImage, RenderGraphResourceState::kManaged, true>>(
-		    GetSelfPtr<RenderGraphPassBase>(), resources, image_view_type, image_aspects);
-	}
-
-private:
-	inline static constexpr uint32_t make_inputs_counter() { return 0; }
-	template <typename... Args>
-	inline static constexpr uint32_t make_inputs_counter(const RenderGraphInput &, Args... args) {
-		return make_inputs_counter(args...) + 1u;
-	}
-	template <typename... Args>
-	inline static constexpr uint32_t make_inputs_counter(const std::optional<RenderGraphInput> &optional_input,
-	                                                     Args... args) {
-		return make_inputs_counter(args...) + optional_input.has_value();
-	}
-	template <typename... Args>
-	inline static constexpr uint32_t make_inputs_counter(const std::vector<RenderGraphInput> &vector, Args... args) {
-		return make_inputs_counter(args...) + vector.size();
-	}
-	template <bool InputUsageClass(RenderGraphInputUsage), typename... Args>
-	inline static constexpr uint32_t make_inputs_counter(const RenderGraphInputGroup<InputUsageClass> &group,
-	                                                     Args... args) {
-		return make_inputs_counter(args...) + group.GetSize();
-	}
-
-	inline static void make_inputs_filler(RenderGraphInput *begin) {}
-	template <typename... Args>
-	inline static void make_inputs_filler(RenderGraphInput *begin, const RenderGraphInput &input, Args... args) {
-		*begin = input;
-		make_inputs_filler(begin + 1, args...);
-	}
-	template <typename... Args>
-	inline static void make_inputs_filler(RenderGraphInput *begin,
-	                                      const std::optional<RenderGraphInput> &optional_input, Args... args) {
-		if (optional_input.has_value()) {
-			*begin = optional_input.value();
-			make_inputs_filler(begin + 1, args...);
-		} else
-			make_inputs_filler(begin, args...);
-	}
-	template <typename... Args>
-	inline static void make_inputs_counter(RenderGraphInput *begin, const std::vector<RenderGraphInput> &vector,
-	                                       Args... args) {
-		std::copy(vector.begin(), vector.end(), begin);
-		make_inputs_filler(begin + vector.size(), args...);
-	}
-	template <bool InputUsageClass(RenderGraphInputUsage), typename... Args>
-	inline static void make_inputs_counter(RenderGraphInput *begin, const RenderGraphInputGroup<InputUsageClass> &group,
-	                                       Args... args) {
-		std::copy(group.GetInputs().begin(), group.GetInputs().end(), begin);
-		make_inputs_filler(begin + group.GetSize(), args...);
-	}
-
-protected:
-	// TODO: Optimize MakeInputs() and GetInputs() interface
-	template <typename... Args> inline std::vector<RenderGraphInput> MakeInputs(Args... args) {
-		uint32_t count{make_inputs_counter(args...)};
-		std::vector<RenderGraphInput> ret(count);
-		make_inputs_filler(ret.data(), args...);
-		return ret;
-	}
-
-public:
-	inline explicit RenderGraphPassBase(const OwnerWeakPtr &owner)
-	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner.index()
-	                                                           ? std::get<1>(owner).lock()->m_render_graph_weak_ptr
-	                                                           : std::get<0>(owner)} {}
-	/* inline explicit RenderGraphPassBase(const std::weak_ptr<const RenderGraph> &owner)
-	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner} {}
-	inline explicit RenderGraphPassBase(const Ptr<const RenderGraphPassBase> &owner)
-	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner->m_render_graph_weak_ptr} {}
-	inline explicit RenderGraphPassBase(const std::weak_ptr<const RenderGraphPassBase> &owner)
-	    : m_owner_weak_ptr{owner}, m_render_graph_weak_ptr{owner.lock()->m_render_graph_weak_ptr} {} */
-	~RenderGraphPassBase() override = default;
-	// Disable Copy and Move
-	inline RenderGraphPassBase(const RenderGraphPassBase &r) = delete;
-	inline RenderGraphPassBase &operator=(const RenderGraphPassBase &r) = delete;
-	inline RenderGraphPassBase(RenderGraphPassBase &&r) = delete;
-	inline RenderGraphPassBase &operator=(RenderGraphPassBase &&r) = delete;
-
-	virtual RenderGraphPassType GetType() const = 0;
-	virtual bool UseDescriptors() const { return false; }
-	virtual void CmdRun(const Ptr<CommandBuffer> &command_buffer, uint32_t frame) = 0;
-	virtual std::vector<RenderGraphInput> GetInputs() const = 0;
-
-	inline bool IsSecondary() const { return m_owner_weak_ptr.index(); }
-	inline Ptr<const RenderGraphPassBase> LockParentPass() const {
-		return IsSecondary() ? std::get<1>(m_owner_weak_ptr).lock() : nullptr;
-	}
-	inline Ptr<RenderGraphBase> LockRenderGraph() const { return m_render_graph_weak_ptr.lock(); }
-	const Ptr<Device> &GetDevicePtr() const final;
 };
 
 class RenderGraphInfo {
