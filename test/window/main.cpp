@@ -10,6 +10,43 @@
 
 constexpr uint32_t kFrameCount = 3;
 
+class TestPass0 final : public myvk::render_graph::RGPassBase,
+                        public myvk::render_graph::RGResourcePool<TestPass0>,
+                        public myvk::render_graph::RGInputPool<TestPass0> {
+public:
+	void Create() {
+		printf("Create TestPass0\n");
+		auto managed_buffer = CreateResource<myvk::render_graph::RGManagedBuffer>("draw_list");
+		std::cout << managed_buffer->GetName() << std::endl;
+		printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource("draw_list"), GetImageResource("draw_list"));
+
+		auto input = AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>("draw_list_gen", managed_buffer);
+		printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
+		       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
+		auto output_buffer = CreateBufferOutput("draw_list_gen");
+		printf("output_buffer = %p\n", output_buffer);
+		auto output_buffer2 = CreateBufferOutput("draw_list_gen");
+		printf("output_buffer2 = %p\n", output_buffer2);
+	}
+	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return CreateBufferOutput("draw_list_gen"); }
+};
+
+class TestPass final : public myvk::render_graph::RGPassBase,
+                       public myvk::render_graph::RGResourcePool<TestPass>,
+                       public myvk::render_graph::RGInputPool<TestPass> {
+public:
+	void Create(myvk::render_graph::RGBufferBase *draw_list) {
+		printf("Create TestPass\n");
+		auto input = AddInput<myvk::render_graph::RGInputUsage::kStorageBufferRW>("draw_list_rw", draw_list);
+		printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
+		       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
+		auto output_buffer = CreateBufferOutput("draw_list_rw");
+		printf("output_buffer = %p\n", output_buffer);
+		auto output_buffer2 = CreateBufferOutput("draw_list_rw");
+		printf("output_buffer2 = %p\n", output_buffer2);
+	}
+};
+
 int main() {
 	GLFWwindow *window = myvk::GLFWCreateWindow("Test", 640, 480, true);
 	myvk::ImGuiInit(window);
@@ -26,19 +63,12 @@ int main() {
 		    physical_device->GetDefaultFeatures(), {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 	}
 
-	myvk::render_graph::RGResourcePool<myvk::render_graph::RenderGraphBase> object_pool;
-	auto managed_buffer = object_pool.CreateBuffer<myvk::render_graph::RGManagedBuffer>("draw_list");
-	std::cout << managed_buffer->GetName() << std::endl;
-	printf("%p %p\n", managed_buffer, object_pool.GetBuffer("draw_list"));
-	myvk::render_graph::RGBufferAlias alias{managed_buffer};
-	std::cout << managed_buffer << " " << alias.GetResource<myvk::render_graph::RGManagedBuffer>() << std::endl;
-	myvk::render_graph::RGBufferAlias alias2{&alias};
-	std::cout << managed_buffer << " " << alias2.GetResource<myvk::render_graph::RGManagedBuffer>() << std::endl;
-	object_pool.DeleteBuffer("draw_list");
-	std::cout << managed_buffer << " " << object_pool.GetBuffer("draw_list") << std::endl;
+	TestPass0 test_pass0;
+	test_pass0.Create();
+	TestPass test_pass;
+	test_pass.Create(test_pass0.GetDrawListOutput());
 
-	myvk::render_graph::RGInputPool<myvk::render_graph::RenderGraphBase, myvk::render_graph::RGInputUsageAll>
-	    input_pool;
+	// object_pool.DeleteBuffer("draw_list");
 
 	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
 
