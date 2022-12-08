@@ -16,19 +16,22 @@ class TestPass0 final : public myvk::render_graph::RGPassBase,
 public:
 	void Create() {
 		printf("Create TestPass0\n");
-		auto managed_buffer = CreateResource<myvk::render_graph::RGManagedBuffer>("draw_list");
-		std::cout << managed_buffer->GetName() << std::endl;
-		printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource("draw_list"), GetImageResource("draw_list"));
 
-		auto input = AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>("draw_list_gen", managed_buffer);
-		printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
-		       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
-		auto output_buffer = CreateBufferOutput("draw_list_gen");
-		printf("output_buffer = %p\n", output_buffer);
-		auto output_buffer2 = CreateBufferOutput("draw_list_gen");
-		printf("output_buffer2 = %p\n", output_buffer2);
+		for (int i = 0; i < 10; ++i) {
+			auto managed_buffer = CreateResource<myvk::render_graph::RGManagedBuffer>({"draw_list", i});
+			std::cout << managed_buffer->GetKey().GetString() << " " << managed_buffer->GetKey().GetID() << std::endl;
+			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}), GetImageResource({"draw_list", i}));
+
+			AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>({"draw_list_gen", i}, managed_buffer);
+			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
+			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
+			auto output_buffer = CreateBufferOutput({"draw_list_gen", i});
+			printf("output_buffer = %p\n", output_buffer);
+			auto output_buffer2 = CreateBufferOutput({"draw_list_gen", i});
+			printf("output_buffer2 = %p\n", output_buffer2);
+		}
 	}
-	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return CreateBufferOutput("draw_list_gen"); }
+	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return CreateBufferOutput({"draw_list_gen"}); }
 };
 
 class TestPass final : public myvk::render_graph::RGPassBase,
@@ -37,12 +40,12 @@ class TestPass final : public myvk::render_graph::RGPassBase,
 public:
 	void Create(myvk::render_graph::RGBufferBase *draw_list) {
 		printf("Create TestPass\n");
-		auto input = AddInput<myvk::render_graph::RGInputUsage::kStorageBufferRW>("draw_list_rw", draw_list);
-		printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
-		       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
-		auto output_buffer = CreateBufferOutput("draw_list_rw");
+		AddInput<myvk::render_graph::RGInputUsage::kStorageBufferRW>({"draw_list_rw"}, draw_list);
+		// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
+		//       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
+		auto output_buffer = CreateBufferOutput({"draw_list_rw"});
 		printf("output_buffer = %p\n", output_buffer);
-		auto output_buffer2 = CreateBufferOutput("draw_list_rw");
+		auto output_buffer2 = CreateBufferOutput({"draw_list_rw"});
 		printf("output_buffer2 = %p\n", output_buffer2);
 	}
 };
