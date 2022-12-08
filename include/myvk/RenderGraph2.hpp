@@ -8,8 +8,7 @@
 #include <tuple>
 #include <unordered_map>
 #include <utility>
-
-// TODO: Use constexpr const char * + uint32_t as key instead of std::string
+#include <variant>
 
 namespace myvk::render_graph {
 
@@ -215,9 +214,9 @@ public:
 		_32_ = r._32_;
 		return *this;
 	}
-	inline std::string_view GetString() const { return std::string_view{m_str, m_len}; }
+	inline std::string_view GetName() const { return std::string_view{m_str, m_len}; }
 	inline IDType GetID() const { return m_id; }
-	inline void SetString(std::string_view str) {
+	inline void SetName(std::string_view str) {
 		m_len = std::min(str.length(), kMaxStrLen);
 		std::copy(str.begin(), str.begin() + m_len, m_str);
 		std::fill(m_str + m_len, m_str + kMaxStrLen, '\0');
@@ -295,149 +294,7 @@ public:
 	inline RGPassBase *GetProducerPassPtr() const { return m_producer_pass_ptr; }
 };
 
-// Object Pool
-namespace _details_rg_object_pool_ {
-template <typename Type> struct TypeTraits {
-	constexpr static bool kIsRGObject = std::is_base_of_v<RGObjectBase, Type>;
-	constexpr static bool kUsePtr = (kIsRGObject && !std::is_final_v<Type>) || !std::is_move_constructible_v<Type>;
-	constexpr static bool kUseOptional = !kUsePtr && (kIsRGObject || !std::is_default_constructible_v<Type>);
-	constexpr static bool kUsePlain = !kUsePtr && !kUseOptional;
-	using AlterT =
-	    std::conditional_t<kUsePtr, std::unique_ptr<Type>, std::conditional_t<kUseOptional, std::optional<Type>, Type>>;
-	template <typename X> constexpr static bool Match = kUsePtr ? std::is_base_of_v<Type, X> : std::is_same_v<Type, X>;
-};
-template <typename... Types> struct TypeTuple;
-template <typename Type, typename... Others> struct TypeTuple<Type, Others...> {
-	using T = decltype(std::tuple_cat(std::declval<std::tuple<typename TypeTraits<Type>::AlterT>>(),
-	                                  std::declval<typename TypeTuple<Others...>::T>()));
-};
-template <> struct TypeTuple<> {
-	using T = std::tuple<>;
-};
-} // namespace _details_rg_object_pool_
-template <typename RGDerived, typename... Types> class RGObjectPool {
-private:
-	using TypeTuple = typename _details_rg_object_pool_::TypeTuple<Types...>::T;
-	template <std::size_t Index> using GetType = std::tuple_element_t<Index, std::tuple<Types...>>;
-	template <std::size_t Index> using GetAlterType = std::tuple_element_t<Index, TypeTuple>;
-	template <std::size_t Index>
-	static constexpr bool kUsePtr = _details_rg_object_pool_::TypeTraits<GetType<Index>>::kUsePtr;
-	template <std::size_t Index>
-	static constexpr bool kUseOptional = _details_rg_object_pool_::TypeTraits<GetType<Index>>::kUseOptional;
-	template <std::size_t Index>
-	static constexpr bool kIsRGObject = _details_rg_object_pool_::TypeTraits<GetType<Index>>::kIsRGObject;
-	template <std::size_t Index, typename T>
-	static constexpr bool kTypeMatch = _details_rg_object_pool_::TypeTraits<GetType<Index>>::template Match<T>;
-
-	RGKeyMap<TypeTuple> m_pool;
-
-	template <std::size_t Index, typename ConsType, typename... Args, typename MapIterator,
-	          typename = std::enable_if_t<kTypeMatch<Index, ConsType>>>
-	inline ConsType *initialize(const MapIterator &it, Args &&...args) {
-		GetAlterType<Index> &ref = std::get<Index>(it->second);
-		ConsType *ptr;
-		if constexpr (kUsePtr<Index>) {
-			auto uptr = std::make_unique<ConsType>(std::forward<Args>(args)...);
-			ptr = uptr.get();
-			ref = std::move(uptr);
-		} else if constexpr (kUseOptional<Index>) {
-			ref.emplace(std::forward<Args>(args)...);
-			ptr = &(ref.value());
-		} else {
-			ref = ConsType(std::forward<Args>(args)...);
-			ptr = &ref;
-		}
-		using Type = GetType<Index>;
-
-		// Initialize RGObjectBase
-		if constexpr (std::is_base_of_v<RGObjectBase, Type>) {
-			static_assert(std::is_base_of_v<RenderGraphBase, RGDerived> || std::is_base_of_v<RGObjectBase, RGDerived>);
-
-			auto base_ptr = static_cast<RGObjectBase *>(ptr);
-			base_ptr->set_key_ptr(&(it->first));
-			if constexpr (std::is_base_of_v<RenderGraphBase, RGDerived>)
-				base_ptr->set_render_graph_ptr((RenderGraphBase *)static_cast<const RGDerived *>(this));
-			else
-				base_ptr->set_render_graph_ptr(
-				    ((RGObjectBase *)static_cast<const RGDerived *>(this))->GetRenderGraphPtr());
-		}
-		// Initialize RGResourceBase
-		if constexpr (std::is_base_of_v<RGResourceBase, Type>) {
-			auto resource_ptr = static_cast<RGResourceBase *>(ptr);
-			if constexpr (std::is_base_of_v<RGPassBase, RGDerived>)
-				resource_ptr->set_producer_pass_ptr((RGPassBase *)static_cast<const RGDerived *>(this));
-		}
-		return ptr;
-	}
-	template <std::size_t Index, typename Type, typename MapIterator,
-	          typename = std::enable_if_t<kTypeMatch<Index, Type>>>
-	inline Type *get(const MapIterator &it) const {
-		const GetAlterType<Index> &ref = std::get<Index>(it->second);
-		if constexpr (kUsePtr<Index>)
-			return (Type *)dynamic_cast<const Type *>(ref.get());
-		else if constexpr (kUseOptional<Index>)
-			return ref.has_value() ? (Type *)(&(ref.value())) : nullptr;
-		else
-			return (Type *)(&ref);
-	}
-
-public:
-	inline RGObjectPool() {
-		static_assert(std::is_default_constructible_v<TypeTuple> && std::is_move_constructible_v<TypeTuple>);
-		// TODO: Debug
-		printf("%s\n", typeid(TypeTuple).name());
-	}
-	inline RGObjectPool(RGObjectPool &&) noexcept = default;
-	inline virtual ~RGObjectPool() = default;
-
-protected:
-	// Create Tag and Initialize the Main Object
-	template <std::size_t Index, typename ConsType, typename... Args,
-	          typename = std::enable_if_t<kTypeMatch<Index, ConsType>>>
-	inline ConsType *CreateAndInitialize(const RGKey &key, Args &&...args) {
-		if (m_pool.find(key) != m_pool.end())
-			return nullptr;
-		auto it = m_pool.insert({key, TypeTuple{}}).first;
-		return initialize<Index, ConsType, Args...>(it, std::forward<Args>(args)...);
-	}
-	// Create Tag Only
-	inline void Create(const RGKey &key) {
-		if (m_pool.find(key) != m_pool.end())
-			return;
-		m_pool.insert(std::make_pair(key, TypeTuple{}));
-	}
-	// Initialize Object of a Tag
-	template <std::size_t Index, typename ConsType, typename... Args,
-	          typename = std::enable_if_t<kTypeMatch<Index, ConsType>>>
-	inline ConsType *Initialize(const RGKey &key, Args &&...args) {
-		auto it = m_pool.find(key);
-		if (it == m_pool.end())
-			return nullptr;
-		return initialize<Index, ConsType, Args...>(it, std::forward<Args>(args)...);
-	}
-	// Get an Object from a Tag, if not Initialized, Initialize it.
-	template <std::size_t Index, typename ConsType, typename... Args,
-	          typename = std::enable_if_t<kTypeMatch<Index, ConsType> && kIsRGObject<Index>>>
-	inline ConsType *InitializeOrGet(const RGKey &key, Args &&...args) {
-		auto it = m_pool.find(key);
-		if (it == m_pool.end())
-			return nullptr;
-		auto ret = (ConsType *)get<Index, ConsType>(it);
-		if (!ret)
-			ret = initialize<Index, ConsType, Args...>(it, std::forward<Args>(args)...);
-		return ret;
-	}
-	// Delete a Tag and its Objects
-	inline void Delete(const RGKey &key) { m_pool.erase(key); }
-	// Get an Object from a Tag
-	template <std::size_t Index, typename Type, typename = std::enable_if_t<kTypeMatch<Index, Type>>>
-	inline Type *Get(const RGKey &key) const {
-		auto it = m_pool.find(key);
-		if (it == m_pool.end())
-			return nullptr;
-		return (Type *)get<Index, Type>(it);
-	}
-};
+#include "RenderGraphObjectPool.inl"
 
 // Buffer and Image
 class RGBufferBase : virtual public RGResourceBase {
@@ -526,9 +383,10 @@ public:
 };
 
 // Resource Pool
-template <typename RGDerived> class RGResourcePool : public RGObjectPool<RGDerived, RGBufferBase, RGImageBase> {
+template <typename RGDerived>
+class RGResourcePool : public RGObjectPool<RGDerived, RGObjectVariant<RGBufferBase, RGImageBase>> {
 private:
-	using ResourcePool = RGObjectPool<RGDerived, RGBufferBase, RGImageBase>;
+	using ResourcePool = RGObjectPool<RGDerived, RGObjectVariant<RGBufferBase, RGImageBase>>;
 
 public:
 	inline RGResourcePool() = default;
@@ -540,12 +398,7 @@ protected:
 	    typename Type, typename... Args,
 	    typename = std::enable_if_t<std::is_base_of_v<RGBufferBase, Type> || std::is_base_of_v<RGImageBase, Type>>>
 	inline Type *CreateResource(const RGKey &resource_key, Args &&...args) {
-		if constexpr (std::is_base_of_v<RGBufferBase, Type>)
-			return ResourcePool::template CreateAndInitialize<0, Type, Args...>(resource_key,
-			                                                                    std::forward<Args>(args)...);
-		else
-			return ResourcePool::template CreateAndInitialize<1, Type, Args...>(resource_key,
-			                                                                    std::forward<Args>(args)...);
+		return ResourcePool::template CreateAndInitialize<0, Type, Args...>(resource_key, std::forward<Args>(args)...);
 	}
 	inline void DeleteResource(const RGKey &resource_key) { return ResourcePool::Delete(resource_key); }
 
@@ -553,14 +406,15 @@ protected:
 		return ResourcePool::template Get<0, RGBufferBase>(resource_buffer_key);
 	}
 	inline RGImageBase *GetImageResource(const RGKey &resource_image_key) const {
-		return ResourcePool::template Get<1, RGImageBase>(resource_image_key);
+		return ResourcePool::template Get<0, RGImageBase>(resource_image_key);
 	}
 };
 
 // Input Pool
-template <typename RGDerived> class RGInputPool : public RGObjectPool<RGDerived, RGInput, RGBufferAlias, RGImageAlias> {
+template <typename RGDerived>
+class RGInputPool : public RGObjectPool<RGDerived, RGInput, RGObjectVariant<RGBufferAlias, RGImageAlias>> {
 private:
-	using InputPool = RGObjectPool<RGDerived, RGInput, RGBufferAlias, RGImageAlias>;
+	using InputPool = RGObjectPool<RGDerived, RGInput, RGObjectVariant<RGBufferAlias, RGImageAlias>>;
 
 	template <typename RGType> inline RGType *create_output(const RGKey &input_key) {
 		// RGType can only be RGBufferBase or RGImageBase
@@ -582,7 +436,7 @@ private:
 				           : nullptr;
 			} else {
 				return (input->GetResource()->GetType() == kResType)
-				           ? InputPool::template InitializeOrGet<2, RGImageAlias>(
+				           ? InputPool::template InitializeOrGet<1, RGImageAlias>(
 				                 input_key, dynamic_cast<RGImageBase *>(input->GetResource()))
 				           : nullptr;
 			}
@@ -603,9 +457,9 @@ protected:
 	inline void AddInput(const RGKey &input_key, RGImageBase *image) {
 		InputPool::template CreateAndInitialize<0, RGInput>(input_key, image, Usage);
 	}
-	inline const RGInput *GetInput(const RGKey &input_key) const {
-		return InputPool::template Get<0, RGInput>(input_key);
-	}
+	/* inline const RGInput *GetInput(const RGKey &input_key) const {
+	    return InputPool::template Get<0, RGInput>(input_key);
+	} */
 	inline void RemoveInput(const RGKey &input_key) { InputPool::Delete(input_key); }
 
 	inline RGBufferBase *CreateBufferOutput(const RGKey &input_buffer_key) {
@@ -640,6 +494,11 @@ public:
 	bool IsAlias() const final { return false; }
 	RGResourceState GetState() const final { return RGResourceState::kManaged; }
 };
+
+// TODO: Debug Type Traits
+static_assert(std::is_same_v<RGObjectVariant<RGBufferAlias, RGObjectBase, RGResourceBase, RGImageAlias>,
+                             std::variant<std::monostate, RGImageAlias, std::unique_ptr<RGResourceBase>,
+                                          std::unique_ptr<RGObjectBase>, RGBufferAlias>>);
 } // namespace myvk::render_graph
 
 #endif

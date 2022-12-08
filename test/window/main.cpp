@@ -19,8 +19,9 @@ public:
 
 		for (int i = 0; i < 10; ++i) {
 			auto managed_buffer = CreateResource<myvk::render_graph::RGManagedBuffer>({"draw_list", i});
-			std::cout << managed_buffer->GetKey().GetString() << " " << managed_buffer->GetKey().GetID() << std::endl;
-			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}), GetImageResource({"draw_list", i}));
+			std::cout << managed_buffer->GetKey().GetName() << " " << managed_buffer->GetKey().GetID() << std::endl;
+			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}),
+			       GetImageResource({"draw_list", i}));
 
 			AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>({"draw_list_gen", i}, managed_buffer);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
@@ -45,8 +46,10 @@ public:
 		//       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 		auto output_buffer = CreateBufferOutput({"draw_list_rw"});
 		printf("output_buffer = %p\n", output_buffer);
+		std::cout << output_buffer->GetKey().GetName() << std::endl;
 		auto output_buffer2 = CreateBufferOutput({"draw_list_rw"});
 		printf("output_buffer2 = %p\n", output_buffer2);
+		std::cout << output_buffer2->GetKey().GetName() << std::endl;
 	}
 };
 
