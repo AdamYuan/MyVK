@@ -186,66 +186,15 @@ template <RGInputUsageClass A, RGInputUsageClass B> inline constexpr bool RGInpu
 	return RGInputUsageIntersect<A, RGInputUsageComplement<B>>(x);
 }
 
-class RGKey {
-public:
-	using LengthType = uint8_t;
-	using IDType = uint16_t;
-	constexpr static const std::size_t kMaxStrLen = 32 - sizeof(LengthType) - sizeof(IDType);
-
-private:
-	union {
-		struct {
-			IDType m_id;
-			LengthType m_len;
-			char m_str[kMaxStrLen];
-		};
-		std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> _32_;
-	};
-	static_assert(sizeof(_32_) == 32);
-
-public:
-	inline RGKey() : _32_{} {}
-	template <typename IntType = IDType, typename = std::enable_if_t<std::is_integral_v<IntType>>>
-	inline RGKey(std::string_view str, IntType id = 0) : m_str{}, m_len(std::min(str.length(), kMaxStrLen)), m_id(id) {
-		std::copy(str.begin(), str.begin() + m_len, m_str);
-	}
-	inline RGKey(const RGKey &r) : _32_{r._32_} {}
-	inline RGKey &operator=(const RGKey &r) {
-		_32_ = r._32_;
-		return *this;
-	}
-	inline std::string_view GetName() const { return std::string_view{m_str, m_len}; }
-	inline IDType GetID() const { return m_id; }
-	inline void SetName(std::string_view str) {
-		m_len = std::min(str.length(), kMaxStrLen);
-		std::copy(str.begin(), str.begin() + m_len, m_str);
-		std::fill(m_str + m_len, m_str + kMaxStrLen, '\0');
-	}
-	inline void SetID(IDType id) { m_id = id; }
-
-	inline bool operator<(const RGKey &r) const { return _32_ < r._32_; }
-	inline bool operator>(const RGKey &r) const { return _32_ > r._32_; }
-	inline bool operator==(const RGKey &r) const { return _32_ == r._32_; }
-	inline bool operator!=(const RGKey &r) const { return _32_ != r._32_; }
-	struct Hash {
-		inline std::size_t operator()(RGKey const &r) const noexcept {
-			return std::get<0>(r._32_) ^ std::get<1>(r._32_) ^ std::get<2>(r._32_) ^ std::get<3>(r._32_);
-			// return ((std::get<0>(r._32_) * 37 + std::get<1>(r._32_)) * 37 + std::get<2>(r._32_)) * 37 +
-			//        std::get<3>(r._32_);
-		}
-	};
-};
-static_assert(sizeof(RGKey) == 32 && std::is_move_constructible_v<RGKey>);
-template <typename Value> using RGKeyMap = std::unordered_map<RGKey, Value, RGKey::Hash>;
-
 // Object Base
+class RGObjectPoolKey;
 class RGObjectBase {
 private:
 	RenderGraphBase *m_render_graph_ptr{};
-	const RGKey *m_key_ptr{};
+	const RGObjectPoolKey *m_key_ptr{};
 
 	inline void set_render_graph_ptr(RenderGraphBase *render_graph_ptr) { m_render_graph_ptr = render_graph_ptr; }
-	inline void set_key_ptr(const RGKey *key_ptr) { m_key_ptr = key_ptr; }
+	inline void set_key_ptr(const RGObjectPoolKey *key_ptr) { m_key_ptr = key_ptr; }
 
 	template <typename, typename...> friend class RGObjectPool;
 
@@ -254,7 +203,7 @@ public:
 	inline virtual ~RGObjectBase() = default;
 
 	inline RenderGraphBase *GetRenderGraphPtr() const { return m_render_graph_ptr; }
-	inline const RGKey &GetKey() const { return *m_key_ptr; }
+	inline const RGObjectPoolKey &GetKey() const { return *m_key_ptr; }
 
 	// Disable Copy
 	inline RGObjectBase(RGObjectBase &&r) noexcept = default;
@@ -397,15 +346,15 @@ protected:
 	template <
 	    typename Type, typename... Args,
 	    typename = std::enable_if_t<std::is_base_of_v<RGBufferBase, Type> || std::is_base_of_v<RGImageBase, Type>>>
-	inline Type *CreateResource(const RGKey &resource_key, Args &&...args) {
+	inline Type *CreateResource(const RGObjectPoolKey &resource_key, Args &&...args) {
 		return ResourcePool::template CreateAndInitialize<0, Type, Args...>(resource_key, std::forward<Args>(args)...);
 	}
-	inline void DeleteResource(const RGKey &resource_key) { return ResourcePool::Delete(resource_key); }
+	inline void DeleteResource(const RGObjectPoolKey &resource_key) { return ResourcePool::Delete(resource_key); }
 
-	inline RGBufferBase *GetBufferResource(const RGKey &resource_buffer_key) const {
+	inline RGBufferBase *GetBufferResource(const RGObjectPoolKey &resource_buffer_key) const {
 		return ResourcePool::template Get<0, RGBufferBase>(resource_buffer_key);
 	}
-	inline RGImageBase *GetImageResource(const RGKey &resource_image_key) const {
+	inline RGImageBase *GetImageResource(const RGObjectPoolKey &resource_image_key) const {
 		return ResourcePool::template Get<0, RGImageBase>(resource_image_key);
 	}
 };
@@ -416,7 +365,7 @@ class RGInputPool : public RGObjectPool<RGDerived, RGInput, RGObjectVariant<RGBu
 private:
 	using InputPool = RGObjectPool<RGDerived, RGInput, RGObjectVariant<RGBufferAlias, RGImageAlias>>;
 
-	template <typename RGType> inline RGType *create_output(const RGKey &input_key) {
+	template <typename RGType> inline RGType *create_output(const RGObjectPoolKey &input_key) {
 		// RGType can only be RGBufferBase or RGImageBase
 		constexpr RGResourceType kResType =
 		    std::is_base_of_v<RGImageBase, RGType> ? RGResourceType::kImage : RGResourceType::kBuffer;
@@ -450,22 +399,22 @@ public:
 
 protected:
 	template <RGInputUsage Usage, typename = std::enable_if_t<RGInputUsageForBuffer(Usage)>>
-	inline void AddInput(const RGKey &input_key, RGBufferBase *buffer) {
+	inline void AddInput(const RGObjectPoolKey &input_key, RGBufferBase *buffer) {
 		InputPool::template CreateAndInitialize<0, RGInput>(input_key, buffer, Usage);
 	}
 	template <RGInputUsage Usage, typename = std::enable_if_t<RGInputUsageForImage(Usage)>>
-	inline void AddInput(const RGKey &input_key, RGImageBase *image) {
+	inline void AddInput(const RGObjectPoolKey &input_key, RGImageBase *image) {
 		InputPool::template CreateAndInitialize<0, RGInput>(input_key, image, Usage);
 	}
 	/* inline const RGInput *GetInput(const RGKey &input_key) const {
 	    return InputPool::template Get<0, RGInput>(input_key);
 	} */
-	inline void RemoveInput(const RGKey &input_key) { InputPool::Delete(input_key); }
+	inline void RemoveInput(const RGObjectPoolKey &input_key) { InputPool::Delete(input_key); }
 
-	inline RGBufferBase *CreateBufferOutput(const RGKey &input_buffer_key) {
+	inline RGBufferBase *CreateBufferOutput(const RGObjectPoolKey &input_buffer_key) {
 		return create_output<RGBufferBase>(input_buffer_key);
 	}
-	inline RGImageBase *CreateImageOutput(const RGKey &input_image_key) {
+	inline RGImageBase *CreateImageOutput(const RGObjectPoolKey &input_image_key) {
 		return create_output<RGImageBase>(input_image_key);
 	}
 };
