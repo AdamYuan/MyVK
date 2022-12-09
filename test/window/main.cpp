@@ -14,10 +14,32 @@ class TestPass0 final
     : public myvk::render_graph::RGPassBase,
       public myvk::render_graph::RGResourcePool<TestPass0>,
       public myvk::render_graph::RGInputPool<TestPass0>,
-      public myvk::render_graph::RGObjectPool<TestPass0, int, myvk::render_graph::RGVariant<int, double>> {
+      public myvk::render_graph::RGObjectPool<
+          TestPass0, int, myvk::render_graph::RGVariant<int, double>,
+          myvk::render_graph::RGVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>> {
 public:
-	using TestPool = myvk::render_graph::RGObjectPool<TestPass0, int, myvk::render_graph::RGVariant<int, double>>;
+	using TestPool = myvk::render_graph::RGObjectPool<
+	    TestPass0, int, myvk::render_graph::RGVariant<int, double>,
+	    myvk::render_graph::RGVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>>;
+
 	void Create() {
+		for (int i = 0; i < 3; ++i) {
+			auto managed_buffer = CreateResource<myvk::render_graph::RGManagedBuffer>({"draw_list", i});
+			std::cout << managed_buffer->GetKey().GetName() << " " << managed_buffer->GetKey().GetID() << std::endl;
+			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}),
+			       GetImageResource({"draw_list", i}));
+
+			AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>({"draw_list_gen", i}, managed_buffer);
+			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
+			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
+			auto output_buffer = CreateBufferOutput({"draw_list_gen", i});
+			printf("output_buffer = %p\n", output_buffer);
+			auto output_buffer2 = CreateBufferOutput({"draw_list_gen", i});
+			printf("output_buffer2 = %p\n", output_buffer2);
+		}
+
+		auto managed_buffer = GetBufferResource({"draw_list", 1});
+
 		TestPool::template CreateAndInitialize<0, int>({"Int"}, 1);
 		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
 		TestPool::template Initialize<1, double>({"Int"}, 2.0);
@@ -34,22 +56,24 @@ public:
 		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
 		       TestPool::template Get<1, double>({"Int"}));
 
+		TestPool::template Initialize<2, myvk::render_graph::RGBufferAlias>({"Int"}, managed_buffer);
+		printf("Value: RGBufferBase =%p, RGBufferAlias =%p\n",
+		       TestPool::template Get<2, myvk::render_graph::RGBufferBase>({"Int"}),
+		       TestPool::template Get<2, myvk::render_graph::RGBufferAlias>({"Int"}));
+
+		TestPool::template Initialize<2, myvk::render_graph::RGManagedBuffer>({"Int"});
+		printf("Value: RGManagedBuffer =%p, RGBufferAlias =%p; IsInitialized=%d\n",
+		       TestPool::template Get<2, myvk::render_graph::RGManagedBuffer>({"Int"}),
+		       TestPool::template Get<2, myvk::render_graph::RGBufferAlias>({"Int"}),
+		       TestPool::template IsInitialized<2>({"Int"}));
+
+		TestPool::template Reset<2>({"Int"});
+		printf("Value: RGManagedBuffer =%p, RGBufferAlias =%p; IsInitialized=%d\n",
+		       TestPool::template Get<2, myvk::render_graph::RGManagedBuffer>({"Int"}),
+		       TestPool::template Get<2, myvk::render_graph::RGBufferAlias>({"Int"}),
+		       TestPool::template IsInitialized<2>({"Int"}));
+
 		printf("Create TestPass0\n");
-
-		for (int i = 0; i < 10; ++i) {
-			auto managed_buffer = CreateResource<myvk::render_graph::RGManagedBuffer>({"draw_list", i});
-			std::cout << managed_buffer->GetKey().GetName() << " " << managed_buffer->GetKey().GetID() << std::endl;
-			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}),
-			       GetImageResource({"draw_list", i}));
-
-			AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>({"draw_list_gen", i}, managed_buffer);
-			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
-			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
-			auto output_buffer = CreateBufferOutput({"draw_list_gen", i});
-			printf("output_buffer = %p\n", output_buffer);
-			auto output_buffer2 = CreateBufferOutput({"draw_list_gen", i});
-			printf("output_buffer2 = %p\n", output_buffer2);
-		}
 	}
 	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return CreateBufferOutput({"draw_list_gen"}); }
 };

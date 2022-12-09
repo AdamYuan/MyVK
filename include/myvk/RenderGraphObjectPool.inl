@@ -54,26 +54,6 @@ template <typename Value> using RGKeyMap = std::unordered_map<RGObjectPoolKey, V
 
 // Object Pool
 namespace _details_rg_object_pool_ {
-template <typename VariantType, typename T, bool UniquePtr, size_t I = 0> constexpr size_t GetVariantIndex() {
-	if constexpr (I >= std::variant_size_v<VariantType>) {
-		return -1;
-	} else {
-		using VTI = std::variant_alternative_t<I, VariantType>;
-		if constexpr (UniquePtr) {
-			if constexpr (std::is_constructible_v<VTI, std::unique_ptr<T> &&>)
-				return I;
-			else
-				return (GetVariantIndex<VariantType, T, UniquePtr, I + 1>());
-		} else {
-			if constexpr (std::is_same_v<VTI, T>)
-				return I;
-			else
-				return (GetVariantIndex<VariantType, T, UniquePtr, I + 1>());
-		}
-	}
-}
-template <typename VariantType, typename T, bool UniquePtr>
-constexpr bool kVariantCanHold = GetVariantIndex<VariantType, T, UniquePtr>() != -1;
 
 template <typename Type> class TypeTraits {
 private:
@@ -87,21 +67,27 @@ public:
 	using VariantAlterType = std::conditional_t<kAlterPtr, std::unique_ptr<Type>, Type>;
 
 	template <typename X>
-	constexpr static bool kCanMatch = kAlterPtr ? std::is_base_of_v<Type, X> : std::is_same_v<Type, X>;
+	constexpr static bool kCanConstruct =
+	    kAlterPtr ? (std::is_base_of_v<Type, X> || std::is_same_v<Type, X>) : std::is_same_v<Type, X>;
+	template <typename X>
+	constexpr static bool kCanGet =
+	    kAlterPtr ? (std::is_base_of_v<Type, X> || std::is_base_of_v<X, Type> || std::is_same_v<Type, X>)
+	              : (std::is_base_of_v<X, Type> || std::is_same_v<Type, X>);
+
 	constexpr static bool kCanCheckInitialized = kAlterPtr || kAlterOptional;
 
-	template <typename ConsType, typename... Args, typename = std::enable_if_t<kCanMatch<ConsType>>>
-	inline static ConsType *Initialize(AlterType &val, Args &&...args) {
+	template <typename TypeToCons, typename... Args, typename = std::enable_if_t<kCanConstruct<TypeToCons>>>
+	inline static TypeToCons *Initialize(AlterType &val, Args &&...args) {
 		if constexpr (kAlterPtr) {
-			auto uptr = std::make_unique<ConsType>(std::forward<Args>(args)...);
-			ConsType *ret = uptr.get();
+			auto uptr = std::make_unique<TypeToCons>(std::forward<Args>(args)...);
+			TypeToCons *ret = uptr.get();
 			val = std::move(uptr);
 			return ret;
 		} else if constexpr (kAlterOptional) {
 			val.emplace(std::forward<Args>(args)...);
 			return &(val.value());
 		} else {
-			val = ConsType(std::forward<Args>(args)...);
+			val = TypeToCons(std::forward<Args>(args)...);
 			return &val;
 		}
 	}
@@ -117,15 +103,88 @@ public:
 			return val.has_value();
 		return true;
 	}
-	template <typename GetType, typename = std::enable_if_t<kCanMatch<GetType>>>
-	inline static GetType *Get(const AlterType &val) {
-		if constexpr (kAlterPtr)
-			return (GetType *)dynamic_cast<const GetType *>(val.get());
-		else if constexpr (kAlterOptional)
-			return val.has_value() ? (GetType *)(&(val.value())) : nullptr;
-		return (GetType *)(&val);
+	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>>
+	inline static TypeToGet *Get(const AlterType &val) {
+		if constexpr (kAlterPtr) {
+			if constexpr (std::is_same_v<Type, TypeToGet>)
+				return (TypeToGet *)(val.get());
+			else
+				return (TypeToGet *)dynamic_cast<const TypeToGet *>(val.get());
+		} else if constexpr (kAlterOptional) {
+			if constexpr (std::is_same_v<Type, TypeToGet>)
+				return val.has_value() ? (TypeToGet *)(&(val.value())) : nullptr;
+			else
+				return val.has_value() ? (TypeToGet *)dynamic_cast<const TypeToGet *>(&(val.value())) : nullptr;
+		} else {
+			if constexpr (std::is_same_v<Type, TypeToGet>)
+				return (TypeToGet *)(&val);
+			else
+				return (TypeToGet *)dynamic_cast<const TypeToGet *>(&val);
+		}
 	}
 };
+
+template <class T> struct is_unique_ptr_impl : std::false_type {};
+template <class T, class D> struct is_unique_ptr_impl<std::unique_ptr<T, D>> : std::true_type {};
+template <class T> constexpr bool kIsUniquePtr = is_unique_ptr_impl<std::decay_t<T>>::value;
+
+template <typename VariantType, typename TypeToCons, bool UniquePtr, size_t I = 0>
+constexpr size_t GetVariantConstructIndex() {
+	if constexpr (I >= std::variant_size_v<VariantType>) {
+		return -1;
+	} else {
+		using VTI = std::variant_alternative_t<I, VariantType>;
+		if constexpr (UniquePtr) {
+			if constexpr (std::is_constructible_v<VTI, std::unique_ptr<TypeToCons> &&>)
+				return I;
+			else
+				return (GetVariantConstructIndex<VariantType, TypeToCons, UniquePtr, I + 1>());
+		} else {
+			if constexpr (std::is_same_v<VTI, TypeToCons>)
+				return I;
+			else
+				return (GetVariantConstructIndex<VariantType, TypeToCons, UniquePtr, I + 1>());
+		}
+	}
+}
+template <typename VariantType, typename TypeToCons, bool UniquePtr>
+constexpr bool kVariantCanConstruct = GetVariantConstructIndex<VariantType, TypeToCons, UniquePtr>() != -1;
+
+template <typename VariantType, typename TypeToGet, size_t I = 0> constexpr bool VariantCanGet() {
+	if constexpr (I >= std::variant_size_v<VariantType>)
+		return false;
+	else {
+		using VTI = std::variant_alternative_t<I, VariantType>;
+		if constexpr (kIsUniquePtr<VTI>) {
+			if constexpr (std::is_same_v<TypeToGet, typename std::pointer_traits<VTI>::element_type> ||
+			              std::is_base_of_v<TypeToGet, typename std::pointer_traits<VTI>::element_type> ||
+			              std::is_base_of_v<typename std::pointer_traits<VTI>::element_type, TypeToGet>)
+				return true;
+		} else {
+			if constexpr (std::is_same_v<TypeToGet, VTI> || std::is_base_of_v<TypeToGet, VTI>)
+				return true;
+		}
+		return VariantCanGet<VariantType, TypeToGet, I + 1>();
+	}
+}
+template <typename TypeToGet> struct VariantGetter {
+	template <typename ValType> inline TypeToGet *operator()(const ValType &val) {
+		if constexpr (kIsUniquePtr<ValType>) {
+			if constexpr (std::is_same_v<TypeToGet, typename std::pointer_traits<ValType>::element_type>)
+				return (TypeToGet *)(val.get());
+			else if constexpr (std::is_base_of_v<TypeToGet, typename std::pointer_traits<ValType>::element_type> ||
+			                   std::is_base_of_v<typename std::pointer_traits<ValType>::element_type, TypeToGet>)
+				return (TypeToGet *)dynamic_cast<const TypeToGet *>(val.get());
+		} else {
+			if constexpr (std::is_same_v<TypeToGet, ValType>)
+				return (TypeToGet *)(&val);
+			else if constexpr (std::is_base_of_v<TypeToGet, ValType>)
+				return (TypeToGet *)dynamic_cast<const TypeToGet *>(&val);
+		}
+		return nullptr;
+	}
+};
+
 template <typename... VariantArgs> struct TypeTraits<std::variant<VariantArgs...>> {
 private:
 	using Type = std::variant<VariantArgs...>;
@@ -133,37 +192,32 @@ private:
 public:
 	using AlterType = Type;
 	template <typename X>
-	constexpr static bool kCanMatch = kVariantCanHold<Type, X, false> || kVariantCanHold<Type, X, true>;
+	constexpr static bool kCanConstruct = kVariantCanConstruct<Type, X, false> || kVariantCanConstruct<Type, X, true>;
+	template <typename X> constexpr static bool kCanGet = VariantCanGet<Type, X>();
 	constexpr static bool kCanCheckInitialized = true;
 
-	template <typename ConsType, typename... Args, typename = std::enable_if_t<kCanMatch<ConsType>>>
-	inline static ConsType *Initialize(AlterType &val, Args &&...args) {
-		if constexpr (kVariantCanHold<Type, ConsType, false>) {
-			constexpr size_t kIndex = GetVariantIndex<Type, ConsType, false>();
+	template <typename TypeToCons, typename... Args, typename = std::enable_if_t<kCanConstruct<TypeToCons>>>
+	inline static TypeToCons *Initialize(AlterType &val, Args &&...args) {
+		if constexpr (kVariantCanConstruct<Type, TypeToCons, false>) {
 			// If Don't need Pointer, prefer plain type
-			// printf("index = %lu\n", kIndex);
-			val.template emplace<kIndex>(ConsType(std::forward<Args>(args)...));
+			constexpr size_t kIndex = GetVariantConstructIndex<Type, TypeToCons, false>();
+			printf("index = %lu\n", kIndex);
+			val.template emplace<kIndex>(TypeToCons(std::forward<Args>(args)...));
 			return &(std::get<kIndex>(val));
 		} else {
-			constexpr size_t kPtrIndex = GetVariantIndex<Type, ConsType, true>();
-
-			auto uptr = std::make_unique<ConsType>(std::forward<Args>(args)...);
-			ConsType *ret = uptr.get();
+			constexpr size_t kPtrIndex = GetVariantConstructIndex<Type, TypeToCons, true>();
+			printf("ptr_index = %lu\n", kPtrIndex);
+			auto uptr = std::make_unique<TypeToCons>(std::forward<Args>(args)...);
+			TypeToCons *ret = uptr.get();
 			val.template emplace<kPtrIndex>(std::move(uptr));
 			return ret;
 		}
 	}
 	inline static void Reset(AlterType &val) { val = std::monostate{}; }
 	inline static bool IsInitialized(const AlterType &val) { return val.index(); }
-	template <typename TypeToGet, typename = std::enable_if_t<kCanMatch<TypeToGet>>>
+	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>>
 	inline static TypeToGet *Get(const AlterType &val) {
-		if constexpr (kVariantCanHold<Type, TypeToGet, false>) {
-			constexpr size_t kIndex = GetVariantIndex<Type, TypeToGet, false>();
-			return val.index() == kIndex ? (TypeToGet *)(&std::get<kIndex>(val)) : nullptr;
-		} else {
-			constexpr size_t kPtrIndex = GetVariantIndex<Type, TypeToGet, true>();
-			return val.index() == kPtrIndex ? (TypeToGet *)(std::get<kPtrIndex>(val).get()) : nullptr;
-		}
+		return std::visit(VariantGetter<TypeToGet>{}, val);
 	}
 };
 template <typename... Types> struct TypeTuple;
@@ -197,23 +251,26 @@ private:
 	template <std::size_t Index> using GetRawType = std::tuple_element_t<Index, std::tuple<Types...>>;
 	template <std::size_t Index> using GetAlterType = std::tuple_element_t<Index, TypeTuple>;
 	template <std::size_t Index, typename T>
-	static constexpr bool kCanMatch = _details_rg_object_pool_::TypeTraits<GetRawType<Index>>::template kCanMatch<T>;
+	static constexpr bool kCanConstruct =
+	    _details_rg_object_pool_::TypeTraits<GetRawType<Index>>::template kCanConstruct<T>;
+	template <std::size_t Index, typename T>
+	static constexpr bool kCanGet = _details_rg_object_pool_::TypeTraits<GetRawType<Index>>::template kCanGet<T>;
 	template <std::size_t Index>
 	static constexpr bool kCanCheckInitialized =
 	    _details_rg_object_pool_::TypeTraits<GetRawType<Index>>::kCanCheckInitialized;
 
 	RGKeyMap<TypeTuple> m_pool;
 
-	template <std::size_t Index, typename ConsType, typename... Args, typename MapIterator,
-	          typename = std::enable_if_t<kCanMatch<Index, ConsType>>>
-	inline ConsType *initialize(const MapIterator &it, Args &&...args) {
+	template <std::size_t Index, typename TypeToCons, typename... Args, typename MapIterator,
+	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
+	inline TypeToCons *initialize(const MapIterator &it, Args &&...args) {
 		GetAlterType<Index> &ref = std::get<Index>(it->second);
 
 		using RawType = GetRawType<Index>;
-		ConsType *ptr = _details_rg_object_pool_::TypeTraits<RawType>::template Initialize<ConsType>(
+		TypeToCons *ptr = _details_rg_object_pool_::TypeTraits<RawType>::template Initialize<TypeToCons>(
 		    ref, std::forward<Args>(args)...);
 		// Initialize RGObjectBase
-		if constexpr (std::is_base_of_v<RGObjectBase, ConsType>) {
+		if constexpr (std::is_base_of_v<RGObjectBase, TypeToCons>) {
 			static_assert(std::is_base_of_v<RenderGraphBase, RGDerived> || std::is_base_of_v<RGObjectBase, RGDerived>);
 
 			auto base_ptr = static_cast<RGObjectBase *>(ptr);
@@ -225,7 +282,7 @@ private:
 				    ((RGObjectBase *)static_cast<const RGDerived *>(this))->GetRenderGraphPtr());
 		}
 		// Initialize RGResourceBase
-		if constexpr (std::is_base_of_v<RGResourceBase, ConsType>) {
+		if constexpr (std::is_base_of_v<RGResourceBase, TypeToCons>) {
 			auto resource_ptr = static_cast<RGResourceBase *>(ptr);
 			if constexpr (std::is_base_of_v<RGPassBase, RGDerived>)
 				resource_ptr->set_producer_pass_ptr((RGPassBase *)static_cast<const RGDerived *>(this));
@@ -248,7 +305,7 @@ private:
 	}
 
 	template <std::size_t Index, typename TypeToGet, typename MapIterator,
-	          typename = std::enable_if_t<kCanMatch<Index, TypeToGet>>>
+	          typename = std::enable_if_t<kCanGet<Index, TypeToGet>>>
 	inline TypeToGet *get(const MapIterator &it) const {
 		const GetAlterType<Index> &ref = std::get<Index>(it->second);
 		using RawType = GetRawType<Index>;
@@ -266,13 +323,13 @@ public:
 
 protected:
 	// Create Tag and Initialize the Main Object
-	template <std::size_t Index, typename ConsType, typename... Args,
-	          typename = std::enable_if_t<kCanMatch<Index, ConsType>>>
-	inline ConsType *CreateAndInitialize(const RGObjectPoolKey &key, Args &&...args) {
+	template <std::size_t Index, typename TypeToCons, typename... Args,
+	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
+	inline TypeToCons *CreateAndInitialize(const RGObjectPoolKey &key, Args &&...args) {
 		if (m_pool.find(key) != m_pool.end())
 			return nullptr;
 		auto it = m_pool.insert({key, TypeTuple{}}).first;
-		return initialize<Index, ConsType, Args...>(it, std::forward<Args>(args)...);
+		return initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Create Tag Only
 	inline void Create(const RGObjectPoolKey &key) {
@@ -281,13 +338,13 @@ protected:
 		m_pool.insert(std::make_pair(key, TypeTuple{}));
 	}
 	// Initialize Object of a Tag
-	template <std::size_t Index, typename ConsType, typename... Args,
-	          typename = std::enable_if_t<kCanMatch<Index, ConsType>>>
-	inline ConsType *Initialize(const RGObjectPoolKey &key, Args &&...args) {
+	template <std::size_t Index, typename TypeToCons, typename... Args,
+	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
+	inline TypeToCons *Initialize(const RGObjectPoolKey &key, Args &&...args) {
 		auto it = m_pool.find(key);
 		if (it == m_pool.end())
 			return nullptr;
-		return initialize<Index, ConsType, Args...>(it, std::forward<Args>(args)...);
+		return initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Check whether an Object of a Tag is Initialized
 	template <std::size_t Index, typename = std::enable_if_t<kCanCheckInitialized<Index>>>
@@ -305,19 +362,19 @@ protected:
 			reset<Index>(it);
 	}
 	// Get an Object from a Tag, if not Initialized, Initialize it.
-	template <std::size_t Index, typename ConsType, typename... Args,
-	          typename = std::enable_if_t<kCanMatch<Index, ConsType> && kCanCheckInitialized<Index>>>
-	inline ConsType *InitializeOrGet(const RGObjectPoolKey &key, Args &&...args) {
+	template <std::size_t Index, typename TypeToCons, typename... Args,
+	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons> && kCanCheckInitialized<Index>>>
+	inline TypeToCons *InitializeOrGet(const RGObjectPoolKey &key, Args &&...args) {
 		auto it = m_pool.find(key);
 		if (it == m_pool.end())
 			return nullptr;
-		return is_initialized<Index>(it) ? (ConsType *)get<Index, ConsType>(it)
-		                                 : initialize<Index, ConsType, Args...>(it, std::forward<Args>(args)...);
+		return is_initialized<Index>(it) ? (TypeToCons *)get<Index, TypeToCons>(it)
+		                                 : initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Delete a Tag and its Objects
 	inline void Delete(const RGObjectPoolKey &key) { m_pool.erase(key); }
 	// Get an Object from a Tag
-	template <std::size_t Index, typename Type, typename = std::enable_if_t<kCanMatch<Index, Type>>>
+	template <std::size_t Index, typename Type, typename = std::enable_if_t<kCanGet<Index, Type>>>
 	inline Type *Get(const RGObjectPoolKey &key) const {
 		auto it = m_pool.find(key);
 		if (it == m_pool.end())
