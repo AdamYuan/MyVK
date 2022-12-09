@@ -10,11 +10,30 @@
 
 constexpr uint32_t kFrameCount = 3;
 
-class TestPass0 final : public myvk::render_graph::RGPassBase,
-                        public myvk::render_graph::RGResourcePool<TestPass0>,
-                        public myvk::render_graph::RGInputPool<TestPass0> {
+class TestPass0 final
+    : public myvk::render_graph::RGPassBase,
+      public myvk::render_graph::RGResourcePool<TestPass0>,
+      public myvk::render_graph::RGInputPool<TestPass0>,
+      public myvk::render_graph::RGObjectPool<TestPass0, int, myvk::render_graph::RGVariant<int, double>> {
 public:
+	using TestPool = myvk::render_graph::RGObjectPool<TestPass0, int, myvk::render_graph::RGVariant<int, double>>;
 	void Create() {
+		TestPool::template CreateAndInitialize<0, int>({"Int"}, 1);
+		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
+		TestPool::template Initialize<1, double>({"Int"}, 2.0);
+		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
+		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
+		       TestPool::template Get<1, double>({"Int"}));
+		printf("Reset\n");
+		TestPool::template Reset<1>({"Int"});
+		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
+		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
+		       TestPool::template Get<1, double>({"Int"}));
+		TestPool::template Initialize<1, int>({"Int"}, 2);
+		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
+		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
+		       TestPool::template Get<1, double>({"Int"}));
+
 		printf("Create TestPass0\n");
 
 		for (int i = 0; i < 10; ++i) {

@@ -333,9 +333,9 @@ public:
 
 // Resource Pool
 template <typename RGDerived>
-class RGResourcePool : public RGObjectPool<RGDerived, RGObjectVariant<RGBufferBase, RGImageBase>> {
+class RGResourcePool : public RGObjectPool<RGDerived, RGVariant<RGBufferBase, RGImageBase>> {
 private:
-	using ResourcePool = RGObjectPool<RGDerived, RGObjectVariant<RGBufferBase, RGImageBase>>;
+	using ResourcePool = RGObjectPool<RGDerived, RGVariant<RGBufferBase, RGImageBase>>;
 
 public:
 	inline RGResourcePool() = default;
@@ -361,9 +361,9 @@ protected:
 
 // Input Pool
 template <typename RGDerived>
-class RGInputPool : public RGObjectPool<RGDerived, RGInput, RGObjectVariant<RGBufferAlias, RGImageAlias>> {
+class RGInputPool : public RGObjectPool<RGDerived, RGInput, RGVariant<RGBufferAlias, RGImageAlias>> {
 private:
-	using InputPool = RGObjectPool<RGDerived, RGInput, RGObjectVariant<RGBufferAlias, RGImageAlias>>;
+	using InputPool = RGObjectPool<RGDerived, RGInput, RGVariant<RGBufferAlias, RGImageAlias>>;
 
 	template <typename RGType> inline RGType *create_output(const RGObjectPoolKey &input_key) {
 		// RGType can only be RGBufferBase or RGImageBase
@@ -445,7 +445,7 @@ public:
 };
 
 // TODO: Debug Type Traits
-static_assert(std::is_same_v<RGObjectVariant<RGBufferAlias, RGObjectBase, RGResourceBase, RGImageAlias>,
+static_assert(std::is_same_v<RGVariant<RGBufferAlias, RGObjectBase, RGResourceBase, RGImageAlias>,
                              std::variant<std::monostate, RGImageAlias, std::unique_ptr<RGResourceBase>,
                                           std::unique_ptr<RGObjectBase>, RGBufferAlias>>);
 } // namespace myvk::render_graph
