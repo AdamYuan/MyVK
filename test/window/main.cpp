@@ -15,12 +15,12 @@ class TestPass0 final
       public myvk::render_graph::RGResourcePool<TestPass0>,
       public myvk::render_graph::RGInputPool<TestPass0>,
       public myvk::render_graph::RGObjectPool<
-          TestPass0, int, myvk::render_graph::RGVariant<int, double>,
-          myvk::render_graph::RGVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>> {
+          TestPass0, int, myvk::render_graph::RGPoolVariant<int, double>,
+          myvk::render_graph::RGPoolVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>> {
 public:
 	using TestPool = myvk::render_graph::RGObjectPool<
-	    TestPass0, int, myvk::render_graph::RGVariant<int, double>,
-	    myvk::render_graph::RGVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>>;
+	    TestPass0, int, myvk::render_graph::RGPoolVariant<int, double>,
+	    myvk::render_graph::RGPoolVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>>;
 
 	void Create() {
 		for (int i = 0; i < 3; ++i) {
@@ -29,13 +29,29 @@ public:
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}),
 			       GetImageResource({"draw_list", i}));
 
+			auto managed_image = CreateResource<myvk::render_graph::RGManagedImage>({"noise_tex", i});
+			std::cout << managed_image->GetKey().GetName() << " " << managed_image->GetKey().GetID() << std::endl;
+			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"noise_tex", i}),
+			       GetImageResource({"noise_tex", i}));
+
 			AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>({"draw_list_gen", i}, managed_buffer);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 			auto output_buffer = CreateBufferOutput({"draw_list_gen", i});
 			printf("output_buffer = %p\n", output_buffer);
-			auto output_buffer2 = CreateBufferOutput({"draw_list_gen", i});
-			printf("output_buffer2 = %p\n", output_buffer2);
+			output_buffer = CreateBufferOutput({"draw_list_gen", i});
+			printf("output_buffer2 = %p\n", output_buffer);
+
+			AddInput<myvk::render_graph::RGInputUsage::kColorAttachment>({"noise_tex", i}, managed_image);
+			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
+			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
+			auto output_image_invalid = CreateBufferOutput({"noise_tex", i});
+			printf("output_image_invalid = %p\n", output_image_invalid);
+			auto output_image = CreateImageOutput({"noise_tex", i});
+			printf("output_image = %p\n", output_image);
+			output_image = CreateImageOutput({"noise_tex", i});
+			printf("output_image = %p, producer_pass = %p, this = %p\n", output_image,
+			       output_image->GetProducerPassPtr(), dynamic_cast<myvk::render_graph::RGPassBase *>(this));
 		}
 
 		auto managed_buffer = GetBufferResource({"draw_list", 1});
@@ -76,15 +92,17 @@ public:
 		printf("Create TestPass0\n");
 	}
 	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return CreateBufferOutput({"draw_list_gen"}); }
+	myvk::render_graph::RGImageBase *GetNoiseTexOutput() { return CreateImageOutput({"noise_tex"}); }
 };
 
 class TestPass final : public myvk::render_graph::RGPassBase,
                        public myvk::render_graph::RGResourcePool<TestPass>,
                        public myvk::render_graph::RGInputPool<TestPass> {
 public:
-	void Create(myvk::render_graph::RGBufferBase *draw_list) {
+	void Create(myvk::render_graph::RGBufferBase *draw_list, myvk::render_graph::RGImageBase *noise_tex) {
 		printf("Create TestPass\n");
 		AddInput<myvk::render_graph::RGInputUsage::kStorageBufferRW>({"draw_list_rw"}, draw_list);
+		AddInput<myvk::render_graph::RGInputUsage::kStorageImageRW>({"noise_tex_rw"}, noise_tex);
 		// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 		//       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 		auto output_buffer = CreateBufferOutput({"draw_list_rw"});
@@ -93,6 +111,13 @@ public:
 		auto output_buffer2 = CreateBufferOutput({"draw_list_rw"});
 		printf("output_buffer2 = %p\n", output_buffer2);
 		std::cout << output_buffer2->GetKey().GetName() << std::endl;
+
+		auto output_image = CreateImageOutput({"noise_tex_rw"});
+		printf("output_image = %p\n", output_image);
+		std::cout << output_image->GetKey().GetName() << std::endl;
+		output_image = CreateImageOutput({"noise_tex_rw"});
+		printf("output_image = %p, producer_pass = %p, this = %p\n", output_image, output_image->GetProducerPassPtr(),
+		       dynamic_cast<myvk::render_graph::RGPassBase *>(this));
 	}
 };
 
@@ -115,7 +140,7 @@ int main() {
 	TestPass0 test_pass0;
 	test_pass0.Create();
 	TestPass test_pass;
-	test_pass.Create(test_pass0.GetDrawListOutput());
+	test_pass.Create(test_pass0.GetDrawListOutput(), test_pass0.GetNoiseTexOutput());
 
 	// object_pool.DeleteBuffer("draw_list");
 
