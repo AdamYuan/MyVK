@@ -19,23 +19,23 @@ namespace myvk::render_graph {
 class RenderGraphBase {};
 class RGPassBase;
 // Object Base
-class RGObjectPoolKey;
+class RGPoolKey;
 class RGObjectBase {
 private:
 	RenderGraphBase *m_render_graph_ptr{};
-	const RGObjectPoolKey *m_key_ptr{};
+	const RGPoolKey *m_key_ptr{};
 
 	inline void set_render_graph_ptr(RenderGraphBase *render_graph_ptr) { m_render_graph_ptr = render_graph_ptr; }
-	inline void set_key_ptr(const RGObjectPoolKey *key_ptr) { m_key_ptr = key_ptr; }
+	inline void set_key_ptr(const RGPoolKey *key_ptr) { m_key_ptr = key_ptr; }
 
-	template <typename, typename...> friend class RGObjectPool;
+	template <typename, typename...> friend class RGPool;
 
 public:
 	inline RGObjectBase() = default;
 	inline virtual ~RGObjectBase() = default;
 
 	inline RenderGraphBase *GetRenderGraphPtr() const { return m_render_graph_ptr; }
-	inline const RGObjectPoolKey &GetKey() const { return *m_key_ptr; }
+	inline const RGPoolKey &GetKey() const { return *m_key_ptr; }
 
 	// Disable Copy
 	inline RGObjectBase(RGObjectBase &&r) noexcept = default;
@@ -51,7 +51,7 @@ private:
 
 	inline void set_producer_pass_ptr(RGPassBase *producer_pass_ptr) { m_producer_pass_ptr = producer_pass_ptr; }
 
-	template <typename, typename...> friend class RGObjectPool;
+	template <typename, typename...> friend class RGPool;
 
 public:
 	inline ~RGResourceBase() override = default;
@@ -69,13 +69,13 @@ public:
 
 #pragma endregion
 
-/////////////////////////
-// SECTION Object Pool //
-/////////////////////////
-#pragma region SECTION : Object Pool
+//////////////////
+// SECTION Pool //
+//////////////////
+#pragma region SECTION : Pool
 
-// Object Pool Key
-class RGObjectPoolKey {
+// Pool Key
+class RGPoolKey {
 public:
 	using LengthType = uint8_t;
 	using IDType = uint16_t;
@@ -93,14 +93,14 @@ private:
 	static_assert(sizeof(_32_) == 32);
 
 public:
-	inline RGObjectPoolKey() : _32_{} {}
+	inline RGPoolKey() : _32_{} {}
 	template <typename IntType = IDType, typename = std::enable_if_t<std::is_integral_v<IntType>>>
-	inline RGObjectPoolKey(std::string_view str, IntType id = 0)
+	inline RGPoolKey(std::string_view str, IntType id = 0)
 	    : m_str{}, m_len(std::min(str.length(), kMaxStrLen)), m_id(id) {
 		std::copy(str.begin(), str.begin() + m_len, m_str);
 	}
-	inline RGObjectPoolKey(const RGObjectPoolKey &r) : _32_{r._32_} {}
-	inline RGObjectPoolKey &operator=(const RGObjectPoolKey &r) {
+	inline RGPoolKey(const RGPoolKey &r) : _32_{r._32_} {}
+	inline RGPoolKey &operator=(const RGPoolKey &r) {
 		_32_ = r._32_;
 		return *this;
 	}
@@ -113,23 +113,23 @@ public:
 	}
 	inline void SetID(IDType id) { m_id = id; }
 
-	inline bool operator<(const RGObjectPoolKey &r) const { return _32_ < r._32_; }
-	inline bool operator>(const RGObjectPoolKey &r) const { return _32_ > r._32_; }
-	inline bool operator==(const RGObjectPoolKey &r) const { return _32_ == r._32_; }
-	inline bool operator!=(const RGObjectPoolKey &r) const { return _32_ != r._32_; }
+	inline bool operator<(const RGPoolKey &r) const { return _32_ < r._32_; }
+	inline bool operator>(const RGPoolKey &r) const { return _32_ > r._32_; }
+	inline bool operator==(const RGPoolKey &r) const { return _32_ == r._32_; }
+	inline bool operator!=(const RGPoolKey &r) const { return _32_ != r._32_; }
 	struct Hash {
-		inline std::size_t operator()(RGObjectPoolKey const &r) const noexcept {
+		inline std::size_t operator()(RGPoolKey const &r) const noexcept {
 			return std::get<0>(r._32_) ^ std::get<1>(r._32_) ^ std::get<2>(r._32_) ^ std::get<3>(r._32_);
 			// return ((std::get<0>(r._32_) * 37 + std::get<1>(r._32_)) * 37 + std::get<2>(r._32_)) * 37 +
 			//        std::get<3>(r._32_);
 		}
 	};
 };
-static_assert(sizeof(RGObjectPoolKey) == 32 && std::is_move_constructible_v<RGObjectPoolKey>);
-template <typename Value> using RGKeyMap = std::unordered_map<RGObjectPoolKey, Value, RGObjectPoolKey::Hash>;
+static_assert(sizeof(RGPoolKey) == 32 && std::is_move_constructible_v<RGPoolKey>);
 
-// Object Pool
-namespace _details_rg_object_pool_ {
+// Pool
+namespace _details_rg_pool_ {
+template <typename Value> using RGPoolKeyMap = std::unordered_map<RGPoolKey, Value, RGPoolKey::Hash>;
 
 template <typename Type> class TypeTraits {
 private:
@@ -319,23 +319,21 @@ template <typename RGType, typename... RGOthers> struct TypeVariant<RGType, RGOt
 template <> struct TypeVariant<> {
 	using T = std::monostate;
 };
-} // namespace _details_rg_object_pool_
-template <typename... RGTypes> using RGPoolVariant = typename _details_rg_object_pool_::TypeVariant<RGTypes...>::T;
-template <typename RGDerived, typename... Types> class RGObjectPool {
+} // namespace _details_rg_pool_
+template <typename... RGTypes> using RGPoolVariant = typename _details_rg_pool_::TypeVariant<RGTypes...>::T;
+template <typename RGDerived, typename... Types> class RGPool {
 private:
-	using TypeTuple = typename _details_rg_object_pool_::TypeTuple<Types...>::T;
+	using TypeTuple = typename _details_rg_pool_::TypeTuple<Types...>::T;
 	template <std::size_t Index> using GetRawType = std::tuple_element_t<Index, std::tuple<Types...>>;
 	template <std::size_t Index> using GetAlterType = std::tuple_element_t<Index, TypeTuple>;
 	template <std::size_t Index, typename T>
-	static constexpr bool kCanConstruct =
-	    _details_rg_object_pool_::TypeTraits<GetRawType<Index>>::template kCanConstruct<T>;
+	static constexpr bool kCanConstruct = _details_rg_pool_::TypeTraits<GetRawType<Index>>::template kCanConstruct<T>;
 	template <std::size_t Index, typename T>
-	static constexpr bool kCanGet = _details_rg_object_pool_::TypeTraits<GetRawType<Index>>::template kCanGet<T>;
+	static constexpr bool kCanGet = _details_rg_pool_::TypeTraits<GetRawType<Index>>::template kCanGet<T>;
 	template <std::size_t Index>
-	static constexpr bool kCanCheckInitialized =
-	    _details_rg_object_pool_::TypeTraits<GetRawType<Index>>::kCanCheckInitialized;
+	static constexpr bool kCanCheckInitialized = _details_rg_pool_::TypeTraits<GetRawType<Index>>::kCanCheckInitialized;
 
-	RGKeyMap<TypeTuple> m_pool;
+	_details_rg_pool_::RGPoolKeyMap<TypeTuple> m_pool;
 
 	template <std::size_t Index, typename TypeToCons, typename... Args, typename MapIterator,
 	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
@@ -343,8 +341,8 @@ private:
 		GetAlterType<Index> &ref = std::get<Index>(it->second);
 
 		using RawType = GetRawType<Index>;
-		TypeToCons *ptr = _details_rg_object_pool_::TypeTraits<RawType>::template Initialize<TypeToCons>(
-		    ref, std::forward<Args>(args)...);
+		TypeToCons *ptr =
+		    _details_rg_pool_::TypeTraits<RawType>::template Initialize<TypeToCons>(ref, std::forward<Args>(args)...);
 		// Initialize RGObjectBase
 		if constexpr (std::is_base_of_v<RGObjectBase, TypeToCons>) {
 			static_assert(std::is_base_of_v<RenderGraphBase, RGDerived> || std::is_base_of_v<RGObjectBase, RGDerived>);
@@ -370,14 +368,14 @@ private:
 	inline bool is_initialized(const MapIterator &it) const {
 		const GetAlterType<Index> &ref = std::get<Index>(it->second);
 		using RawType = GetRawType<Index>;
-		return _details_rg_object_pool_::TypeTraits<RawType>::IsInitialized(ref);
+		return _details_rg_pool_::TypeTraits<RawType>::IsInitialized(ref);
 	}
 
 	template <std::size_t Index, typename MapIterator, typename = std::enable_if_t<kCanCheckInitialized<Index>>>
 	inline void reset(MapIterator &it) {
 		GetAlterType<Index> &ref = std::get<Index>(it->second);
 		using RawType = GetRawType<Index>;
-		_details_rg_object_pool_::TypeTraits<RawType>::Reset(ref);
+		_details_rg_pool_::TypeTraits<RawType>::Reset(ref);
 	}
 
 	template <std::size_t Index, typename TypeToGet, typename MapIterator,
@@ -385,30 +383,30 @@ private:
 	inline TypeToGet *get(const MapIterator &it) const {
 		const GetAlterType<Index> &ref = std::get<Index>(it->second);
 		using RawType = GetRawType<Index>;
-		return _details_rg_object_pool_::TypeTraits<RawType>::template Get<TypeToGet>(ref);
+		return _details_rg_pool_::TypeTraits<RawType>::template Get<TypeToGet>(ref);
 	}
 
 public:
-	inline RGObjectPool() {
+	inline RGPool() {
 		static_assert(std::is_default_constructible_v<TypeTuple> && std::is_move_constructible_v<TypeTuple>);
 		// TODO: Debug
 		printf("%s\n", typeid(TypeTuple).name());
 	}
-	inline RGObjectPool(RGObjectPool &&) noexcept = default;
-	inline virtual ~RGObjectPool() = default;
+	inline RGPool(RGPool &&) noexcept = default;
+	inline virtual ~RGPool() = default;
 
 protected:
 	// Create Tag and Initialize the Main Object
 	template <std::size_t Index, typename TypeToCons, typename... Args,
 	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
-	inline TypeToCons *CreateAndInitialize(const RGObjectPoolKey &key, Args &&...args) {
+	inline TypeToCons *CreateAndInitialize(const RGPoolKey &key, Args &&...args) {
 		if (m_pool.find(key) != m_pool.end())
 			return nullptr;
 		auto it = m_pool.insert({key, TypeTuple{}}).first;
 		return initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Create Tag Only
-	inline void Create(const RGObjectPoolKey &key) {
+	inline void Create(const RGPoolKey &key) {
 		if (m_pool.find(key) != m_pool.end())
 			return;
 		m_pool.insert(std::make_pair(key, TypeTuple{}));
@@ -416,7 +414,7 @@ protected:
 	// Initialize Object of a Tag
 	template <std::size_t Index, typename TypeToCons, typename... Args,
 	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
-	inline TypeToCons *Initialize(const RGObjectPoolKey &key, Args &&...args) {
+	inline TypeToCons *Initialize(const RGPoolKey &key, Args &&...args) {
 		auto it = m_pool.find(key);
 		if (it == m_pool.end())
 			return nullptr;
@@ -424,7 +422,7 @@ protected:
 	}
 	// Check whether an Object of a Tag is Initialized
 	template <std::size_t Index, typename = std::enable_if_t<kCanCheckInitialized<Index>>>
-	inline bool IsInitialized(const RGObjectPoolKey &key) const {
+	inline bool IsInitialized(const RGPoolKey &key) const {
 		auto it = m_pool.find(key);
 		if (it == m_pool.end())
 			return false;
@@ -432,7 +430,7 @@ protected:
 	}
 	// Reset an Object of a Tag
 	template <std::size_t Index, typename = std::enable_if_t<kCanCheckInitialized<Index>>>
-	inline void Reset(const RGObjectPoolKey &key) {
+	inline void Reset(const RGPoolKey &key) {
 		auto it = m_pool.find(key);
 		if (it != m_pool.end())
 			reset<Index>(it);
@@ -441,7 +439,7 @@ protected:
 	template <std::size_t Index, typename TypeToCons, typename... Args,
 	          typename = std::enable_if_t<kCanGet<Index, TypeToCons> && kCanConstruct<Index, TypeToCons> &&
 	                                      kCanCheckInitialized<Index>>>
-	inline TypeToCons *InitializeOrGet(const RGObjectPoolKey &key, Args &&...args) {
+	inline TypeToCons *InitializeOrGet(const RGPoolKey &key, Args &&...args) {
 		auto it = m_pool.find(key);
 		if (it == m_pool.end())
 			return nullptr;
@@ -449,10 +447,10 @@ protected:
 		                                 : initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Delete a Tag and its Objects
-	inline void Delete(const RGObjectPoolKey &key) { m_pool.erase(key); }
+	inline void Delete(const RGPoolKey &key) { m_pool.erase(key); }
 	// Get an Object from a Tag
 	template <std::size_t Index, typename Type, typename = std::enable_if_t<kCanGet<Index, Type>>>
-	inline Type *Get(const RGObjectPoolKey &key) const {
+	inline Type *Get(const RGPoolKey &key) const {
 		auto it = m_pool.find(key);
 		if (it == m_pool.end())
 			return nullptr;
@@ -569,11 +567,12 @@ public:
 
 // Resource Pool
 template <typename RGDerived>
-class RGResourcePool : public RGObjectPool<RGDerived, RGPoolVariant<RGBufferBase, RGManagedBuffer, RGBufferAlias,
-                                                                    RGImageBase, RGManagedImage, RGImageAlias>> {
+class RGResourcePool : public RGPool<RGDerived, RGPoolVariant<RGBufferBase, RGManagedBuffer, RGBufferAlias, RGImageBase,
+                                                              RGManagedImage, RGImageAlias>> {
 private:
-	using ResourcePool = RGObjectPool<RGDerived, RGPoolVariant<RGBufferBase, RGManagedBuffer, RGBufferAlias,
-	                                                           RGImageBase, RGManagedImage, RGImageAlias>>;
+	using ResourcePool =
+	    RGPool<RGDerived,
+	           RGPoolVariant<RGBufferBase, RGManagedBuffer, RGBufferAlias, RGImageBase, RGManagedImage, RGImageAlias>>;
 
 public:
 	inline RGResourcePool() = default;
@@ -584,15 +583,15 @@ protected:
 	template <
 	    typename Type, typename... Args,
 	    typename = std::enable_if_t<std::is_base_of_v<RGBufferBase, Type> || std::is_base_of_v<RGImageBase, Type>>>
-	inline Type *CreateResource(const RGObjectPoolKey &resource_key, Args &&...args) {
+	inline Type *CreateResource(const RGPoolKey &resource_key, Args &&...args) {
 		return ResourcePool::template CreateAndInitialize<0, Type, Args...>(resource_key, std::forward<Args>(args)...);
 	}
-	inline void DeleteResource(const RGObjectPoolKey &resource_key) { return ResourcePool::Delete(resource_key); }
+	inline void DeleteResource(const RGPoolKey &resource_key) { return ResourcePool::Delete(resource_key); }
 
-	inline RGBufferBase *GetBufferResource(const RGObjectPoolKey &resource_buffer_key) const {
+	inline RGBufferBase *GetBufferResource(const RGPoolKey &resource_buffer_key) const {
 		return ResourcePool::template Get<0, RGBufferBase>(resource_buffer_key);
 	}
-	inline RGImageBase *GetImageResource(const RGObjectPoolKey &resource_image_key) const {
+	inline RGImageBase *GetImageResource(const RGPoolKey &resource_image_key) const {
 		return ResourcePool::template Get<0, RGImageBase>(resource_image_key);
 	}
 };
@@ -803,11 +802,11 @@ public:
 
 // Input Pool
 template <typename RGDerived>
-class RGInputPool : public RGObjectPool<RGDerived, RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
+class RGInputPool : public RGPool<RGDerived, RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
 private:
-	using InputPool = RGObjectPool<RGDerived, RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
+	using InputPool = RGPool<RGDerived, RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
 
-	template <typename RGType> inline RGType *create_output(const RGObjectPoolKey &input_key) {
+	template <typename RGType> inline RGType *create_output(const RGPoolKey &input_key) {
 		// RGType can only be RGBufferBase or RGImageBase
 		constexpr RGResourceType kResType =
 		    std::is_base_of_v<RGImageBase, RGType> ? RGResourceType::kImage : RGResourceType::kBuffer;
@@ -841,22 +840,22 @@ public:
 
 protected:
 	template <RGInputUsage Usage, typename = std::enable_if_t<RGInputUsageForBuffer(Usage)>>
-	inline void AddInput(const RGObjectPoolKey &input_key, RGBufferBase *buffer) {
+	inline void AddInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
 		InputPool::template CreateAndInitialize<0, RGInput>(input_key, buffer, Usage);
 	}
 	template <RGInputUsage Usage, typename = std::enable_if_t<RGInputUsageForImage(Usage)>>
-	inline void AddInput(const RGObjectPoolKey &input_key, RGImageBase *image) {
+	inline void AddInput(const RGPoolKey &input_key, RGImageBase *image) {
 		InputPool::template CreateAndInitialize<0, RGInput>(input_key, image, Usage);
 	}
 	/* inline const RGInput *GetInput(const RGKey &input_key) const {
 	    return InputPool::template Get<0, RGInput>(input_key);
 	} */
-	inline void RemoveInput(const RGObjectPoolKey &input_key) { InputPool::Delete(input_key); }
+	inline void RemoveInput(const RGPoolKey &input_key) { InputPool::Delete(input_key); }
 
-	inline RGBufferBase *CreateBufferOutput(const RGObjectPoolKey &input_buffer_key) {
+	inline RGBufferBase *CreateBufferOutput(const RGPoolKey &input_buffer_key) {
 		return create_output<RGBufferBase>(input_buffer_key);
 	}
-	inline RGImageBase *CreateImageOutput(const RGObjectPoolKey &input_image_key) {
+	inline RGImageBase *CreateImageOutput(const RGPoolKey &input_image_key) {
 		return create_output<RGImageBase>(input_image_key);
 	}
 };

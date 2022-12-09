@@ -14,11 +14,11 @@ class TestPass0 final
     : public myvk::render_graph::RGPassBase,
       public myvk::render_graph::RGResourcePool<TestPass0>,
       public myvk::render_graph::RGInputPool<TestPass0>,
-      public myvk::render_graph::RGObjectPool<
+      public myvk::render_graph::RGPool<
           TestPass0, int, myvk::render_graph::RGPoolVariant<int, double>,
           myvk::render_graph::RGPoolVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>> {
 public:
-	using TestPool = myvk::render_graph::RGObjectPool<
+	using TestPool = myvk::render_graph::RGPool<
 	    TestPass0, int, myvk::render_graph::RGPoolVariant<int, double>,
 	    myvk::render_graph::RGPoolVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>>;
 
