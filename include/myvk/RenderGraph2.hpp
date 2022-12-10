@@ -860,6 +860,18 @@ protected:
 	}
 };
 
+template <typename RGDerived> class RGDescriptorInputSlot {
+private:
+	RGInputPool<RGDerived> *get_input_pool_ptr() { return (RGInputPool<RGDerived> *)static_cast<RGDerived *>(this); }
+	const RGInputPool<RGDerived> *get_input_pool_ptr() const {
+		return (const RGInputPool<RGDerived> *)static_cast<const RGDerived *>(this);
+	}
+
+public:
+	RGDescriptorInputSlot() { static_assert(std::is_base_of_v<RGInputPool<RGDerived>, RGDerived>); }
+	inline virtual ~RGDescriptorInputSlot() = default;
+};
+
 #pragma endregion
 
 /* template <typename RGDerived>
