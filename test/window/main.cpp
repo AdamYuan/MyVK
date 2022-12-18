@@ -107,8 +107,9 @@ public:
 
 	void Create(myvk::render_graph::RGBufferBase *draw_list, myvk::render_graph::RGImageBase *noise_tex) {
 		printf("Create TestPass\n");
-		AddInput<myvk::render_graph::RGUsage::kStorageBufferRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
-		    {"draw_list_rw"}, draw_list);
+		AddInput<myvk::render_graph::RGUsage::kStorageBufferRW,
+		         VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT>({"draw_list_rw"},
+		                                                                                          draw_list);
 		AddInput<myvk::render_graph::RGUsage::kStorageImageRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 		    {"noise_tex_rw"}, noise_tex);
 
