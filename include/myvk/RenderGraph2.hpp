@@ -3,7 +3,6 @@
 
 #include "CommandBuffer.hpp"
 #include "FrameManager.hpp"
-#include "RenderGraphScheduler.hpp"
 #include <optional>
 #include <tuple>
 #include <unordered_map>
@@ -16,7 +15,7 @@ namespace myvk::render_graph {
 ///////////////////////////
 #pragma region SECTION : Base Objects
 
-class RenderGraphBase {};
+class RenderGraphBase;
 class RGPassBase;
 // Object Base
 class RGPoolKey;
@@ -321,10 +320,9 @@ template <typename RGType, typename... RGOthers> struct TypeVariant<RGType, RGOt
 template <> struct TypeVariant<> {
 	using T = std::monostate;
 };
-} // namespace _details_rg_pool_
-template <typename... RGTypes> using RGPoolVariant = typename _details_rg_pool_::TypeVariant<RGTypes...>::T;
-template <typename RGDerived, typename... Types> class RGPool {
-private:
+
+// Used for internal processing
+template <typename... Types> struct RGPoolData {
 	using TypeTuple = typename _details_rg_pool_::TypeTuple<Types...>::T;
 	template <std::size_t Index> using GetRawType = std::tuple_element_t<Index, std::tuple<Types...>>;
 	template <std::size_t Index> using GetAlterType = std::tuple_element_t<Index, TypeTuple>;
@@ -335,46 +333,26 @@ private:
 	template <std::size_t Index>
 	static constexpr bool kCanReset = _details_rg_pool_::TypeTraits<GetRawType<Index>>::kCanReset;
 
-	_details_rg_pool_::RGPoolKeyMap<TypeTuple> m_pool;
+	_details_rg_pool_::RGPoolKeyMap<TypeTuple> pool;
 
 	template <std::size_t Index, typename TypeToCons, typename... Args, typename MapIterator,
 	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
-	inline TypeToCons *initialize(const MapIterator &it, Args &&...args) {
+	inline TypeToCons *ValueInitialize(const MapIterator &it, Args &&...args) {
 		GetAlterType<Index> &ref = std::get<Index>(it->second);
-
 		using RawType = GetRawType<Index>;
-		TypeToCons *ptr =
-		    _details_rg_pool_::TypeTraits<RawType>::template Initialize<TypeToCons>(ref, std::forward<Args>(args)...);
-		// Initialize RGObjectBase
-		if constexpr (std::is_base_of_v<RGObjectBase, TypeToCons>) {
-			static_assert(std::is_base_of_v<RenderGraphBase, RGDerived> || std::is_base_of_v<RGObjectBase, RGDerived>);
-
-			auto base_ptr = static_cast<RGObjectBase *>(ptr);
-			base_ptr->set_key_ptr(&(it->first));
-			if constexpr (std::is_base_of_v<RenderGraphBase, RGDerived>)
-				base_ptr->set_render_graph_ptr((RenderGraphBase *)static_cast<const RGDerived *>(this));
-			else
-				base_ptr->set_render_graph_ptr(
-				    ((RGObjectBase *)static_cast<const RGDerived *>(this))->GetRenderGraphPtr());
-		}
-		// Initialize RGResourceBase
-		if constexpr (std::is_base_of_v<RGResourceBase, TypeToCons>) {
-			auto resource_ptr = static_cast<RGResourceBase *>(ptr);
-			if constexpr (std::is_base_of_v<RGPassBase, RGDerived>)
-				resource_ptr->set_producer_pass_ptr((RGPassBase *)static_cast<const RGDerived *>(this));
-		}
-		return ptr;
+		return _details_rg_pool_::TypeTraits<RawType>::template Initialize<TypeToCons>(ref,
+		                                                                               std::forward<Args>(args)...);
 	}
 
 	template <std::size_t Index, typename MapIterator, typename = std::enable_if_t<kCanReset<Index>>>
-	inline bool is_initialized(const MapIterator &it) const {
+	inline bool ValueIsInitialized(const MapIterator &it) const {
 		const GetAlterType<Index> &ref = std::get<Index>(it->second);
 		using RawType = GetRawType<Index>;
 		return _details_rg_pool_::TypeTraits<RawType>::IsInitialized(ref);
 	}
 
 	template <std::size_t Index, typename MapIterator, typename = std::enable_if_t<kCanReset<Index>>>
-	inline void reset(MapIterator &it) {
+	inline void ValueReset(MapIterator &it) {
 		GetAlterType<Index> &ref = std::get<Index>(it->second);
 		using RawType = GetRawType<Index>;
 		_details_rg_pool_::TypeTraits<RawType>::Reset(ref);
@@ -382,81 +360,107 @@ private:
 
 	template <std::size_t Index, typename TypeToGet, typename MapIterator,
 	          typename = std::enable_if_t<kCanGet<Index, TypeToGet>>>
-	inline TypeToGet *get(const MapIterator &it) const {
+	inline TypeToGet *ValueGet(const MapIterator &it) const {
 		const GetAlterType<Index> &ref = std::get<Index>(it->second);
 		using RawType = GetRawType<Index>;
 		return _details_rg_pool_::TypeTraits<RawType>::template Get<TypeToGet>(ref);
 	}
 
-public:
-	inline RGPool() {
+	inline RGPoolData() {
 		static_assert(std::is_default_constructible_v<TypeTuple> && std::is_move_constructible_v<TypeTuple>);
 		// TODO: Debug
 		printf("%s\n", typeid(TypeTuple).name());
 	}
+	inline RGPoolData(RGPoolData &&) noexcept = default;
+	inline virtual ~RGPoolData() = default;
+};
+
+} // namespace _details_rg_pool_
+template <typename... RGTypes> using RGPoolVariant = typename _details_rg_pool_::TypeVariant<RGTypes...>::T;
+
+template <typename Derived, typename... Types> class RGPool : private _details_rg_pool_::RGPoolData<Types...> {
+private:
+	using PoolData = _details_rg_pool_::RGPoolData<Types...>;
+
+	template <std::size_t Index, typename TypeToCons, typename... Args, typename MapIterator>
+	inline TypeToCons *initialize_and_set_rg_data(const MapIterator &it, Args &&...args) {
+		TypeToCons *ptr = PoolData::template ValueInitialize<Index, TypeToCons>(it, std::forward<Args>(args)...);
+		// Initialize RGObjectBase
+		if constexpr (std::is_base_of_v<RGObjectBase, TypeToCons>) {
+			static_assert(std::is_base_of_v<RenderGraphBase, Derived> || std::is_base_of_v<RGObjectBase, Derived>);
+
+			auto base_ptr = static_cast<RGObjectBase *>(ptr);
+			base_ptr->set_key_ptr(&(it->first));
+			if constexpr (std::is_base_of_v<RenderGraphBase, Derived>)
+				base_ptr->set_render_graph_ptr((RenderGraphBase *)static_cast<const Derived *>(this));
+			else
+				base_ptr->set_render_graph_ptr(
+				    ((RGObjectBase *)static_cast<const Derived *>(this))->GetRenderGraphPtr());
+		}
+		// Initialize RGResourceBase
+		if constexpr (std::is_base_of_v<RGResourceBase, TypeToCons>) {
+			auto resource_ptr = static_cast<RGResourceBase *>(ptr);
+			if constexpr (std::is_base_of_v<RGPassBase, Derived>)
+				resource_ptr->set_producer_pass_ptr((RGPassBase *)static_cast<const Derived *>(this));
+		}
+		return ptr;
+	}
+
+public:
+	inline RGPool() = default;
 	inline RGPool(RGPool &&) noexcept = default;
 	inline virtual ~RGPool() = default;
 
 protected:
 	// Create Tag and Initialize the Main Object
-	template <std::size_t Index, typename TypeToCons, typename... Args,
-	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
+	template <std::size_t Index, typename TypeToCons, typename... Args>
 	inline TypeToCons *CreateAndInitialize(const RGPoolKey &key, Args &&...args) {
-		if (m_pool.find(key) != m_pool.end())
+		if (PoolData::pool.find(key) != PoolData::pool.end())
 			return nullptr;
-		auto it = m_pool.insert({key, TypeTuple{}}).first;
-		return initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
+		auto it = PoolData::pool.insert({key, typename PoolData::TypeTuple{}}).first;
+		return initialize_and_set_rg_data<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Create Tag Only
 	inline void Create(const RGPoolKey &key) {
-		if (m_pool.find(key) != m_pool.end())
+		if (PoolData::pool.find(key) != PoolData::pool.end())
 			return;
-		m_pool.insert(std::make_pair(key, TypeTuple{}));
+		PoolData::pool.insert(std::make_pair(key, typename PoolData::TypeTuple{}));
 	}
 	// Initialize Object of a Tag
-	template <std::size_t Index, typename TypeToCons, typename... Args,
-	          typename = std::enable_if_t<kCanConstruct<Index, TypeToCons>>>
+	template <std::size_t Index, typename TypeToCons, typename... Args>
 	inline TypeToCons *Initialize(const RGPoolKey &key, Args &&...args) {
-		auto it = m_pool.find(key);
-		if (it == m_pool.end())
-			return nullptr;
-		return initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
+		auto it = PoolData::pool.find(key);
+		return it == PoolData::pool.end()
+		           ? nullptr
+		           : initialize_and_set_rg_data<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Check whether an Object of a Tag is Initialized
-	template <std::size_t Index, typename = std::enable_if_t<kCanReset<Index>>>
-	inline bool IsInitialized(const RGPoolKey &key) const {
-		auto it = m_pool.find(key);
-		if (it == m_pool.end())
-			return false;
-		return is_initialized<Index>(it);
+	template <std::size_t Index> inline bool IsInitialized(const RGPoolKey &key) const {
+		auto it = PoolData::pool.find(key);
+		return it != PoolData::pool.end() && PoolData::template ValueIsInitialized<Index>(it);
 	}
 	// Reset an Object of a Tag
-	template <std::size_t Index, typename = std::enable_if_t<kCanReset<Index>>>
-	inline void Reset(const RGPoolKey &key) {
-		auto it = m_pool.find(key);
-		if (it != m_pool.end())
-			reset<Index>(it);
+	template <std::size_t Index> inline void Reset(const RGPoolKey &key) {
+		auto it = PoolData::pool.find(key);
+		if (it != PoolData::pool.end())
+			PoolData::template ValueReset<Index>(it);
 	}
 	// Get an Object from a Tag, if not Initialized, Initialize it.
-	template <
-	    std::size_t Index, typename TypeToCons, typename... Args,
-	    typename = std::enable_if_t<kCanGet<Index, TypeToCons> && kCanConstruct<Index, TypeToCons> && kCanReset<Index>>>
+	template <std::size_t Index, typename TypeToCons, typename... Args>
 	inline TypeToCons *InitializeOrGet(const RGPoolKey &key, Args &&...args) {
-		auto it = m_pool.find(key);
-		if (it == m_pool.end())
+		auto it = PoolData::pool.find(key);
+		if (it == PoolData::pool.end())
 			return nullptr;
-		return is_initialized<Index>(it) ? (TypeToCons *)get<Index, TypeToCons>(it)
-		                                 : initialize<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
+		return PoolData::template ValueIsInitialized<Index>(it)
+		           ? (TypeToCons *)PoolData::template ValueGet<Index, TypeToCons>(it)
+		           : initialize_and_set_rg_data<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Delete a Tag and its Objects
-	inline void Delete(const RGPoolKey &key) { m_pool.erase(key); }
+	inline void Delete(const RGPoolKey &key) { PoolData::pool.erase(key); }
 	// Get an Object from a Tag
-	template <std::size_t Index, typename Type, typename = std::enable_if_t<kCanGet<Index, Type>>>
-	inline Type *Get(const RGPoolKey &key) const {
-		auto it = m_pool.find(key);
-		if (it == m_pool.end())
-			return nullptr;
-		return (Type *)get<Index, Type>(it);
+	template <std::size_t Index, typename Type> inline Type *Get(const RGPoolKey &key) const {
+		auto it = PoolData::pool.find(key);
+		return it == PoolData::pool.end() ? nullptr : (Type *)PoolData::template ValueGet<Index, Type>(it);
 	}
 };
 
@@ -474,7 +478,7 @@ public:
 	inline RGBufferBase(RGBufferBase &&) noexcept = default;
 
 	inline RGResourceType GetType() const final { return RGResourceType::kBuffer; }
-	virtual const Ptr<BufferBase> &GetBuffer(uint32_t frame = 0) const = 0;
+	virtual const Ptr<BufferBase> &GetBuffer() const = 0;
 };
 
 enum class RGAttachmentLoadOp { kClear, kLoad, kDontCare };
@@ -485,11 +489,59 @@ public:
 	inline RGImageBase(RGImageBase &&) noexcept = default;
 
 	inline RGResourceType GetType() const final { return RGResourceType::kImage; }
-	virtual const Ptr<ImageView> &GetImageView(uint32_t frame = 0) const = 0;
+	virtual const Ptr<ImageView> &GetImageView() const = 0;
 
 	virtual RGAttachmentLoadOp GetLoadOp() const = 0;
 	virtual const VkClearValue &GetClearValue() const = 0;
 };
+// External
+class RGExternalImageBase : virtual public RGImageBase {
+public:
+	inline RGExternalImageBase() = default;
+	inline RGExternalImageBase(RGExternalImageBase &&) noexcept = default;
+	inline ~RGExternalImageBase() override = default;
+
+	inline RGResourceState GetState() const final { return RGResourceState::kExternal; }
+	bool IsAlias() const final { return false; }
+
+private:
+	RGAttachmentLoadOp m_load_op{RGAttachmentLoadOp::kDontCare};
+	VkClearValue m_clear_value{};
+
+public:
+	template <RGAttachmentLoadOp LoadOp, typename = std::enable_if_t<LoadOp != RGAttachmentLoadOp::kClear>>
+	inline void SetLoadOp() {
+		m_load_op = LoadOp;
+	}
+	template <RGAttachmentLoadOp LoadOp, typename = std::enable_if_t<LoadOp == RGAttachmentLoadOp::kClear>>
+	inline void SetLoadOp(const VkClearValue &clear_value) {
+		m_load_op = LoadOp;
+		m_clear_value = clear_value;
+	}
+	inline RGAttachmentLoadOp GetLoadOp() const final { return m_load_op; }
+	inline const VkClearValue &GetClearValue() const final { return m_clear_value; }
+};
+class RGExternalBufferBase : virtual public RGBufferBase {
+public:
+	inline RGExternalBufferBase() = default;
+	inline RGExternalBufferBase(RGExternalBufferBase &&) noexcept = default;
+	inline ~RGExternalBufferBase() override = default;
+
+	inline RGResourceState GetState() const final { return RGResourceState::kExternal; }
+	bool IsAlias() const final { return false; }
+};
+#ifdef MYVK_ENABLE_GLFW
+class RGSwapchainImage final : public RGExternalImageBase {
+private:
+	Ptr<FrameManager> m_frame_manager;
+
+public:
+	inline explicit RGSwapchainImage(Ptr<FrameManager> frame_manager) : m_frame_manager{std::move(frame_manager)} {}
+	inline RGSwapchainImage(RGSwapchainImage &&) noexcept = default;
+	~RGSwapchainImage() final = default;
+	inline const Ptr<ImageView> &GetImageView() const final { return m_frame_manager->GetCurrentSwapchainImageView(); }
+};
+#endif
 // Alias
 class RGResourceAliasBase : virtual public RGResourceBase {
 private:
@@ -515,9 +567,7 @@ public:
 	inline RGImageAlias(RGImageAlias &&) noexcept = default;
 	inline ~RGImageAlias() final = default;
 
-	inline const Ptr<ImageView> &GetImageView(uint32_t frame = 0) const final {
-		return GetResource<RGImageBase>()->GetImageView(frame);
-	}
+	inline const Ptr<ImageView> &GetImageView() const final { return GetResource<RGImageBase>()->GetImageView(); }
 	inline RGAttachmentLoadOp GetLoadOp() const final { return GetResource<RGImageBase>()->GetLoadOp(); }
 	const VkClearValue &GetClearValue() const final { return GetResource<RGImageBase>()->GetClearValue(); }
 };
@@ -527,9 +577,7 @@ public:
 	inline RGBufferAlias(RGBufferAlias &&) = default;
 	inline ~RGBufferAlias() final = default;
 
-	inline const Ptr<BufferBase> &GetBuffer(uint32_t frame = 0) const final {
-		return GetResource<RGBufferBase>()->GetBuffer(frame);
-	}
+	inline const Ptr<BufferBase> &GetBuffer() const final { return GetResource<RGBufferBase>()->GetBuffer(); }
 };
 
 // Managed Resources
@@ -540,7 +588,7 @@ public:
 	inline RGManagedBuffer(RGManagedBuffer &&) noexcept = default;
 	~RGManagedBuffer() override = default;
 
-	const Ptr<BufferBase> &GetBuffer(uint32_t frame = 0) const final {
+	const Ptr<BufferBase> &GetBuffer() const final {
 		static Ptr<BufferBase> x;
 		return x;
 	}
@@ -553,7 +601,7 @@ public:
 	inline RGManagedImage(RGManagedImage &&) noexcept = default;
 	~RGManagedImage() override = default;
 
-	const Ptr<ImageView> &GetImageView(uint32_t frame = 0) const final {
+	const Ptr<ImageView> &GetImageView() const final {
 		static Ptr<ImageView> x;
 		return x;
 	}
@@ -568,13 +616,13 @@ public:
 };
 
 // Resource Pool
-template <typename RGDerived>
-class RGResourcePool : public RGPool<RGDerived, RGPoolVariant<RGBufferBase, RGManagedBuffer, RGBufferAlias, RGImageBase,
-                                                              RGManagedImage, RGImageAlias>> {
+template <typename Derived>
+class RGResourcePool
+    : public RGPool<Derived,
+                    RGPoolVariant<RGManagedBuffer, RGExternalBufferBase, RGManagedImage, RGExternalImageBase>> {
 private:
 	using ResourcePool =
-	    RGPool<RGDerived,
-	           RGPoolVariant<RGBufferBase, RGManagedBuffer, RGBufferAlias, RGImageBase, RGManagedImage, RGImageAlias>>;
+	    RGPool<Derived, RGPoolVariant<RGManagedBuffer, RGExternalBufferBase, RGManagedImage, RGExternalImageBase>>;
 
 public:
 	inline RGResourcePool() = default;
@@ -612,13 +660,15 @@ protected:
 #pragma endregion
 
 ////////////////////////////
-// SECTION Resource Input //
+// SECTION Resource Usage //
 ////////////////////////////
-#pragma region SECTION : Resource Input
+#pragma region SECTION : Resource Usage
 
-enum class RGInputUsage {
-	kPreserve,
-	kColorAttachment,
+enum class RGUsage {
+	kPreserveImage,
+	kPreserveBuffer,
+	kColorAttachmentW,
+	kColorAttachmentRW,
 	kDepthAttachmentR,
 	kDepthAttachmentRW,
 	kInputAttachment,
@@ -633,196 +683,354 @@ enum class RGInputUsage {
 	kStorageBufferRW,
 	kIndexBuffer,
 	kVertexBuffer,
-	kTransferSrc,
-	kTransferDst
+	kCopyImageSrc,
+	kCopyImageDst,
+	kBlitImageSrc,
+	kBlitImageDst,
+	kClearImage,
+	kCopyBufferSrc,
+	kCopyBufferDst,
+	__RG_USAGE_NUM
 };
+struct RGUsageInfo {
+	VkAccessFlags2 read_access_flags, write_access_flags;
 
-#define CASE(NAME) case RGInputUsage::NAME:
-inline constexpr bool RGInputUsageIsDescriptor(RGInputUsage usage) {
-	switch (usage) {
-		CASE(kInputAttachment)
-		CASE(kSampledImage)
-		CASE(kStorageImageR)
-		CASE(kStorageImageW)
-		CASE(kStorageImageRW)
-		CASE(kUniformBuffer)
-		CASE(kStorageBufferR)
-		CASE(kStorageBufferW)
-		CASE(kStorageBufferRW)
-		return true;
-	default:
-		return false;
-	}
+	RGResourceType resource_type;
+	VkImageLayout image_layout;
+
+	VkPipelineStageFlags2 specified_pipeline_stages;
+	VkPipelineStageFlags2 optional_pipeline_stages;
+
+	bool is_descriptor;
+	VkDescriptorType descriptor_type;
+};
+constexpr VkPipelineStageFlags2 MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT =
+    VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
+    VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT | VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT |
+    VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+    VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+
+template <RGUsage> constexpr RGUsageInfo kUsageInfo{};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kPreserveImage> = {0, 0, RGResourceType::kImage, {}, 0, 0, false, {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kPreserveBuffer> = {0, 0, RGResourceType::kBuffer, {}, 0, 0, false, {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kColorAttachmentW> = {0,
+                                                                VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                                                RGResourceType::kImage,
+                                                                VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                                VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                                0,
+                                                                false,
+                                                                {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kColorAttachmentRW> = {VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+                                                                 VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+                                                                 RGResourceType::kImage,
+                                                                 VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                                                                 VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                                                 0,
+                                                                 false,
+                                                                 {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kDepthAttachmentR> = {VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+                                                                0,
+                                                                RGResourceType::kImage,
+                                                                VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                                                VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+                                                                0,
+                                                                false,
+                                                                {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kDepthAttachmentRW> = {VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+                                                                 VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                                                                 RGResourceType::kImage,
+                                                                 VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                                                 VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
+                                                                     VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+                                                                 0,
+                                                                 false,
+                                                                 {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kInputAttachment> = {VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
+                                                               0,
+                                                               RGResourceType::kImage,
+                                                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                                               VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                                                               0,
+                                                               true,
+                                                               VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT};
+// TODO: Is it correct?
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kPresent> = {
+    0, 0, RGResourceType::kImage, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 0, false, {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kSampledImage> = {VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
+                                                            0,
+                                                            RGResourceType::kImage,
+                                                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                                            0,
+                                                            MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                            true,
+                                                            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kStorageImageR> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT, //
+                                                             0,
+                                                             RGResourceType::kImage,
+                                                             VK_IMAGE_LAYOUT_GENERAL,
+                                                             0,
+                                                             MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                             true,
+                                                             VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kStorageImageW> = {0,
+                                                             VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                             RGResourceType::kImage,
+                                                             VK_IMAGE_LAYOUT_GENERAL,
+                                                             0,
+                                                             MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                             true,
+                                                             VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kStorageImageRW> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                                                              VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                              RGResourceType::kImage,
+                                                              VK_IMAGE_LAYOUT_GENERAL,
+                                                              0,
+                                                              MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                              true,
+                                                              VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kUniformBuffer> = {VK_ACCESS_2_UNIFORM_READ_BIT, //
+                                                             0,
+                                                             RGResourceType::kBuffer,
+                                                             {},
+                                                             0,
+                                                             MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                             true,
+                                                             VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kStorageBufferR> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT, //
+                                                              0,
+                                                              RGResourceType::kBuffer,
+                                                              {},
+                                                              0,
+                                                              MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                              true,
+                                                              VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kStorageBufferW> = {0, //
+                                                              VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                              RGResourceType::kBuffer,
+                                                              {},
+                                                              0,
+                                                              MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                              true,
+                                                              VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kStorageBufferRW> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                                                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                               RGResourceType::kBuffer,
+                                                               {},
+                                                               0,
+                                                               MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                               true,
+                                                               VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kVertexBuffer> = {VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+                                                            0,
+                                                            RGResourceType::kBuffer,
+                                                            {},
+                                                            VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
+                                                            0,
+                                                            false,
+                                                            {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kIndexBuffer> = {VK_ACCESS_2_INDEX_READ_BIT, //
+                                                           0,
+                                                           RGResourceType::kBuffer,
+                                                           {},
+                                                           VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT,
+                                                           0,
+                                                           false,
+                                                           {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kCopyImageSrc> = {VK_ACCESS_2_TRANSFER_READ_BIT, //
+                                                            0,
+                                                            RGResourceType::kImage,
+                                                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                            VK_PIPELINE_STAGE_2_COPY_BIT,
+                                                            0,
+                                                            false,
+                                                            {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kCopyImageDst> = {0, //
+                                                            VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                            RGResourceType::kImage,
+                                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                            VK_PIPELINE_STAGE_2_COPY_BIT,
+                                                            0,
+                                                            false,
+                                                            {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kBlitImageSrc> = {VK_ACCESS_2_TRANSFER_READ_BIT, //
+                                                            0,
+                                                            RGResourceType::kImage,
+                                                            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                                            VK_PIPELINE_STAGE_2_BLIT_BIT,
+                                                            0,
+                                                            false,
+                                                            {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kBlitImageDst> = {0, //
+                                                            VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                            RGResourceType::kImage,
+                                                            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                            VK_PIPELINE_STAGE_2_BLIT_BIT,
+                                                            0,
+                                                            false,
+                                                            {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kClearImage> = {0, //
+                                                          VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                          RGResourceType::kImage,
+                                                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                                          VK_PIPELINE_STAGE_2_CLEAR_BIT,
+                                                          0,
+                                                          false,
+                                                          {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kCopyBufferSrc> = {VK_ACCESS_2_TRANSFER_READ_BIT, //
+                                                             0,
+                                                             RGResourceType::kBuffer,
+                                                             {},
+                                                             VK_PIPELINE_STAGE_2_COPY_BIT,
+                                                             0,
+                                                             false,
+                                                             {}};
+template <>
+constexpr RGUsageInfo kUsageInfo<RGUsage::kCopyBufferDst> = {0, //
+                                                             VK_ACCESS_2_TRANSFER_WRITE_BIT,
+                                                             RGResourceType::kBuffer,
+                                                             {},
+                                                             VK_PIPELINE_STAGE_2_COPY_BIT,
+                                                             0,
+                                                             false,
+                                                             {}};
+template <typename IndexSequence> class RGUsageInfoTable;
+template <std::size_t... Indices> class RGUsageInfoTable<std::index_sequence<Indices...>> {
+private:
+	inline static constexpr RGUsageInfo kArr[] = {(kUsageInfo<(RGUsage)Indices>)...};
+
+public:
+	inline constexpr const RGUsageInfo &operator[](RGUsage usage) const { return kArr[(std::size_t)usage]; }
+};
+constexpr RGUsageInfoTable<std::make_index_sequence<(std::size_t)RGUsage::__RG_USAGE_NUM>> kUsageInfoTable{};
+
+inline constexpr bool RGUsageIsDescriptor(RGUsage usage) { return kUsageInfoTable[usage].is_descriptor; }
+inline constexpr VkDescriptorType RGUsageGetDescriptorType(RGUsage usage) {
+	return kUsageInfoTable[usage].descriptor_type;
 }
-inline constexpr VkDescriptorType RGInputUsageGetDescriptorType(RGInputUsage usage) {
-	switch (usage) {
-		CASE(kInputAttachment)
-		return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-		CASE(kSampledImage)
-		return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		CASE(kStorageImageR)
-		CASE(kStorageImageW)
-		CASE(kStorageImageRW)
-		return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-		CASE(kUniformBuffer)
-		return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		CASE(kStorageBufferR)
-		CASE(kStorageBufferW)
-		CASE(kStorageBufferRW)
-		return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-	default:
-		return VK_DESCRIPTOR_TYPE_MAX_ENUM;
-	}
+inline constexpr bool RGUsageIsReadOnly(RGUsage usage) { return kUsageInfoTable[usage].write_access_flags == 0; }
+inline constexpr bool RGUsageForBuffer(RGUsage usage) {
+	return kUsageInfoTable[usage].resource_type == RGResourceType::kBuffer;
 }
-inline constexpr bool RGInputUsageIsReadOnly(RGInputUsage usage) {
-	switch (usage) {
-		CASE(kPresent)
-		CASE(kPreserve)
-		CASE(kDepthAttachmentR)
-		CASE(kInputAttachment)
-		CASE(kSampledImage)
-		CASE(kStorageImageR)
-		CASE(kUniformBuffer)
-		CASE(kStorageBufferR)
-		CASE(kIndexBuffer)
-		CASE(kVertexBuffer)
-		CASE(kTransferSrc)
-		return true;
-	default:
-		return false;
-	}
+inline constexpr bool RGUsageForImage(RGUsage usage) {
+	return kUsageInfoTable[usage].resource_type == RGResourceType::kImage;
 }
-inline constexpr bool RGInputUsageForBuffer(RGInputUsage usage) {
-	switch (usage) {
-		CASE(kPreserve)
-		CASE(kUniformBuffer)
-		CASE(kStorageBufferR)
-		CASE(kStorageBufferW)
-		CASE(kStorageBufferRW)
-		CASE(kIndexBuffer)
-		CASE(kVertexBuffer)
-		CASE(kTransferSrc)
-		CASE(kTransferDst)
-		return true;
-	default:
-		return false;
-	}
+inline constexpr bool RGUsageHasSpecifiedPipelineStages(RGUsage usage) {
+	return kUsageInfoTable[usage].specified_pipeline_stages;
 }
-inline constexpr bool RGInputUsageForImage(RGInputUsage usage) {
-	switch (usage) {
-		CASE(kPreserve)
-		CASE(kPresent)
-		CASE(kColorAttachment)
-		CASE(kDepthAttachmentR)
-		CASE(kDepthAttachmentRW)
-		CASE(kInputAttachment)
-		CASE(kSampledImage)
-		CASE(kStorageImageR)
-		CASE(kStorageImageW)
-		CASE(kStorageImageRW)
-		CASE(kTransferSrc)
-		CASE(kTransferDst)
-		return true;
-	default:
-		return false;
-	}
+inline constexpr VkPipelineStageFlags2 RGUsageGetSpecifiedPipelineStages(RGUsage usage) {
+	return kUsageInfoTable[usage].specified_pipeline_stages;
 }
-inline constexpr bool RGInputUsageGetImageLayout(RGInputUsage usage) {
-	switch (usage) {
-		CASE(kPresent)
-		return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-		CASE(kColorAttachment)
-		return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		CASE(kDepthAttachmentR)
-		CASE(kDepthAttachmentRW)
-		return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-		CASE(kInputAttachment)
-		CASE(kSampledImage)
-		return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		CASE(kStorageImageR)
-		CASE(kStorageImageW)
-		CASE(kStorageImageRW)
-		return VK_IMAGE_LAYOUT_GENERAL;
-		CASE(kTransferSrc)
-		return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-		CASE(kTransferDst)
-		return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	default:
-		return VK_IMAGE_LAYOUT_UNDEFINED;
-	}
+inline constexpr VkPipelineStageFlags2 RGUsageGetOptionalPipelineStages(RGUsage usage) {
+	return kUsageInfoTable[usage].optional_pipeline_stages;
 }
-#undef CASE
-template <RGResourceType Type> inline constexpr bool RGInputUsageForType(RGInputUsage usage) {
+inline constexpr VkImageLayout RGUsageGetImageLayout(RGUsage usage) { return kUsageInfoTable[usage].image_layout; }
+template <RGResourceType Type> inline constexpr bool RGUsageForType(RGUsage usage) {
 	if constexpr (Type == RGResourceType::kImage) {
-		return RGInputUsageForImage(usage);
+		return RGUsageForImage(usage);
 	} else {
-		return RGInputUsageForBuffer(usage);
+		return RGUsageForBuffer(usage);
 	}
 };
-inline constexpr bool RGInputUsageAll(RGInputUsage) { return true; }
+inline constexpr bool RGUsageAll(RGUsage) { return true; }
 
 // Input Usage Operation
-using RGInputUsageClass = bool(RGInputUsage);
+using RGUsageClass = bool(RGUsage);
 namespace _details_rg_input_usage_op_ {
-template <RGInputUsageClass... Args> struct Union;
-template <RGInputUsageClass X, RGInputUsageClass... Args> struct Union<X, Args...> {
-	constexpr bool operator()(RGInputUsage x) const { return X(x) || Union<Args...>(x); }
+template <RGUsageClass... Args> struct Union;
+template <RGUsageClass X, RGUsageClass... Args> struct Union<X, Args...> {
+	constexpr bool operator()(RGUsage x) const { return X(x) || Union<Args...>(x); }
 };
 template <> struct Union<> {
-	constexpr bool operator()(RGInputUsage) const { return false; }
+	constexpr bool operator()(RGUsage) const { return false; }
 };
-template <bool... Args(RGInputUsage)> struct Intersect;
-template <RGInputUsageClass X, RGInputUsageClass... Args> struct Intersect<X, Args...> {
-	constexpr bool operator()(RGInputUsage x) const { return X(x) && Intersect<Args...>(x); }
+template <bool... Args(RGUsage)> struct Intersect;
+template <RGUsageClass X, RGUsageClass... Args> struct Intersect<X, Args...> {
+	constexpr bool operator()(RGUsage x) const { return X(x) && Intersect<Args...>(x); }
 };
 template <> struct Intersect<> {
-	constexpr bool operator()(RGInputUsage) const { return true; }
+	constexpr bool operator()(RGUsage) const { return true; }
 };
 } // namespace _details_rg_input_usage_op_
 // Union: A | B
-template <RGInputUsageClass... Args> inline constexpr bool RGInputUsageUnion(RGInputUsage x) {
+template <RGUsageClass... Args> inline constexpr bool RGUsageUnion(RGUsage x) {
 	return _details_rg_input_usage_op_::Union<Args...>(x);
 }
 // Intersect: A & B
-template <RGInputUsageClass... Args> inline constexpr bool RGInputUsageIntersect(RGInputUsage x) {
+template <RGUsageClass... Args> inline constexpr bool RGUsageIntersect(RGUsage x) {
 	return _details_rg_input_usage_op_::Intersect<Args...>(x);
 }
 // Complement: ~X
-template <RGInputUsageClass X> inline constexpr bool RGInputUsageComplement(RGInputUsage x) { return !X(x); }
+template <RGUsageClass X> inline constexpr bool RGUsageComplement(RGUsage x) { return !X(x); }
 // Minus: A & (~B)
-template <RGInputUsageClass A, RGInputUsageClass B> inline constexpr bool RGInputUsageMinus(RGInputUsage x) {
-	return RGInputUsageIntersect<A, RGInputUsageComplement<B>>(x);
+template <RGUsageClass A, RGUsageClass B> inline constexpr bool RGUsageMinus(RGUsage x) {
+	return RGUsageIntersect<A, RGUsageComplement<B>>(x);
 }
+
+#pragma endregion
+
+////////////////////////////
+// SECTION Resource Input //
+////////////////////////////
+#pragma region SECTION : Resource Input
 
 // Resource Input
 template <typename RGType> class RGInput {
 private:
 	RGType *m_resource_ptr{};
-	RGInputUsage m_usage{};
+	RGUsage m_usage{};
+	VkPipelineStageFlags2 m_usage_pipeline_stages{};
 
 public:
 	inline RGInput() = default;
-	RGInput(RGType *resource_ptr, RGInputUsage usage) : m_resource_ptr{resource_ptr}, m_usage{usage} {}
+	RGInput(RGType *resource_ptr, RGUsage usage, VkPipelineStageFlags2 usage_pipeline_stages)
+	    : m_resource_ptr{resource_ptr}, m_usage{usage}, m_usage_pipeline_stages{usage_pipeline_stages} {}
 
 	inline RGType *GetResource() const { return m_resource_ptr; }
-	inline RGInputUsage GetUsage() const { return m_usage; }
+	inline RGUsage GetUsage() const { return m_usage; }
+	inline VkPipelineStageFlags2 GetUsagePipelineStages() const { return m_usage_pipeline_stages; }
 };
+using RGResourceInput = RGInput<RGResourceBase>;
 using RGBufferInput = RGInput<RGBufferBase>;
 using RGImageInput = RGInput<RGImageBase>;
 
 // Input Pool
-template <typename RGDerived>
+template <typename Derived>
 class RGInputPool
-    : public RGPool<RGDerived, RGPoolVariant<RGBufferInput, RGImageInput>, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
+    : public RGPool<Derived, RGPoolVariant<RGBufferInput, RGImageInput>, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
 private:
 	using InputPool =
-	    RGPool<RGDerived, RGPoolVariant<RGBufferInput, RGImageInput>, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
+	    RGPool<Derived, RGPoolVariant<RGBufferInput, RGImageInput>, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
 
 	template <typename RGType> inline RGType *create_output(const RGPoolKey &input_key) {
 		const RGInput<RGType> *input = InputPool::template Get<0, RGInput<RGType>>(input_key);
 		if (!input)
 			return nullptr;
-		else if (input->GetResource()->GetProducerPassPtr() == (RGPassBase *)static_cast<RGDerived *>(this))
+		else if (input->GetResource()->GetProducerPassPtr() == (RGPassBase *)static_cast<Derived *>(this))
 			return input->GetResource();
 		else
 			return InputPool::template InitializeOrGet<
@@ -831,18 +1039,38 @@ private:
 	}
 
 public:
-	inline RGInputPool() = default;
+	inline RGInputPool() { static_assert(std::is_base_of_v<RGPassBase, Derived>); }
 	inline RGInputPool(RGInputPool &&) noexcept = default;
 	inline ~RGInputPool() override = default;
 
 protected:
-	template <RGInputUsage Usage, typename = std::enable_if_t<RGInputUsageForBuffer(Usage)>>
+	template <RGUsage Usage,
+	          typename = std::enable_if_t<RGUsageHasSpecifiedPipelineStages(Usage) && RGUsageForBuffer(Usage)>>
 	inline void AddInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
-		InputPool::template CreateAndInitialize<0, RGBufferInput>(input_key, buffer, Usage);
+		InputPool::template CreateAndInitialize<0, RGBufferInput>(input_key, buffer, Usage,
+		                                                          RGUsageGetSpecifiedPipelineStages(Usage));
 	}
-	template <RGInputUsage Usage, typename = std::enable_if_t<RGInputUsageForImage(Usage)>>
+	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
+	          typename = std::enable_if_t<!RGUsageHasSpecifiedPipelineStages(Usage) &&
+	                                      (PipelineStageFlags & RGUsageGetOptionalPipelineStages(Usage)) ==
+	                                          PipelineStageFlags &&
+	                                      RGUsageForBuffer(Usage)>>
+	inline void AddInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
+		InputPool::template CreateAndInitialize<0, RGBufferInput>(input_key, buffer, Usage, PipelineStageFlags);
+	}
+	template <RGUsage Usage,
+	          typename = std::enable_if_t<RGUsageHasSpecifiedPipelineStages(Usage) && RGUsageForImage(Usage)>>
 	inline void AddInput(const RGPoolKey &input_key, RGImageBase *image) {
-		InputPool::template CreateAndInitialize<0, RGImageInput>(input_key, image, Usage);
+		InputPool::template CreateAndInitialize<0, RGImageInput>(input_key, image, Usage,
+		                                                         RGUsageGetSpecifiedPipelineStages(Usage));
+	}
+	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
+	          typename = std::enable_if_t<!RGUsageHasSpecifiedPipelineStages(Usage) &&
+	                                      (PipelineStageFlags & RGUsageGetOptionalPipelineStages(Usage)) ==
+	                                          PipelineStageFlags &&
+	                                      RGUsageForImage(Usage)>>
+	inline void AddInput(const RGPoolKey &input_key, RGImageBase *image) {
+		InputPool::template CreateAndInitialize<0, RGImageInput>(input_key, image, Usage, PipelineStageFlags);
 	}
 	inline const RGBufferInput *GetBufferInput(const RGPoolKey &input_key) const {
 		return InputPool::template Get<0, RGBufferInput>(input_key);
@@ -873,23 +1101,21 @@ public:
 	inline VkShaderStageFlags GetStageFlags() const { return m_stage_flags; }
 	inline const Ptr<Sampler> &GetSampler() const { return m_sampler; }
 };
-template <typename RGDerived>
-class RGInputDescriptorPool : public RGPool<RGDerived, std::vector<RGInputDescriptorInfo>, Ptr<DescriptorSetLayout>,
+template <typename Derived>
+class RGInputDescriptorPool : public RGPool<Derived, std::vector<RGInputDescriptorInfo>, Ptr<DescriptorSetLayout>,
                                             std::vector<Ptr<DescriptorSet>>> {
 private:
-	using InputDescriptorPool = RGPool<RGDerived, std::vector<RGInputDescriptorInfo>, Ptr<DescriptorSetLayout>,
-	                                   std::vector<Ptr<DescriptorSet>>>;
-	inline RGInputPool<RGDerived> *get_input_pool_ptr() {
-		return (RGInputPool<RGDerived> *)static_cast<RGDerived *>(this);
-	}
-	inline const RGInputPool<RGDerived> *get_input_pool_ptr() const {
-		return (const RGInputPool<RGDerived> *)static_cast<const RGDerived *>(this);
+	using InputDescriptorPool =
+	    RGPool<Derived, std::vector<RGInputDescriptorInfo>, Ptr<DescriptorSetLayout>, std::vector<Ptr<DescriptorSet>>>;
+	inline RGInputPool<Derived> *get_input_pool_ptr() { return (RGInputPool<Derived> *)static_cast<Derived *>(this); }
+	inline const RGInputPool<Derived> *get_input_pool_ptr() const {
+		return (const RGInputPool<Derived> *)static_cast<const Derived *>(this);
 	}
 
 public:
 	inline RGInputDescriptorPool() {
-		static_assert(std::is_base_of_v<RGPassBase, RGDerived>);
-		static_assert(std::is_base_of_v<RGInputPool<RGDerived>, RGDerived>);
+		static_assert(std::is_base_of_v<RGPassBase, Derived>);
+		static_assert(std::is_base_of_v<RGInputPool<Derived>, Derived>);
 	}
 	inline RGInputDescriptorPool(RGInputDescriptorPool &&) noexcept = default;
 	inline ~RGInputDescriptorPool() override = default;
@@ -921,11 +1147,13 @@ public:
 	inline RGPassBase() = default;
 	inline RGPassBase(RGPassBase &&) noexcept = default;
 	inline ~RGPassBase() override = default;
+
+	virtual void CmdExecute(const Ptr<CommandBuffer> &command_buffer) = 0;
 };
 
-template <typename RGDerived> class RGPassPool : public RGPool<RGDerived, RGPassBase> {
+template <typename Derived> class RGPassPool : public RGPool<Derived, RGPassBase> {
 private:
-	using PassPool = RGPool<RGDerived, RGPassBase>;
+	using PassPool = RGPool<Derived, RGPassBase>;
 
 public:
 	inline RGPassPool() = default;
@@ -951,15 +1179,27 @@ struct NoResourcePool {};
 struct NoInputDescriptorPool {};
 struct NoPassPool {};
 } // namespace _details_rg_pass_
-template <typename RGDerived, bool EnableResourceAllocation = true, bool EnableInputDescriptorAllocation = true,
-          bool EnableSubpassAllocation = true>
-class RGPass
-    : public RGPassBase,
-      public RGInputPool<RGDerived>,
-      public std::conditional_t<EnableResourceAllocation, RGResourcePool<RGDerived>, _details_rg_pass_::NoResourcePool>,
-      public std::conditional_t<EnableInputDescriptorAllocation, RGInputDescriptorPool<RGDerived>,
-                                _details_rg_pass_::NoInputDescriptorPool>,
-      public std::conditional_t<EnableSubpassAllocation, RGPassPool<RGDerived>, _details_rg_pass_::NoPassPool> {
+
+struct RGPassFlag {
+	enum : uint8_t {
+		kEnableResourceAllocation = 1u,
+		kEnableInputDescriptorAllocation = 2u,
+		kEnableSubpassAllocation = 4u,
+		kEnableAllAllocation = 7u,
+		kGraphicsSubpass = 8u,
+		kAsyncCompute = 16u
+	};
+};
+
+template <typename Derived, uint8_t Flags>
+class RGPass : public RGPassBase,
+               public RGInputPool<Derived>,
+               public std::conditional_t<(Flags & RGPassFlag::kEnableResourceAllocation) != 0, RGResourcePool<Derived>,
+                                         _details_rg_pass_::NoResourcePool>,
+               public std::conditional_t<(Flags & RGPassFlag::kEnableInputDescriptorAllocation) != 0,
+                                         RGInputDescriptorPool<Derived>, _details_rg_pass_::NoInputDescriptorPool>,
+               public std::conditional_t<(Flags & RGPassFlag::kEnableSubpassAllocation) != 0, RGPassPool<Derived>,
+                                         _details_rg_pass_::NoPassPool> {
 public:
 	inline RGPass() = default;
 	inline RGPass(RGPass &&) noexcept = default;
@@ -968,7 +1208,27 @@ public:
 
 #pragma endregion
 
-// Render Pass
+//////////////////////////
+// SECTION Render Graph //
+//////////////////////////
+#pragma region SECTION : Render Graph
+
+class RenderGraphBase : public DeviceObjectBase {
+protected:
+	Ptr<Device> m_device_ptr;
+	uint32_t m_frame_count{};
+
+public:
+	inline const Ptr<Device> &GetDevicePtr() const final { return m_device_ptr; }
+	inline uint32_t GetFrameCount() const { return m_frame_count; }
+};
+
+template <typename Derived>
+class RenderGraph : public RenderGraphBase, public RGPool<Derived, RGPoolVariant<RGImageInput, RGBufferInput>> {
+public:
+};
+
+#pragma endregion
 
 // TODO: Debug Type Traits
 static_assert(std::is_same_v<RGPoolVariant<RGBufferAlias, RGObjectBase, RGResourceBase, RGImageAlias>,

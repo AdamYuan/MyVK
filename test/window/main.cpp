@@ -11,7 +11,7 @@
 constexpr uint32_t kFrameCount = 3;
 
 class TestPass0 final
-    : public myvk::render_graph::RGPass<TestPass0>,
+    : public myvk::render_graph::RGPass<TestPass0, myvk::render_graph::RGPassFlag::kEnableAllAllocation>,
       public myvk::render_graph::RGPool<
           TestPass0, int, myvk::render_graph::RGPoolVariant<int, double>,
           myvk::render_graph::RGPoolVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>> {
@@ -19,6 +19,8 @@ public:
 	using TestPool = myvk::render_graph::RGPool<
 	    TestPass0, int, myvk::render_graph::RGPoolVariant<int, double>,
 	    myvk::render_graph::RGPoolVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>>;
+
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
 
 	void Create() {
 		auto *subpass = CreatePass<TestPass0>({"123"});
@@ -36,7 +38,7 @@ public:
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"noise_tex", i}),
 			       GetImageResource({"noise_tex", i}));
 
-			AddInput<myvk::render_graph::RGInputUsage::kStorageBufferW>({"draw_list_gen", i}, managed_buffer);
+			AddInput<myvk::render_graph::RGUsage::kStorageBufferW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"draw_list_gen", i}, managed_buffer);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 			auto output_buffer = GetBufferOutput({"draw_list_gen", i});
@@ -44,7 +46,7 @@ public:
 			output_buffer = GetBufferOutput({"draw_list_gen", i});
 			printf("output_buffer2 = %p\n", output_buffer);
 
-			AddInput<myvk::render_graph::RGInputUsage::kColorAttachment>({"noise_tex", i}, managed_image);
+			AddInput<myvk::render_graph::RGUsage::kColorAttachmentW>({"noise_tex", i}, managed_image);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 			auto output_image_invalid = GetBufferOutput({"noise_tex", i});
@@ -97,15 +99,15 @@ public:
 	myvk::render_graph::RGImageBase *GetNoiseTexOutput() { return GetImageOutput({"noise_tex"}); }
 };
 
-class TestPass final : public myvk::render_graph::RGPassBase,
-                       public myvk::render_graph::RGResourcePool<TestPass>,
-                       public myvk::render_graph::RGInputPool<TestPass>,
-                       public myvk::render_graph::RGInputDescriptorPool<TestPass> {
+class TestPass final
+    : public myvk::render_graph::RGPass<TestPass, myvk::render_graph::RGPassFlag::kEnableAllAllocation> {
 public:
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
+
 	void Create(myvk::render_graph::RGBufferBase *draw_list, myvk::render_graph::RGImageBase *noise_tex) {
 		printf("Create TestPass\n");
-		AddInput<myvk::render_graph::RGInputUsage::kStorageBufferRW>({"draw_list_rw"}, draw_list);
-		AddInput<myvk::render_graph::RGInputUsage::kStorageImageRW>({"noise_tex_rw"}, noise_tex);
+		AddInput<myvk::render_graph::RGUsage::kStorageBufferRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"draw_list_rw"}, draw_list);
+		AddInput<myvk::render_graph::RGUsage::kStorageImageRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"noise_tex_rw"}, noise_tex);
 
 		AddDescriptorSet({"set"}, {{{"draw_list_rw"}, VK_SHADER_STAGE_VERTEX_BIT},
 		                           {{"noise_tex_rw"}, VK_SHADER_STAGE_FRAGMENT_BIT}});
