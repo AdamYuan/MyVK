@@ -38,7 +38,8 @@ public:
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"noise_tex", i}),
 			       GetImageResource({"noise_tex", i}));
 
-			AddInput<myvk::render_graph::RGUsage::kStorageBufferW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"draw_list_gen", i}, managed_buffer);
+			AddInput<myvk::render_graph::RGUsage::kStorageBufferW, VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT>(
+			    {"draw_list_gen", i}, managed_buffer);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 			auto output_buffer = GetBufferOutput({"draw_list_gen", i});
@@ -106,8 +107,10 @@ public:
 
 	void Create(myvk::render_graph::RGBufferBase *draw_list, myvk::render_graph::RGImageBase *noise_tex) {
 		printf("Create TestPass\n");
-		AddInput<myvk::render_graph::RGUsage::kStorageBufferRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"draw_list_rw"}, draw_list);
-		AddInput<myvk::render_graph::RGUsage::kStorageImageRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"noise_tex_rw"}, noise_tex);
+		AddInput<myvk::render_graph::RGUsage::kStorageBufferRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+		    {"draw_list_rw"}, draw_list);
+		AddInput<myvk::render_graph::RGUsage::kStorageImageRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+		    {"noise_tex_rw"}, noise_tex);
 
 		AddDescriptorSet({"set"}, {{{"draw_list_rw"}, VK_SHADER_STAGE_VERTEX_BIT},
 		                           {{"noise_tex_rw"}, VK_SHADER_STAGE_FRAGMENT_BIT}});
