@@ -96,8 +96,8 @@ public:
 
 		printf("Create TestPass0\n");
 	}
-	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return GetBufferOutput({"draw_list_gen"}); }
-	myvk::render_graph::RGImageBase *GetNoiseTexOutput() { return GetImageOutput({"noise_tex"}); }
+	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return GetBufferOutput({"draw_list_gen", 0}); }
+	myvk::render_graph::RGImageBase *GetNoiseTexOutput() { return GetImageOutput({"noise_tex", 0}); }
 };
 
 class TestPass final
@@ -113,8 +113,7 @@ public:
 		AddInput<myvk::render_graph::RGUsage::kStorageImageRW, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 		    {"noise_tex_rw"}, noise_tex);
 
-		AddDescriptorSet({"set"}, {{{"draw_list_rw"}, VK_SHADER_STAGE_VERTEX_BIT},
-		                           {{"noise_tex_rw"}, VK_SHADER_STAGE_FRAGMENT_BIT}});
+		AddDescriptorSet({"set"}, {{{"draw_list_rw"}}, {{"noise_tex_rw"}}});
 		// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 		//       dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 		auto output_buffer = GetBufferOutput({"draw_list_rw"});

@@ -43,7 +43,7 @@ public:
 
 // Resource Base
 enum class RGResourceType { kImage, kBuffer };
-enum class RGResourceState { kManaged, kExternal };
+enum class RGResourceState { kManaged, kCombinedImage, kExternal };
 class RGResourceBase : virtual public RGObjectBase {
 private:
 	RGPassBase *m_producer_pass_ptr{};
@@ -94,8 +94,11 @@ private:
 public:
 	inline RGPoolKey() : _32_{} {}
 	template <typename IntType = IDType, typename = std::enable_if_t<std::is_integral_v<IntType>>>
-	inline RGPoolKey(std::string_view str, IntType id = 0)
-	    : m_str{}, m_len(std::min(str.length(), kMaxStrLen)), m_id(id) {
+	inline RGPoolKey(std::string_view str, IntType id) : m_str{}, m_len(std::min(str.length(), kMaxStrLen)), m_id(id) {
+		std::copy(str.begin(), str.begin() + m_len, m_str);
+	}
+	inline RGPoolKey(std::string_view str)
+	    : m_str{}, m_len(std::min(str.length(), kMaxStrLen)), m_id{std::numeric_limits<IDType>::max()} {
 		std::copy(str.begin(), str.begin() + m_len, m_str);
 	}
 	inline RGPoolKey(const RGPoolKey &r) : _32_{r._32_} {}
@@ -499,6 +502,7 @@ public:
 	virtual const VkClearValue &GetClearValue() const = 0;
 };
 // External
+// TODO: External barriers (pipeline stage + access + image layout, begin & end)
 class RGExternalImageBase : virtual public RGImageBase {
 public:
 	inline RGExternalImageBase() = default;
@@ -1114,6 +1118,7 @@ protected:
 	inline void AddInput(const RGPoolKey &input_key, RGImageBase *image) {
 		InputPool::template CreateAndInitialize<0, RGImageInput>(input_key, image, Usage, PipelineStageFlags);
 	}
+	// TODO: AddCombinedImageInput()
 	inline const RGBufferInput *GetBufferInput(const RGPoolKey &input_key) const {
 		return InputPool::template Get<0, RGBufferInput>(input_key);
 	}
@@ -1132,15 +1137,12 @@ protected:
 class RGInputDescriptorInfo {
 private:
 	RGPoolKey m_input_key;
-	VkShaderStageFlags m_stage_flags;
 	Ptr<Sampler> m_sampler;
 
 public:
-	inline RGInputDescriptorInfo(const RGPoolKey &input_key, VkShaderStageFlags stage_flags,
-	                             const Ptr<Sampler> &sampler = nullptr)
-	    : m_input_key{input_key}, m_stage_flags{stage_flags}, m_sampler{sampler} {}
+	inline RGInputDescriptorInfo(const RGPoolKey &input_key, const Ptr<Sampler> &sampler = nullptr)
+	    : m_input_key{input_key}, m_sampler{sampler} {}
 	inline const RGPoolKey &GetInputKey() const { return m_input_key; }
-	inline VkShaderStageFlags GetStageFlags() const { return m_stage_flags; }
 	inline const Ptr<Sampler> &GetSampler() const { return m_sampler; }
 };
 
