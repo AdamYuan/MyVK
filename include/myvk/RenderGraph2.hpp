@@ -624,9 +624,9 @@ public:
 };
 
 // Resource Pool
-namespace _details_rg_resource_pool_ {
-using PoolData = _details_rg_pool_::PoolData<
-    RGPoolVariant<RGManagedBuffer, RGExternalBufferBase, RGManagedImage, RGExternalImageBase>>;
+namespace _details_rg_pool_ {
+using ResourcePoolData =
+    PoolData<RGPoolVariant<RGManagedBuffer, RGExternalBufferBase, RGManagedImage, RGExternalImageBase>>;
 }
 template <typename Derived>
 class RGResourcePool
@@ -714,10 +714,28 @@ struct RGUsageInfo {
 	bool is_descriptor;
 	VkDescriptorType descriptor_type;
 };
-constexpr VkPipelineStageFlags2 MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT =
+constexpr VkPipelineStageFlags2 __PIPELINE_STAGE_ALL_SHADERS_BIT =
     VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
     VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT |
     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+
+// For RGInputDescriptorPool
+constexpr VkShaderStageFlags __ShaderStagesFromPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
+	VkShaderStageFlags ret = 0;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_VERTEX_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_GEOMETRY_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_FRAGMENT_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
+	return ret;
+}
 
 template <RGUsage> constexpr RGUsageInfo kRGUsageInfo{};
 template <>
@@ -780,15 +798,10 @@ template <>
 constexpr RGUsageInfo kRGUsageInfo<RGUsage::kPresent> = {
     0, 0, RGResourceType::kImage, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 0, false, {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kSampledImage> = {VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
-                                                              0,
-                                                              RGResourceType::kImage,
-                                                              VK_IMAGE_USAGE_SAMPLED_BIT,
-                                                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                                              0,
-                                                              MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                              true,
-                                                              VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
+constexpr RGUsageInfo kRGUsageInfo<RGUsage::kSampledImage> = {
+    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,      0, RGResourceType::kImage,           VK_IMAGE_USAGE_SAMPLED_BIT,
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, __PIPELINE_STAGE_ALL_SHADERS_BIT, true,
+    VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
 template <>
 constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageR> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT, //
                                                                0,
@@ -796,7 +809,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageR> = {VK_ACCESS_2_SHADE
                                                                VK_IMAGE_USAGE_STORAGE_BIT,
                                                                VK_IMAGE_LAYOUT_GENERAL,
                                                                0,
-                                                               MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                               __PIPELINE_STAGE_ALL_SHADERS_BIT,
                                                                true,
                                                                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
 template <>
@@ -806,7 +819,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageW> = {0,
                                                                VK_IMAGE_USAGE_STORAGE_BIT,
                                                                VK_IMAGE_LAYOUT_GENERAL,
                                                                0,
-                                                               MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                               __PIPELINE_STAGE_ALL_SHADERS_BIT,
                                                                true,
                                                                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
 template <>
@@ -816,7 +829,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageRW> = {VK_ACCESS_2_SHAD
                                                                 VK_IMAGE_USAGE_STORAGE_BIT,
                                                                 VK_IMAGE_LAYOUT_GENERAL,
                                                                 0,
-                                                                MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                __PIPELINE_STAGE_ALL_SHADERS_BIT,
                                                                 true,
                                                                 VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
 template <>
@@ -826,7 +839,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kUniformBuffer> = {VK_ACCESS_2_UNIFO
                                                                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                                                {},
                                                                0,
-                                                               MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                               __PIPELINE_STAGE_ALL_SHADERS_BIT,
                                                                true,
                                                                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
 template <>
@@ -836,7 +849,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferR> = {VK_ACCESS_2_SHAD
                                                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                                                 {},
                                                                 0,
-                                                                MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                __PIPELINE_STAGE_ALL_SHADERS_BIT,
                                                                 true,
                                                                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
 template <>
@@ -846,7 +859,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferW> = {0, //
                                                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                                                 {},
                                                                 0,
-                                                                MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                __PIPELINE_STAGE_ALL_SHADERS_BIT,
                                                                 true,
                                                                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
 template <>
@@ -856,7 +869,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferRW> = {VK_ACCESS_2_SHA
                                                                  VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                                                                  {},
                                                                  0,
-                                                                 MYVK_PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                 __PIPELINE_STAGE_ALL_SHADERS_BIT,
                                                                  true,
                                                                  VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
 template <>
@@ -1041,48 +1054,67 @@ template <RGUsageClass A, RGUsageClass B> inline constexpr bool RGUsageMinus(RGU
 #pragma region SECTION : Resource Input
 
 // Resource Input
-template <typename RGType> class RGInput {
+class RGInput {
 private:
-	RGType *m_resource_ptr{};
+	std::variant<RGImageBase *, RGBufferBase *> m_resource_ptr{};
 	RGUsage m_usage{};
 	VkPipelineStageFlags2 m_usage_pipeline_stages{};
+	uint32_t m_descriptor_binding{std::numeric_limits<uint32_t>::max()};
 
 public:
 	inline RGInput() = default;
-	RGInput(RGType *resource_ptr, RGUsage usage, VkPipelineStageFlags2 usage_pipeline_stages)
-	    : m_resource_ptr{resource_ptr}, m_usage{usage}, m_usage_pipeline_stages{usage_pipeline_stages} {}
-
-	inline RGType *GetResource() const { return m_resource_ptr; }
+	template <typename RGType>
+	RGInput(RGType *resource_ptr, RGUsage usage, VkPipelineStageFlags2 usage_pipeline_stages,
+	        uint32_t descriptor_binding = std::numeric_limits<uint32_t>::max())
+	    : m_resource_ptr{resource_ptr}, m_usage{usage}, m_usage_pipeline_stages{usage_pipeline_stages},
+	      m_descriptor_binding{descriptor_binding} {}
+	template <typename RGType = RGResourceBase> inline RGType *GetResource() const {
+		return std::visit(
+		    [](auto arg) -> RGType * {
+			    using CURType = std::decay_t<decltype(*arg)>;
+			    if constexpr (std::is_same_v<RGType, CURType> || std::is_base_of_v<RGType, CURType>)
+				    return arg;
+			    return nullptr;
+		    },
+		    m_resource_ptr);
+	}
 	inline RGUsage GetUsage() const { return m_usage; }
 	inline VkPipelineStageFlags2 GetUsagePipelineStages() const { return m_usage_pipeline_stages; }
+	inline uint32_t GetDescriptorBinding() const { return m_descriptor_binding; }
 };
-using RGResourceInput = RGInput<RGResourceBase>;
-using RGBufferInput = RGInput<RGBufferBase>;
-using RGImageInput = RGInput<RGImageBase>;
 
 // Input Pool
-namespace _details_rg_input_pool_ {
-using PoolData =
-    _details_rg_pool_::PoolData<RGPoolVariant<RGBufferInput, RGImageInput>, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
+namespace _details_rg_pool_ {
+using InputPoolData = PoolData<RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
 }
 template <typename Derived>
-class RGInputPool
-    : public RGPool<Derived, RGPoolVariant<RGBufferInput, RGImageInput>, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
+class RGInputPool : public RGPool<Derived, RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
 private:
-	using InputPool =
-	    RGPool<Derived, RGPoolVariant<RGBufferInput, RGImageInput>, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
+	using InputPool = RGPool<Derived, RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
+
+	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags, typename RGType>
+	inline RGInput *add_input(const RGPoolKey &input_key, RGType *resource,
+	                          uint32_t descriptor_binding = std::numeric_limits<uint32_t>::max()) {
+		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, resource, Usage, PipelineStageFlags);
+	}
 
 	template <typename RGType> inline RGType *create_output(const RGPoolKey &input_key) {
-		const RGInput<RGType> *input = InputPool::template Get<0, RGInput<RGType>>(input_key);
-		if (!input)
+		const RGInput *input = InputPool::template Get<0, RGInput>(input_key);
+		if (!input || RGUsageIsReadOnly(input->GetUsage())) // Read-Only input should not produce an output
 			return nullptr;
-		else if (input->GetResource()->GetProducerPassPtr() == (RGPassBase *)static_cast<Derived *>(this))
-			return input->GetResource();
+		RGType *resource = input->GetResource<RGType>();
+		if (!resource)
+			throw std::exception(); // TODO: More exceptions in interface
+		// return nullptr;
+		else if (resource->GetProducerPassPtr() == (RGPassBase *)static_cast<Derived *>(this))
+			return resource;
 		else
 			return InputPool::template InitializeOrGet<
-			    1, std::conditional_t<std::is_same_v<RGType, RGBufferBase>, RGBufferAlias, RGImageAlias>>(
-			    input_key, input->GetResource());
+			    1, std::conditional_t<std::is_same_v<RGType, RGBufferBase>, RGBufferAlias, RGImageAlias>>(input_key,
+			                                                                                              resource);
 	}
+
+	template <typename> friend class RGInputDescriptorSlot;
 
 public:
 	inline RGInputPool() { static_assert(std::is_base_of_v<RGPassBase, Derived>); }
@@ -1091,39 +1123,38 @@ public:
 
 protected:
 	template <RGUsage Usage,
-	          typename = std::enable_if_t<kRGUsageHasSpecifiedPipelineStages<Usage> && kRGUsageForBuffer<Usage>>>
-	inline void AddInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
-		InputPool::template CreateAndInitialize<0, RGBufferInput>(input_key, buffer, Usage,
-		                                                          kRGUsageGetSpecifiedPipelineStages<Usage>);
+	          typename = std::enable_if_t<!kRGUsageIsDescriptor<Usage> && kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	                                      kRGUsageForBuffer<Usage>>>
+	inline bool AddInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
+		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, buffer, Usage,
+		                                                           kRGUsageGetSpecifiedPipelineStages<Usage>);
 	}
 	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
-	          typename = std::enable_if_t<!kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	          typename = std::enable_if_t<!kRGUsageIsDescriptor<Usage> && !kRGUsageHasSpecifiedPipelineStages<Usage> &&
 	                                      (PipelineStageFlags & kRGUsageGetOptionalPipelineStages<Usage>) ==
 	                                          PipelineStageFlags &&
 	                                      kRGUsageForBuffer<Usage>>>
-	inline void AddInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
-		InputPool::template CreateAndInitialize<0, RGBufferInput>(input_key, buffer, Usage, PipelineStageFlags);
+	inline bool AddInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
+		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, buffer, Usage, PipelineStageFlags);
 	}
 	template <RGUsage Usage,
-	          typename = std::enable_if_t<kRGUsageHasSpecifiedPipelineStages<Usage> && kRGUsageForImage<Usage>>>
-	inline void AddInput(const RGPoolKey &input_key, RGImageBase *image) {
-		InputPool::template CreateAndInitialize<0, RGImageInput>(input_key, image, Usage,
-		                                                         kRGUsageGetSpecifiedPipelineStages<Usage>);
+	          typename = std::enable_if_t<!kRGUsageIsDescriptor<Usage> && kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	                                      kRGUsageForImage<Usage>>>
+	inline bool AddInput(const RGPoolKey &input_key, RGImageBase *image) {
+		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, image, Usage,
+		                                                           kRGUsageGetSpecifiedPipelineStages<Usage>);
 	}
 	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
-	          typename = std::enable_if_t<!kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	          typename = std::enable_if_t<!kRGUsageIsDescriptor<Usage> && !kRGUsageHasSpecifiedPipelineStages<Usage> &&
 	                                      (PipelineStageFlags & kRGUsageGetOptionalPipelineStages<Usage>) ==
 	                                          PipelineStageFlags &&
 	                                      kRGUsageForImage<Usage>>>
-	inline void AddInput(const RGPoolKey &input_key, RGImageBase *image) {
-		InputPool::template CreateAndInitialize<0, RGImageInput>(input_key, image, Usage, PipelineStageFlags);
+	inline bool AddInput(const RGPoolKey &input_key, RGImageBase *image) {
+		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, image, Usage, PipelineStageFlags);
 	}
 	// TODO: AddCombinedImageInput()
-	inline const RGBufferInput *GetBufferInput(const RGPoolKey &input_key) const {
-		return InputPool::template Get<0, RGBufferInput>(input_key);
-	}
-	inline const RGBufferInput *GetImageInput(const RGPoolKey &input_key) const {
-		return InputPool::template Get<0, RGImageInput>(input_key);
+	inline const RGInput *GetInput(const RGPoolKey &input_key) const {
+		return InputPool::template Get<0, RGInput>(input_key);
 	}
 	inline RGBufferBase *GetBufferOutput(const RGPoolKey &input_buffer_key) {
 		return create_output<RGBufferBase>(input_buffer_key);
@@ -1131,59 +1162,123 @@ protected:
 	inline RGImageBase *GetImageOutput(const RGPoolKey &input_image_key) {
 		return create_output<RGImageBase>(input_image_key);
 	}
-	inline void RemoveInput(const RGPoolKey &input_key) { InputPool::Delete(input_key); }
+	inline void RemoveInput(const RGPoolKey &input_key);
 };
 
 class RGInputDescriptorInfo {
 private:
-	RGPoolKey m_input_key;
-	Ptr<Sampler> m_sampler;
+	RGInput *m_p_input{};
+	Ptr<Sampler> m_sampler{};
 
 public:
-	inline RGInputDescriptorInfo(const RGPoolKey &input_key, const Ptr<Sampler> &sampler = nullptr)
-	    : m_input_key{input_key}, m_sampler{sampler} {}
-	inline const RGPoolKey &GetInputKey() const { return m_input_key; }
+	inline RGInputDescriptorInfo() = default;
+	inline explicit RGInputDescriptorInfo(RGInput *input, const Ptr<Sampler> &sampler = nullptr)
+	    : m_p_input{input}, m_sampler{sampler} {}
+	inline bool Empty() const { return m_p_input == nullptr; }
+	inline void SetInput(RGInput *input) { m_p_input = input; }
+	inline void SetSampler(const Ptr<Sampler> &sampler) { m_sampler = sampler; }
+	inline void Reset() {
+		m_sampler.reset();
+		m_p_input = nullptr;
+	}
+	inline const RGInput *GetInputPtr() const { return m_p_input; }
 	inline const Ptr<Sampler> &GetSampler() const { return m_sampler; }
 };
 
-namespace _details_rg_input_descriptor_pool_ {
-using PoolData = _details_rg_pool_::PoolData<std::vector<RGInputDescriptorInfo>, Ptr<DescriptorSetLayout>,
-                                             std::vector<Ptr<DescriptorSet>>>;
-}
-template <typename Derived>
-class RGInputDescriptorPool : public RGPool<Derived, std::vector<RGInputDescriptorInfo>, Ptr<DescriptorSetLayout>,
-                                            std::vector<Ptr<DescriptorSet>>> {
+template <typename Derived> class RGInputDescriptorSlot {
 private:
-	using InputDescriptorPool =
-	    RGPool<Derived, std::vector<RGInputDescriptorInfo>, Ptr<DescriptorSetLayout>, std::vector<Ptr<DescriptorSet>>>;
 	inline RGInputPool<Derived> *get_input_pool_ptr() { return (RGInputPool<Derived> *)static_cast<Derived *>(this); }
 	inline const RGInputPool<Derived> *get_input_pool_ptr() const {
 		return (const RGInputPool<Derived> *)static_cast<const Derived *>(this);
 	}
+	std::vector<RGInputDescriptorInfo> m_descriptor_vector;
+
+	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags, typename RGType>
+	inline bool add_input_descriptor(const RGPoolKey &input_key, RGType *resource, uint32_t descriptor_binding,
+	                                 const Ptr<Sampler> &sampler = nullptr) {
+		if (m_descriptor_vector.size() <= descriptor_binding)
+			m_descriptor_vector.resize(descriptor_binding + 1);
+		else if (!m_descriptor_vector[descriptor_binding].Empty())
+			return false;
+		auto input = get_input_pool_ptr()->template add_input<Usage, PipelineStageFlags>(input_key, resource,
+		                                                                                 descriptor_binding);
+		if (!input)
+			return false;
+		m_descriptor_vector[descriptor_binding].SetInput(input);
+		if constexpr (Usage == RGUsage::kSampledImage)
+			m_descriptor_vector[descriptor_binding].SetSampler(sampler);
+		return true;
+	}
+
+	inline void remove_input_descriptor(uint32_t descriptor_binding) {
+		if (~descriptor_binding) {
+			m_descriptor_vector[descriptor_binding].Reset();
+			while (!m_descriptor_vector.empty() && m_descriptor_vector.back().Empty())
+				m_descriptor_vector.pop_back();
+		}
+	}
+
+	template <typename> friend class RGInputPool;
 
 public:
-	inline RGInputDescriptorPool() {
-		static_assert(std::is_base_of_v<RGPassBase, Derived>);
-		static_assert(std::is_base_of_v<RGInputPool<Derived>, Derived>);
-	}
-	inline RGInputDescriptorPool(RGInputDescriptorPool &&) noexcept = default;
-	inline ~RGInputDescriptorPool() override = default;
+	inline RGInputDescriptorSlot() { static_assert(std::is_base_of_v<RGInputPool<Derived>, Derived>); }
+	inline RGInputDescriptorSlot(RGInputDescriptorSlot &&) noexcept = default;
+	inline ~RGInputDescriptorSlot() = default;
 
-protected:
-	template <typename Iterator,
-	          typename = std::enable_if_t<std::is_same_v<
-	              std::decay_t<typename std::iterator_traits<Iterator>::value_type>, RGInputDescriptorInfo>>>
-	inline void AddDescriptorSet(const RGPoolKey &descriptor_key, const Iterator &begin, const Iterator &end) {
-		InputDescriptorPool::template CreateAndInitialize<0, std::vector<RGInputDescriptorInfo>>(descriptor_key, //
-		                                                                                         begin, end);
+	inline const std::vector<RGInputDescriptorInfo> &GetInputDescriptorVector() const { return m_descriptor_vector; }
+
+	template <uint32_t Binding, RGUsage Usage,
+	          typename = std::enable_if_t<kRGUsageIsDescriptor<Usage> && kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	                                      kRGUsageForBuffer<Usage>>>
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
+		return add_input_descriptor<Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, buffer, Binding);
 	}
-	inline void AddDescriptorSet(const RGPoolKey &descriptor_key,
-	                             std::vector<RGInputDescriptorInfo> &&descriptor_set_info) {
-		InputDescriptorPool::template CreateAndInitialize<0, std::vector<RGInputDescriptorInfo>>(
-		    descriptor_key, std::move(descriptor_set_info));
+	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
+	          typename = std::enable_if_t<kRGUsageIsDescriptor<Usage> && !kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	                                      (PipelineStageFlags & kRGUsageGetOptionalPipelineStages<Usage>) ==
+	                                          PipelineStageFlags &&
+	                                      kRGUsageForBuffer<Usage>>>
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
+		return add_input_descriptor<Usage, PipelineStageFlags>(input_key, buffer, Binding);
 	}
-	inline void RemoveDescriptorSet(const RGPoolKey &descriptor_key) { InputDescriptorPool ::Delete(descriptor_key); }
+	template <uint32_t Binding, RGUsage Usage,
+	          typename = std::enable_if_t<Usage != RGUsage::kSampledImage && kRGUsageIsDescriptor<Usage> &&
+	                                      kRGUsageHasSpecifiedPipelineStages<Usage> && kRGUsageForImage<Usage>>>
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image) {
+		return add_input_descriptor<Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, image, Binding);
+	}
+	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
+	          typename = std::enable_if_t<Usage != RGUsage::kSampledImage && kRGUsageIsDescriptor<Usage> &&
+	                                      !kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	                                      (PipelineStageFlags & kRGUsageGetOptionalPipelineStages<Usage>) ==
+	                                          PipelineStageFlags &&
+	                                      kRGUsageForImage<Usage>>>
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image) {
+		return add_input_descriptor<Usage, PipelineStageFlags>(input_key, image, Binding);
+	}
+	template <uint32_t Binding, RGUsage Usage,
+	          typename = std::enable_if_t<Usage == RGUsage::kSampledImage &&
+	                                      kRGUsageHasSpecifiedPipelineStages<Usage> && kRGUsageForImage<Usage>>>
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image, const Ptr<Sampler> &sampler) {
+		return add_input_descriptor<Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, image, Binding,
+		                                                                              sampler);
+	}
+	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
+	          typename = std::enable_if_t<
+	              Usage == RGUsage::kSampledImage && !kRGUsageHasSpecifiedPipelineStages<Usage> &&
+	              (PipelineStageFlags & kRGUsageGetOptionalPipelineStages<Usage>) == PipelineStageFlags &&
+	              kRGUsageForImage<Usage>>>
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image, const Ptr<Sampler> &sampler) {
+		return add_input_descriptor<Usage, PipelineStageFlags>(input_key, image, Binding, sampler);
+	}
 };
+
+template <typename Derived> void RGInputPool<Derived>::RemoveInput(const RGPoolKey &input_key) {
+	if constexpr (std::is_base_of_v<RGInputDescriptorSlot<Derived>, Derived>)
+		((RGInputDescriptorSlot<Derived> *)static_cast<Derived *>(this))
+		    ->remove_input_descriptor(GetInput(input_key)->GetDescriptorBinding());
+	InputPool::Delete(input_key);
+}
 
 #pragma endregion
 
@@ -1192,16 +1287,16 @@ protected:
 /////////////////////////
 #pragma region SECTION : Render Pass
 
-namespace _details_rg_pass_pool_ {
-using PoolData = _details_rg_pool_::PoolData<RGPassBase>;
+namespace _details_rg_pool_ {
+using PassPoolData = PoolData<RGPassBase>;
 }
 
 class RGPassBase : public RGObjectBase {
 private:
-	_details_rg_input_pool_::PoolData *m_p_input_pool_data{};
-	_details_rg_resource_pool_::PoolData *m_p_resource_pool_data{};
-	_details_rg_input_descriptor_pool_::PoolData *m_p_input_descriptor_pool_data{};
-	_details_rg_pass_pool_::PoolData *m_p_pass_pool_data{};
+	_details_rg_pool_::InputPoolData *m_p_input_pool_data{};
+	_details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
+	_details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
+	const std::vector<RGInputDescriptorInfo> *m_p_input_descriptor_vector{};
 
 	template <typename, uint8_t> friend class RGPass;
 
@@ -1259,7 +1354,7 @@ class RGPass : public RGPassBase,
                public std::conditional_t<(Flags & RGPassFlag::kEnableResourceAllocation) != 0, RGResourcePool<Derived>,
                                          _details_rg_pass_::NoResourcePool>,
                public std::conditional_t<(Flags & RGPassFlag::kEnableInputDescriptorAllocation) != 0,
-                                         RGInputDescriptorPool<Derived>, _details_rg_pass_::NoInputDescriptorPool>,
+                                         RGInputDescriptorSlot<Derived>, _details_rg_pass_::NoInputDescriptorPool>,
                public std::conditional_t<(Flags & RGPassFlag::kEnableSubpassAllocation) != 0, RGPassPool<Derived>,
                                          _details_rg_pass_::NoPassPool> {
 public:
@@ -1267,10 +1362,10 @@ public:
 		m_p_input_pool_data = &RGInputPool<Derived>::GetPoolData();
 		if constexpr ((Flags & RGPassFlag::kEnableResourceAllocation) != 0)
 			m_p_resource_pool_data = &RGResourcePool<Derived>::GetPoolData();
-		if constexpr ((Flags & RGPassFlag::kEnableInputDescriptorAllocation) != 0)
-			m_p_input_descriptor_pool_data = &RGInputDescriptorPool<Derived>::GetPoolData();
 		if constexpr ((Flags & RGPassFlag::kEnableSubpassAllocation) != 0)
 			m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData();
+		if constexpr ((Flags & RGPassFlag::kEnableInputDescriptorAllocation) != 0)
+			m_p_input_descriptor_vector = &RGInputDescriptorSlot<Derived>::GetInputDescriptorVector();
 	}
 	inline RGPass(RGPass &&) noexcept = default;
 	inline ~RGPass() override = default;
@@ -1283,10 +1378,30 @@ public:
 //////////////////////////
 #pragma region SECTION : Render Graph
 
+namespace _details_rg_pool_ {
+using ResultPoolData = PoolData<RGResourceBase *>;
+}
+template <typename Derived> class RGResultPool : public RGPool<Derived, RGResourceBase *> {
+private:
+	using ResultPool = RGPool<Derived, RGResourceBase *>;
+
+public:
+	inline RGResultPool() = default;
+	inline RGResultPool(RGResultPool &&) noexcept = default;
+	inline ~RGResultPool() override = default;
+
+protected:
+	inline bool AddResult(const RGPoolKey &result_key, RGResourceBase *resource) {
+		return ResultPool::template CreateAndInitialize<0, RGResourceBase *>(result_key, resource);
+	}
+	inline void RemoveResult(const RGPoolKey &result_key) { ResultPool::Delete(result_key); }
+};
+
 class RenderGraphBase : public DeviceObjectBase {
 private:
-	_details_rg_resource_pool_::PoolData *m_p_resource_pool_data{};
-	_details_rg_pass_pool_::PoolData *m_p_pass_pool_data{};
+	_details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
+	_details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
+	_details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
 
 	template <typename> friend class RenderGraph;
 
@@ -1300,9 +1415,13 @@ public:
 };
 
 template <typename Derived>
-class RenderGraph : public RenderGraphBase, public RGPassPool<Derived>, public RGResourcePool<Derived> {
+class RenderGraph : public RenderGraphBase,
+                    public RGPassPool<Derived>,
+                    public RGResourcePool<Derived>,
+                    public RGResultPool<Derived> {
 public:
 	inline RenderGraph() {
+		m_p_result_pool_data = &RGResultPool<Derived>::GetPoolData();
 		m_p_resource_pool_data = &RGResourcePool<Derived>::GetPoolData();
 		m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData();
 	}
