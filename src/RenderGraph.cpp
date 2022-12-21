@@ -1,40 +1,47 @@
-// #include "myvk/RenderGraph.hpp"
 #include "myvk/RenderGraph2.hpp"
+#include <cassert>
 
-namespace myvk {
+namespace myvk::render_graph {
 
-/* void RenderGraphDescriptorPassBase::create_descriptors_layout() {
-    std::vector<VkDescriptorSetLayoutBinding> bindings(m_descriptor_group.GetSize());
-    std::vector<VkSampler> immutable_samplers;
-    for (uint32_t i = 0; i < m_descriptor_group.GetSize(); ++i) {
-        auto &binding = bindings[i];
-        auto &descriptor_info = m_descriptor_group[i].m_descriptor_info;
-        binding.binding = i;
-        binding.descriptorType = RenderGraphInputUsageGetDescriptorType(m_descriptor_group[i].GetUsage());
-        binding.descriptorCount = 1;
-        binding.stageFlags = descriptor_info.stage_flags;
-        if (m_descriptor_group[i].GetUsage() == RenderGraphInputUsage::kSampledImage) {
-            immutable_samplers.push_back(
-                descriptor_info.sampler
-                    ? (descriptor_info.sampler->GetHandle())
-                    : (descriptor_info.sampler = LockRenderGraph()->get_sampler(descriptor_info.sampler_info))
-                          ->GetHandle());
-            binding.pImmutableSamplers = &immutable_samplers.back();
-        }
-    }
-    m_descriptor_layout = myvk::DescriptorSetLayout::Create(GetDevicePtr(), bindings);
+inline constexpr VkShaderStageFlags ShaderStagesFromPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
+	VkShaderStageFlags ret = 0;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_VERTEX_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_GEOMETRY_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_FRAGMENT_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
+	return ret;
 }
+const Ptr<DescriptorSetLayout> &RGDescriptorSet::GetDescriptorSetLayout() const {
+	if (m_updated || !m_descriptor_set_layout) {
+		std::vector<VkDescriptorSetLayoutBinding> bindings;
+		std::vector<VkSampler> immutable_samplers;
+		bindings.reserve(m_bindings.size());
+		immutable_samplers.reserve(m_bindings.size());
 
-Ptr<Sampler> RenderGraphBase::get_sampler(const RenderGraphSamplerInfo &sampler_info) {
-    auto cache_it = m_sampler_cache.find(sampler_info);
-    if (cache_it != m_sampler_cache.end()) {
-        auto cache = cache_it->second.lock();
-        if (cache)
-            return cache;
-    }
-    auto ret = Sampler::Create(m_device_ptr, sampler_info.filter, sampler_info.address_mode, sampler_info.mipmap_mode,
-                               VK_LOD_CLAMP_NONE);
-    m_sampler_cache[sampler_info] = ret;
-    return ret;
-} */
-} // namespace myvk
+		for (const auto &binding_data : m_bindings) {
+			VkDescriptorSetLayoutBinding info = {};
+			info.binding = binding_data.first;
+			info.descriptorType = RGUsageGetDescriptorType(binding_data.second.GetInputPtr()->GetUsage());
+			info.descriptorCount = 1;
+			info.stageFlags =
+			    ShaderStagesFromPipelineStages(binding_data.second.GetInputPtr()->GetUsagePipelineStages());
+			if (binding_data.second.GetSampler()) {
+				immutable_samplers.push_back(binding_data.second.GetSampler()->GetHandle());
+				info.pImmutableSamplers = &immutable_samplers.back();
+			}
+		}
+		m_descriptor_set_layout = myvk::DescriptorSetLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), bindings);
+
+		m_updated = false;
+	}
+	return m_descriptor_set_layout;
+}
+} // namespace myvk::render_graph

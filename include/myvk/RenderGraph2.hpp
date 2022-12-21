@@ -28,6 +28,7 @@ private:
 	inline void set_key_ptr(const RGPoolKey *key_ptr) { m_key_ptr = key_ptr; }
 
 	template <typename, typename...> friend class RGPool;
+	template <typename> friend class RGInputDescriptorSlot;
 
 public:
 	inline RGObjectBase() = default;
@@ -469,6 +470,8 @@ protected:
 		auto it = m_data.pool.find(key);
 		return it == m_data.pool.end() ? nullptr : (Type *)m_data.template ValueGet<Index, Type>(it);
 	}
+	// Delete all Tags and Objects
+	inline void Clear() { m_data.pool.clear(); }
 };
 
 #pragma endregion
@@ -667,6 +670,7 @@ protected:
 	inline ResourceType *GetResource(const RGPoolKey &resource_image_key) const {
 		return ResourcePool::template Get<0, ResourceType>(resource_image_key);
 	}
+	inline void ClearResources() { ResourcePool::Clear(); }
 };
 
 #pragma endregion
@@ -718,24 +722,6 @@ constexpr VkPipelineStageFlags2 __PIPELINE_STAGE_ALL_SHADERS_BIT =
     VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
     VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT |
     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-
-// For RGInputDescriptorPool
-constexpr VkShaderStageFlags __ShaderStagesFromPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
-	VkShaderStageFlags ret = 0;
-	if (pipeline_stages & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)
-		ret |= VK_SHADER_STAGE_VERTEX_BIT;
-	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT)
-		ret |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT)
-		ret |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-	if (pipeline_stages & VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT)
-		ret |= VK_SHADER_STAGE_GEOMETRY_BIT;
-	if (pipeline_stages & VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
-		ret |= VK_SHADER_STAGE_FRAGMENT_BIT;
-	if (pipeline_stages & VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
-		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
-	return ret;
-}
 
 template <RGUsage> constexpr RGUsageInfo kRGUsageInfo{};
 template <>
@@ -1092,10 +1078,10 @@ class RGInputPool : public RGPool<Derived, RGInput, RGPoolVariant<RGBufferAlias,
 private:
 	using InputPool = RGPool<Derived, RGInput, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
 
-	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags, typename RGType>
-	inline RGInput *add_input(const RGPoolKey &input_key, RGType *resource,
-	                          uint32_t descriptor_binding = std::numeric_limits<uint32_t>::max()) {
-		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, resource, Usage, PipelineStageFlags);
+	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags, typename RGType>
+	inline RGInput *add_input_for_descriptor(const RGPoolKey &input_key, RGType *resource) {
+		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, resource, Usage, PipelineStageFlags,
+		                                                           Binding);
 	}
 
 	template <typename RGType> inline RGType *create_output(const RGPoolKey &input_key) {
@@ -1104,8 +1090,7 @@ private:
 			return nullptr;
 		RGType *resource = input->GetResource<RGType>();
 		if (!resource)
-			throw std::exception(); // TODO: More exceptions in interface
-		// return nullptr;
+			return nullptr;
 		else if (resource->GetProducerPassPtr() == (RGPassBase *)static_cast<Derived *>(this))
 			return resource;
 		else
@@ -1163,19 +1148,19 @@ protected:
 		return create_output<RGImageBase>(input_image_key);
 	}
 	inline void RemoveInput(const RGPoolKey &input_key);
+	inline void ClearInputs();
 };
 
-class RGInputDescriptorInfo {
+class RGDescriptorBinding {
 private:
-	RGInput *m_p_input{};
+	const RGInput *m_p_input{};
 	Ptr<Sampler> m_sampler{};
 
 public:
-	inline RGInputDescriptorInfo() = default;
-	inline explicit RGInputDescriptorInfo(RGInput *input, const Ptr<Sampler> &sampler = nullptr)
+	inline RGDescriptorBinding() = default;
+	inline explicit RGDescriptorBinding(const RGInput *input, const Ptr<Sampler> &sampler = nullptr)
 	    : m_p_input{input}, m_sampler{sampler} {}
-	inline bool Empty() const { return m_p_input == nullptr; }
-	inline void SetInput(RGInput *input) { m_p_input = input; }
+	inline void SetInput(const RGInput *input) { m_p_input = input; }
 	inline void SetSampler(const Ptr<Sampler> &sampler) { m_sampler = sampler; }
 	inline void Reset() {
 		m_sampler.reset();
@@ -1185,53 +1170,75 @@ public:
 	inline const Ptr<Sampler> &GetSampler() const { return m_sampler; }
 };
 
+class RGDescriptorSet : public RGObjectBase {
+private:
+	std::unordered_map<uint32_t, RGDescriptorBinding> m_bindings;
+
+	mutable Ptr<DescriptorSetLayout> m_descriptor_set_layout;
+	mutable std::vector<Ptr<DescriptorSet>> m_descriptor_sets;
+	mutable bool m_updated = true;
+
+public:
+	inline bool IsBindingExist(uint32_t binding) const { return m_bindings.find(binding) != m_bindings.end(); }
+	inline void AddBinding(uint32_t binding, const RGInput *input, const Ptr<Sampler> &sampler = nullptr) {
+		m_bindings.insert({binding, RGDescriptorBinding{input, sampler}});
+		m_updated = true;
+	}
+	inline void RemoveBinding(uint32_t binding) {
+		m_bindings.erase(binding);
+		m_updated = true;
+	}
+	inline void ClearBindings() {
+		m_bindings.clear();
+		m_updated = true;
+	}
+	const Ptr<DescriptorSetLayout> &GetDescriptorSetLayout() const;
+};
+
 template <typename Derived> class RGInputDescriptorSlot {
 private:
+	RGDescriptorSet m_descriptor_set_data;
+
 	inline RGInputPool<Derived> *get_input_pool_ptr() { return (RGInputPool<Derived> *)static_cast<Derived *>(this); }
 	inline const RGInputPool<Derived> *get_input_pool_ptr() const {
 		return (const RGInputPool<Derived> *)static_cast<const Derived *>(this);
 	}
-	std::vector<RGInputDescriptorInfo> m_descriptor_vector;
 
-	template <RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags, typename RGType>
-	inline bool add_input_descriptor(const RGPoolKey &input_key, RGType *resource, uint32_t descriptor_binding,
+	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags, typename RGType>
+	inline bool add_input_descriptor(const RGPoolKey &input_key, RGType *resource,
 	                                 const Ptr<Sampler> &sampler = nullptr) {
-		if (m_descriptor_vector.size() <= descriptor_binding)
-			m_descriptor_vector.resize(descriptor_binding + 1);
-		else if (!m_descriptor_vector[descriptor_binding].Empty())
+		if (m_descriptor_set_data.IsBindingExist(Binding))
 			return false;
-		auto input = get_input_pool_ptr()->template add_input<Usage, PipelineStageFlags>(input_key, resource,
-		                                                                                 descriptor_binding);
+		auto input = get_input_pool_ptr()->template add_input_for_descriptor<Binding, Usage, PipelineStageFlags>(
+		    input_key, resource);
 		if (!input)
 			return false;
-		m_descriptor_vector[descriptor_binding].SetInput(input);
-		if constexpr (Usage == RGUsage::kSampledImage)
-			m_descriptor_vector[descriptor_binding].SetSampler(sampler);
+		m_descriptor_set_data.AddBinding(Binding, input, sampler);
 		return true;
-	}
-
-	inline void remove_input_descriptor(uint32_t descriptor_binding) {
-		if (~descriptor_binding) {
-			m_descriptor_vector[descriptor_binding].Reset();
-			while (!m_descriptor_vector.empty() && m_descriptor_vector.back().Empty())
-				m_descriptor_vector.pop_back();
-		}
 	}
 
 	template <typename> friend class RGInputPool;
 
 public:
-	inline RGInputDescriptorSlot() { static_assert(std::is_base_of_v<RGInputPool<Derived>, Derived>); }
+	inline RGInputDescriptorSlot() {
+		static_assert(std::is_base_of_v<RGInputPool<Derived>, Derived>);
+		static_assert(std::is_base_of_v<RGObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
+		if constexpr (std::is_base_of_v<RGObjectBase, Derived>)
+			m_descriptor_set_data.set_render_graph_ptr(
+			    ((RGObjectBase *)static_cast<Derived *>(this))->GetRenderGraphPtr());
+		else
+			m_descriptor_set_data.set_render_graph_ptr((RenderGraphBase *)static_cast<Derived *>(this));
+	}
 	inline RGInputDescriptorSlot(RGInputDescriptorSlot &&) noexcept = default;
 	inline ~RGInputDescriptorSlot() = default;
 
-	inline const std::vector<RGInputDescriptorInfo> &GetInputDescriptorVector() const { return m_descriptor_vector; }
+	inline const RGDescriptorSet &GetDescriptorSetData() const { return m_descriptor_set_data; }
 
 	template <uint32_t Binding, RGUsage Usage,
 	          typename = std::enable_if_t<kRGUsageIsDescriptor<Usage> && kRGUsageHasSpecifiedPipelineStages<Usage> &&
 	                                      kRGUsageForBuffer<Usage>>>
 	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
-		return add_input_descriptor<Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, buffer, Binding);
+		return add_input_descriptor<Binding, Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, buffer);
 	}
 	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
 	          typename = std::enable_if_t<kRGUsageIsDescriptor<Usage> && !kRGUsageHasSpecifiedPipelineStages<Usage> &&
@@ -1239,13 +1246,13 @@ public:
 	                                          PipelineStageFlags &&
 	                                      kRGUsageForBuffer<Usage>>>
 	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGBufferBase *buffer) {
-		return add_input_descriptor<Usage, PipelineStageFlags>(input_key, buffer, Binding);
+		return add_input_descriptor<Binding, Usage, PipelineStageFlags>(input_key, buffer);
 	}
 	template <uint32_t Binding, RGUsage Usage,
 	          typename = std::enable_if_t<Usage != RGUsage::kSampledImage && kRGUsageIsDescriptor<Usage> &&
 	                                      kRGUsageHasSpecifiedPipelineStages<Usage> && kRGUsageForImage<Usage>>>
 	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image) {
-		return add_input_descriptor<Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, image, Binding);
+		return add_input_descriptor<Binding, Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, image);
 	}
 	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
 	          typename = std::enable_if_t<Usage != RGUsage::kSampledImage && kRGUsageIsDescriptor<Usage> &&
@@ -1254,14 +1261,14 @@ public:
 	                                          PipelineStageFlags &&
 	                                      kRGUsageForImage<Usage>>>
 	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image) {
-		return add_input_descriptor<Usage, PipelineStageFlags>(input_key, image, Binding);
+		return add_input_descriptor<Binding, Usage, PipelineStageFlags>(input_key, image);
 	}
 	template <uint32_t Binding, RGUsage Usage,
 	          typename = std::enable_if_t<Usage == RGUsage::kSampledImage &&
 	                                      kRGUsageHasSpecifiedPipelineStages<Usage> && kRGUsageForImage<Usage>>>
 	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image, const Ptr<Sampler> &sampler) {
-		return add_input_descriptor<Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, image, Binding,
-		                                                                              sampler);
+		return add_input_descriptor<Binding, Usage, kRGUsageGetSpecifiedPipelineStages<Usage>>(input_key, image,
+		                                                                                       sampler);
 	}
 	template <uint32_t Binding, RGUsage Usage, VkPipelineStageFlags2 PipelineStageFlags,
 	          typename = std::enable_if_t<
@@ -1269,15 +1276,24 @@ public:
 	              (PipelineStageFlags & kRGUsageGetOptionalPipelineStages<Usage>) == PipelineStageFlags &&
 	              kRGUsageForImage<Usage>>>
 	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image, const Ptr<Sampler> &sampler) {
-		return add_input_descriptor<Usage, PipelineStageFlags>(input_key, image, Binding, sampler);
+		return add_input_descriptor<Binding, Usage, PipelineStageFlags>(input_key, image, sampler);
+	}
+	inline const Ptr<DescriptorSetLayout> &GetDescriptorSetLayout() const {
+		return m_descriptor_set_data.GetDescriptorSetLayout();
 	}
 };
 
 template <typename Derived> void RGInputPool<Derived>::RemoveInput(const RGPoolKey &input_key) {
 	if constexpr (std::is_base_of_v<RGInputDescriptorSlot<Derived>, Derived>)
 		((RGInputDescriptorSlot<Derived> *)static_cast<Derived *>(this))
-		    ->remove_input_descriptor(GetInput(input_key)->GetDescriptorBinding());
+		    ->m_descriptor_set_data.RemoveBinding(GetInput(input_key)->GetDescriptorBinding());
 	InputPool::Delete(input_key);
+}
+
+template <typename Derived> void RGInputPool<Derived>::ClearInputs() {
+	if constexpr (std::is_base_of_v<RGInputDescriptorSlot<Derived>, Derived>)
+		((RGInputDescriptorSlot<Derived> *)static_cast<Derived *>(this))->m_descriptor_set_data.ClearBindings();
+	InputPool::Clear();
 }
 
 #pragma endregion
@@ -1296,7 +1312,7 @@ private:
 	_details_rg_pool_::InputPoolData *m_p_input_pool_data{};
 	_details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 	_details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
-	const std::vector<RGInputDescriptorInfo> *m_p_input_descriptor_vector{};
+	const RGDescriptorSet *m_p_descriptor_set_data{};
 
 	template <typename, uint8_t> friend class RGPass;
 
@@ -1329,6 +1345,7 @@ protected:
 	inline PassType *GetPass(const RGPoolKey &pass_key) const {
 		return PassPool::template Get<0, PassType>(pass_key);
 	}
+	inline void ClearPasses() { PassPool::Clear(); }
 };
 
 namespace _details_rg_pass_ {
@@ -1365,7 +1382,7 @@ public:
 		if constexpr ((Flags & RGPassFlag::kEnableSubpassAllocation) != 0)
 			m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData();
 		if constexpr ((Flags & RGPassFlag::kEnableInputDescriptorAllocation) != 0)
-			m_p_input_descriptor_vector = &RGInputDescriptorSlot<Derived>::GetInputDescriptorVector();
+			m_p_descriptor_set_data = &RGInputDescriptorSlot<Derived>::GetDescriptorSetData();
 	}
 	inline RGPass(RGPass &&) noexcept = default;
 	inline ~RGPass() override = default;
@@ -1395,6 +1412,7 @@ protected:
 		return ResultPool::template CreateAndInitialize<0, RGResourceBase *>(result_key, resource);
 	}
 	inline void RemoveResult(const RGPoolKey &result_key) { ResultPool::Delete(result_key); }
+	inline void ClearResults() { ResultPool::Clear(); }
 };
 
 class RenderGraphBase : public DeviceObjectBase {

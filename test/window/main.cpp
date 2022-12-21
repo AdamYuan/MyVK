@@ -128,6 +128,8 @@ public:
 		output_image = GetImageOutput({"noise_tex_rw"});
 		printf("output_image = %p, producer_pass = %p, this = %p\n", output_image, output_image->GetProducerPassPtr(),
 		       dynamic_cast<myvk::render_graph::RGPassBase *>(this));
+
+		RemoveInput({"noise_tex_rw"});
 	}
 };
 
