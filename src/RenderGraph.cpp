@@ -1,5 +1,4 @@
 #include "myvk/RenderGraph2.hpp"
-#include <cassert>
 
 namespace myvk::render_graph {
 
@@ -19,27 +18,32 @@ inline constexpr VkShaderStageFlags ShaderStagesFromPipelineStages(VkPipelineSta
 		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
 	return ret;
 }
-const Ptr<DescriptorSetLayout> &RGDescriptorSet::GetDescriptorSetLayout() const {
-	if (m_updated || !m_descriptor_set_layout) {
-		std::vector<VkDescriptorSetLayoutBinding> bindings;
-		std::vector<VkSampler> immutable_samplers;
-		bindings.reserve(m_bindings.size());
-		immutable_samplers.reserve(m_bindings.size());
+const Ptr<DescriptorSetLayout> &RGDescriptorSetData::GetDescriptorSetLayout() const {
+	if (m_updated) {
+		if (m_bindings.empty()) {
+			m_descriptor_set_layout = nullptr;
+		} else {
+			std::vector<VkDescriptorSetLayoutBinding> bindings;
+			std::vector<VkSampler> immutable_samplers;
+			bindings.reserve(m_bindings.size());
+			immutable_samplers.reserve(m_bindings.size());
 
-		for (const auto &binding_data : m_bindings) {
-			VkDescriptorSetLayoutBinding info = {};
-			info.binding = binding_data.first;
-			info.descriptorType = RGUsageGetDescriptorType(binding_data.second.GetInputPtr()->GetUsage());
-			info.descriptorCount = 1;
-			info.stageFlags =
-			    ShaderStagesFromPipelineStages(binding_data.second.GetInputPtr()->GetUsagePipelineStages());
-			if (binding_data.second.GetSampler()) {
-				immutable_samplers.push_back(binding_data.second.GetSampler()->GetHandle());
-				info.pImmutableSamplers = &immutable_samplers.back();
+			for (const auto &binding_data : m_bindings) {
+				bindings.emplace_back();
+				VkDescriptorSetLayoutBinding &info = bindings.back();
+				info.binding = binding_data.first;
+				info.descriptorType = RGUsageGetDescriptorType(binding_data.second.GetInputPtr()->GetUsage());
+				info.descriptorCount = 1;
+				info.stageFlags =
+				    ShaderStagesFromPipelineStages(binding_data.second.GetInputPtr()->GetUsagePipelineStages());
+				if (info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
+				    binding_data.second.GetSampler()) {
+					immutable_samplers.push_back(binding_data.second.GetSampler()->GetHandle());
+					info.pImmutableSamplers = &immutable_samplers.back();
+				}
 			}
+			m_descriptor_set_layout = myvk::DescriptorSetLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), bindings);
 		}
-		m_descriptor_set_layout = myvk::DescriptorSetLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), bindings);
-
 		m_updated = false;
 	}
 	return m_descriptor_set_layout;
