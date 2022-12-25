@@ -54,6 +54,7 @@ private:
 	inline void set_producer_pass_ptr(RGPassBase *producer_pass_ptr) { m_producer_pass_ptr = producer_pass_ptr; }
 
 	template <typename, typename...> friend class RGPool;
+	template <typename> friend class RGAliasOutputPool;
 
 public:
 	inline ~RGResourceBase() override = default;
@@ -420,7 +421,7 @@ public:
 
 protected:
 	// Get PoolData Pointer
-	inline PoolData &GetPoolData() { return m_data; }
+	// inline PoolData &GetPoolData() { return m_data; }
 	inline const PoolData &GetPoolData() const { return m_data; }
 	// Create Tag and Initialize the Main Object
 	template <std::size_t Index, typename TypeToCons, typename... Args>
@@ -490,7 +491,7 @@ public:
 	inline RGBufferBase(RGBufferBase &&) noexcept = default;
 
 	inline RGResourceType GetType() const final { return RGResourceType::kBuffer; }
-	virtual const Ptr<BufferBase> &GetBuffer() const = 0;
+	virtual const Ptr<BufferBase> &GetVkBuffer() const = 0;
 };
 
 enum class RGAttachmentLoadOp { kClear, kLoad, kDontCare };
@@ -501,7 +502,7 @@ public:
 	inline RGImageBase(RGImageBase &&) noexcept = default;
 
 	inline RGResourceType GetType() const final { return RGResourceType::kImage; }
-	virtual const Ptr<ImageView> &GetImageView() const = 0;
+	virtual const Ptr<ImageView> &GetVkImageView() const = 0;
 
 	virtual RGAttachmentLoadOp GetLoadOp() const = 0;
 	virtual const VkClearValue &GetClearValue() const = 0;
@@ -552,45 +553,47 @@ public:
 	inline explicit RGSwapchainImage(Ptr<FrameManager> frame_manager) : m_frame_manager{std::move(frame_manager)} {}
 	inline RGSwapchainImage(RGSwapchainImage &&) noexcept = default;
 	~RGSwapchainImage() final = default;
-	inline const Ptr<ImageView> &GetImageView() const final { return m_frame_manager->GetCurrentSwapchainImageView(); }
+	inline const Ptr<ImageView> &GetVkImageView() const final {
+		return m_frame_manager->GetCurrentSwapchainImageView();
+	}
 };
 #endif
 // Alias
-class RGResourceAliasBase : virtual public RGResourceBase {
+class RGImageAlias final : public RGImageBase {
 private:
-	RGResourceBase *m_resource;
+	RGImageBase *m_pointed_image;
 
 public:
-	inline explicit RGResourceAliasBase(RGResourceBase *resource)
-	    : m_resource{resource->IsAlias() ? dynamic_cast<RGResourceAliasBase *>(resource)->GetResource() : resource} {}
-	inline RGResourceAliasBase(RGResourceAliasBase &&) noexcept = default;
-
-	bool IsAlias() const final { return true; }
-	RGResourceState GetState() const final { return m_resource->GetState(); }
-
-	template <typename Type = RGResourceBase, typename = std::enable_if_t<std::is_base_of_v<RGResourceBase, Type>>>
-	Type *GetResource() const {
-		return dynamic_cast<Type *>(m_resource);
-	}
-	~RGResourceAliasBase() override = default;
-};
-class RGImageAlias final : public RGResourceAliasBase, public RGImageBase {
-public:
-	inline explicit RGImageAlias(RGImageBase *image) : RGResourceAliasBase(image) {}
+	inline explicit RGImageAlias(RGImageBase *image)
+	    : m_pointed_image{image->IsAlias() ? static_cast<RGImageAlias *>(image)->GetPointedResource() : image} {}
 	inline RGImageAlias(RGImageAlias &&) noexcept = default;
 	inline ~RGImageAlias() final = default;
 
-	inline const Ptr<ImageView> &GetImageView() const final { return GetResource<RGImageBase>()->GetImageView(); }
-	inline RGAttachmentLoadOp GetLoadOp() const final { return GetResource<RGImageBase>()->GetLoadOp(); }
-	const VkClearValue &GetClearValue() const final { return GetResource<RGImageBase>()->GetClearValue(); }
+	inline RGImageBase *GetPointedResource() const { return m_pointed_image; }
+
+	inline const Ptr<ImageView> &GetVkImageView() const final { return m_pointed_image->GetVkImageView(); }
+	inline RGAttachmentLoadOp GetLoadOp() const final { return m_pointed_image->GetLoadOp(); }
+	const VkClearValue &GetClearValue() const final { return m_pointed_image->GetClearValue(); }
+
+	bool IsAlias() const final { return true; }
+	RGResourceState GetState() const final { return m_pointed_image->GetState(); }
 };
-class RGBufferAlias final : public RGResourceAliasBase, public RGBufferBase {
+class RGBufferAlias final : public RGBufferBase {
+private:
+	RGBufferBase *m_pointed_buffer;
+
 public:
-	inline explicit RGBufferAlias(RGBufferBase *image) : RGResourceAliasBase(image) {}
+	inline explicit RGBufferAlias(RGBufferBase *buffer)
+	    : m_pointed_buffer{buffer->IsAlias() ? static_cast<RGBufferAlias *>(buffer)->GetPointedResource() : buffer} {}
 	inline RGBufferAlias(RGBufferAlias &&) = default;
 	inline ~RGBufferAlias() final = default;
 
-	inline const Ptr<BufferBase> &GetBuffer() const final { return GetResource<RGBufferBase>()->GetBuffer(); }
+	inline RGBufferBase *GetPointedResource() const { return m_pointed_buffer; }
+
+	inline const Ptr<BufferBase> &GetVkBuffer() const final { return m_pointed_buffer->GetVkBuffer(); }
+
+	bool IsAlias() const final { return true; }
+	RGResourceState GetState() const final { return m_pointed_buffer->GetState(); }
 };
 
 // Managed Resources
@@ -601,7 +604,7 @@ public:
 	inline RGManagedBuffer(RGManagedBuffer &&) noexcept = default;
 	~RGManagedBuffer() override = default;
 
-	const Ptr<BufferBase> &GetBuffer() const final {
+	const Ptr<BufferBase> &GetVkBuffer() const final {
 		static Ptr<BufferBase> x;
 		return x;
 	}
@@ -614,7 +617,7 @@ public:
 	inline RGManagedImage(RGManagedImage &&) noexcept = default;
 	~RGManagedImage() override = default;
 
-	const Ptr<ImageView> &GetImageView() const final {
+	const Ptr<ImageView> &GetVkImageView() const final {
 		static Ptr<ImageView> x;
 		return x;
 	}
@@ -1055,10 +1058,52 @@ template <RGUsageClass A, RGUsageClass B> inline constexpr bool RGUsageMinus(RGU
 
 #pragma endregion
 
-////////////////////////////
-// SECTION Resource Input //
-////////////////////////////
-#pragma region SECTION : Resource Input
+//////////////////////////
+// SECTION Resource I/O //
+//////////////////////////
+#pragma region SECTION : Resource IO
+
+// Alias Output Pool (for Sub-pass)
+namespace _details_rg_pool_ {
+using AliasOutputPool = PoolData<RGPoolVariant<RGBufferAlias, RGImageAlias>>;
+}
+template <typename Derived>
+class RGAliasOutputPool : public RGPool<Derived, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
+private:
+	using AliasOutputPool = RGPool<Derived, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
+
+	template <typename RGType, typename RGAliasType>
+	inline RGType *make_alias_output(const RGPoolKey &output_key, RGType *resource) {
+		RGAliasType *alias = AliasOutputPool ::template Get<0, RGAliasType>(output_key);
+		RGAliasType *new_alias;
+		if (alias == nullptr) {
+			new_alias = AliasOutputPool ::template CreateAndInitialize<0, RGAliasType>(output_key, resource);
+		} else {
+			if (alias->GetPointedResource() == resource)
+				return alias;
+			new_alias = AliasOutputPool ::template Initialize<0, RGAliasType>(output_key, resource);
+		}
+		// Redirect ProducerPassPtr
+		static_cast<RGResourceBase *>(new_alias)->set_producer_pass_ptr(resource->GetProducerPassPtr());
+		return new_alias;
+	}
+
+public:
+	inline RGAliasOutputPool() = default;
+	inline RGAliasOutputPool(RGAliasOutputPool &&) noexcept = default;
+	inline virtual ~RGAliasOutputPool() = default;
+
+protected:
+	inline RGBufferBase *MakeAliasOutput(const RGPoolKey &alias_output_key, RGBufferBase *buffer_output) {
+		return make_alias_output<RGBufferBase, RGBufferAlias>(alias_output_key, buffer_output);
+	}
+	inline RGImageBase *MakeAliasOutput(const RGPoolKey &alias_output_key, RGImageBase *image_output) {
+		return make_alias_output<RGImageBase, RGImageAlias>(alias_output_key, image_output);
+	}
+	// TODO: MakeCombinedImageOutput
+	inline void RemoveAliasOutput(const RGPoolKey &alias_output_key) { AliasOutputPool::Delete(alias_output_key); }
+	inline void ClearAliasOutputs() { AliasOutputPool::Clear(); }
+};
 
 // Resource Input
 class RGInput {
@@ -1105,19 +1150,19 @@ private:
 		return InputPool::template CreateAndInitialize<0, RGInput>(input_key, std::forward<Args>(input_args)...);
 	}
 
-	template <typename RGType> inline RGType *create_output(const RGPoolKey &input_key) {
+	template <typename RGType, typename RGAliasType> inline RGType *make_output(const RGPoolKey &input_key) {
 		const RGInput *input = InputPool::template Get<0, RGInput>(input_key);
+		assert(input && !RGUsageIsReadOnly(input->GetUsage()));
 		if (!input || RGUsageIsReadOnly(input->GetUsage())) // Read-Only input should not produce an output
 			return nullptr;
 		RGType *resource = input->GetResource<RGType>();
+		assert(resource);
 		if (!resource)
 			return nullptr;
 		else if (resource->GetProducerPassPtr() == (RGPassBase *)static_cast<Derived *>(this))
 			return resource;
 		else
-			return InputPool::template InitializeOrGet<
-			    1, std::conditional_t<std::is_same_v<RGType, RGBufferBase>, RGBufferAlias, RGImageAlias>>(input_key,
-			                                                                                              resource);
+			return InputPool::template InitializeOrGet<1, RGAliasType>(input_key, resource);
 	}
 
 	template <typename> friend class RGDescriptorInputSlot;
@@ -1163,11 +1208,11 @@ protected:
 	inline const RGInput *GetInput(const RGPoolKey &input_key) const {
 		return InputPool::template Get<0, RGInput>(input_key);
 	}
-	inline RGBufferBase *GetBufferOutput(const RGPoolKey &input_buffer_key) {
-		return create_output<RGBufferBase>(input_buffer_key);
+	inline RGBufferBase *MakeBufferOutput(const RGPoolKey &input_buffer_key) {
+		return make_output<RGBufferBase, RGBufferAlias>(input_buffer_key);
 	}
-	inline RGImageBase *GetImageOutput(const RGPoolKey &input_image_key) {
-		return create_output<RGImageBase>(input_image_key);
+	inline RGImageBase *MakeImageOutput(const RGPoolKey &input_image_key) {
+		return make_output<RGImageBase, RGImageAlias>(input_image_key);
 	}
 	inline void RemoveInput(const RGPoolKey &input_key);
 	inline void ClearInputs();
@@ -1189,7 +1234,7 @@ public:
 		m_p_input = nullptr;
 	}
 	inline const RGInput *GetInputPtr() const { return m_p_input; }
-	inline const Ptr<Sampler> &GetSampler() const { return m_sampler; }
+	inline const Ptr<Sampler> &GetVkSampler() const { return m_sampler; }
 };
 
 class RGDescriptorSetData : public RGObjectBase {
@@ -1214,7 +1259,8 @@ public:
 		m_bindings.clear();
 		m_updated = true;
 	}
-	const Ptr<DescriptorSetLayout> &GetDescriptorSetLayout() const;
+
+	const Ptr<DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
 };
 
 class RGAttachmentData {
@@ -1281,10 +1327,12 @@ private:
 	                                     VkPipelineStageFlags2 pipeline_stage_flags, uint32_t binding,
 	                                     const Ptr<Sampler> &sampler = nullptr,
 	                                     uint32_t attachment_index = UINT32_MAX) {
+		assert(!m_descriptor_set_data.IsBindingExist(binding));
 		if (m_descriptor_set_data.IsBindingExist(binding))
 			return nullptr;
 		auto input = get_input_pool_ptr()->add_input(input_key, resource, usage, pipeline_stage_flags, binding,
 		                                             attachment_index);
+		assert(input);
 		if (!input)
 			return nullptr;
 		m_descriptor_set_data.AddBinding(binding, input, sampler);
@@ -1363,7 +1411,7 @@ public:
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
 	}
 	inline const Ptr<DescriptorSetLayout> &GetDescriptorSetLayout() const {
-		return m_descriptor_set_data.GetDescriptorSetLayout();
+		return m_descriptor_set_data.GetVkDescriptorSetLayout();
 	}
 };
 
@@ -1423,10 +1471,12 @@ public:
 	inline bool AddColorAttachmentInput(const RGPoolKey &input_key, RGImageBase *image) {
 		static_assert(kRGUsageHasSpecifiedPipelineStages<Usage>);
 
+		assert(!m_attachment_data.IsColorAttachmentExist(Index));
 		if (m_attachment_data.IsColorAttachmentExist(Index))
 			return false;
 		auto input = get_input_pool_ptr()->add_input(input_key, image, Usage, kRGUsageGetSpecifiedPipelineStages<Usage>,
 		                                             UINT32_MAX, Index);
+		assert(input);
 		if (!input)
 			return false;
 		m_attachment_data.AddColorAttachment(Index, input);
@@ -1437,14 +1487,16 @@ public:
 	inline bool AddInputAttachmentInput(const RGPoolKey &input_key, RGImageBase *image) {
 		static_assert(kRGUsageHasSpecifiedPipelineStages<RGUsage::kInputAttachment>);
 
+		assert(!m_attachment_data.IsInputAttachmentExist(AttachmentIndex));
 		if (m_attachment_data.IsInputAttachmentExist(AttachmentIndex))
 			return false;
 		auto input = get_descriptor_slot_ptr()->add_input_descriptor(
 		    input_key, image, RGUsage::kInputAttachment, kRGUsageGetSpecifiedPipelineStages<RGUsage::kInputAttachment>,
 		    DescriptorBinding, nullptr, AttachmentIndex);
+		assert(input);
 		if (!input)
 			return false;
-		m_attachment_data.AddColorAttachment(AttachmentIndex, input);
+		m_attachment_data.AddInputAttachment(AttachmentIndex, input);
 		return true;
 	}
 
@@ -1452,10 +1504,12 @@ public:
 	inline bool SetDepthAttachmentInput(const RGPoolKey &input_key, RGImageBase *image) {
 		static_assert(kRGUsageHasSpecifiedPipelineStages<Usage>);
 
+		assert(!m_attachment_data.IsDepthAttachmentExist());
 		if (m_attachment_data.IsDepthAttachmentExist())
 			return false;
 		auto input =
 		    get_input_pool_ptr()->add_input(input_key, image, Usage, kRGUsageGetSpecifiedPipelineStages<Usage>);
+		assert(input);
 		if (!input)
 			return false;
 		m_attachment_data.SetDepthAttachment(input);
@@ -1496,13 +1550,19 @@ using PassPoolData = PoolData<RGPassBase>;
 
 class RGPassBase : public RGObjectBase {
 private:
-	_details_rg_pool_::InputPoolData *m_p_input_pool_data{};
-	_details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
-	_details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
+	const _details_rg_pool_::InputPoolData *m_p_input_pool_data{};
+	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
+	// const _details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
 	const RGDescriptorSetData *m_p_descriptor_set_data{};
 	const RGAttachmentData *m_p_attachment_data{};
 
+	mutable struct {
+		bool in_stack;
+		uint32_t in_degree;
+	} m_traversal_data{};
+
 	template <typename, uint8_t> friend class RGPass;
+	friend class RenderGraphBase;
 
 public:
 	inline RGPassBase() = default;
@@ -1539,42 +1599,38 @@ protected:
 namespace _details_rg_pass_ {
 struct NoResourcePool {};
 struct NoPassPool {};
+struct NoAliasOutputPool {};
 struct NoDescriptorInputSlot {};
 struct NoAttachmentInputSlot {};
 } // namespace _details_rg_pass_
 
 struct RGPassFlag {
-	enum : uint8_t {
-		kEnableResourceAllocation = 1u,
-		kEnableSubpassAllocation = 2u,
-		kEnableAllAllocation = 3u,
-		kDescriptor = 4u,
-		kGraphicsSubpass = 8u,
-		kAsyncCompute = 16u
-	};
+	enum : uint8_t { kEnableResource = 1u, kEnableSubpass = 2u, kDescriptor = 4u, kGraphics = 8u, kAsyncCompute = 16u };
 };
 
 template <typename Derived, uint8_t Flags>
 class RGPass : public RGPassBase,
                public RGInputPool<Derived>,
-               public std::conditional_t<(Flags & RGPassFlag::kEnableResourceAllocation) != 0, RGResourcePool<Derived>,
+               public std::conditional_t<(Flags & RGPassFlag::kEnableResource) != 0, RGResourcePool<Derived>,
                                          _details_rg_pass_::NoResourcePool>,
                public std::conditional_t<(Flags & RGPassFlag::kDescriptor) != 0, RGDescriptorInputSlot<Derived>,
                                          _details_rg_pass_::NoDescriptorInputSlot>,
-               public std::conditional_t<(Flags & RGPassFlag::kGraphicsSubpass) != 0, RGAttachmentInputSlot<Derived>,
+               public std::conditional_t<(Flags & RGPassFlag::kGraphics) != 0, RGAttachmentInputSlot<Derived>,
                                          _details_rg_pass_::NoAttachmentInputSlot>,
-               public std::conditional_t<(Flags & RGPassFlag::kEnableSubpassAllocation) != 0, RGPassPool<Derived>,
-                                         _details_rg_pass_::NoPassPool> {
+               public std::conditional_t<(Flags & RGPassFlag::kEnableSubpass) != 0, RGPassPool<Derived>,
+                                         _details_rg_pass_::NoPassPool>,
+               public std::conditional_t<(Flags & RGPassFlag::kEnableSubpass) != 0, RGAliasOutputPool<Derived>,
+                                         _details_rg_pass_::NoAliasOutputPool> {
 public:
 	inline RGPass() {
 		m_p_input_pool_data = &RGInputPool<Derived>::GetPoolData();
-		if constexpr ((Flags & RGPassFlag::kEnableResourceAllocation) != 0)
-			m_p_resource_pool_data = &RGResourcePool<Derived>::GetPoolData();
-		if constexpr ((Flags & RGPassFlag::kEnableSubpassAllocation) != 0)
-			m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData();
+		/* if constexpr ((Flags & RGPassFlag::kEnableResourceAllocation) != 0)
+		    m_p_resource_pool_data = &RGResourcePool<Derived>::GetPoolData();
+		if constexpr ((Flags & RGPassFlag::kEnableSubpass) != 0)
+		    m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData(); */
 		if constexpr ((Flags & RGPassFlag::kDescriptor) != 0)
 			m_p_descriptor_set_data = &RGDescriptorInputSlot<Derived>::GetDescriptorSetData();
-		if constexpr ((Flags & RGPassFlag::kGraphicsSubpass) != 0)
+		if constexpr ((Flags & RGPassFlag::kGraphics) != 0)
 			m_p_attachment_data = &RGAttachmentInputSlot<Derived>::GetAttachmentData();
 	}
 	inline RGPass(RGPass &&) noexcept = default;
@@ -1602,6 +1658,7 @@ public:
 
 protected:
 	inline bool AddResult(const RGPoolKey &result_key, RGResourceBase *resource) {
+		assert(resource);
 		return ResultPool::template CreateAndInitialize<0, RGResourceBase *>(result_key, resource);
 	}
 	inline void RemoveResult(const RGPoolKey &result_key) { ResultPool::Delete(result_key); }
@@ -1610,19 +1667,33 @@ protected:
 
 class RenderGraphBase : public DeviceObjectBase {
 private:
-	_details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
-	_details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
-	_details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
+	Ptr<Device> m_device_ptr;
+	uint32_t m_frame_count{};
+	VkExtent2D m_canvas_size{};
+
+	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
+	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
+	// const _details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
+
+	mutable std::vector<RGPassBase *> m_pass_graph_nodes;
+	void pass_graph_traverse(RGPassBase *pass) const;
+
+	bool m_pass_graph_updated = true, m_resource_updated = true;
 
 	template <typename> friend class RenderGraph;
 
 protected:
-	Ptr<Device> m_device_ptr;
-	uint32_t m_frame_count{};
+	inline void SetFrameCount(uint32_t frame_count) {
+		if (m_frame_count != frame_count)
+			m_resource_updated = true;
+		m_frame_count = frame_count;
+	}
+	inline void SetCanvasSize(const VkExtent2D &canvas_size) {}
 
 public:
 	inline const Ptr<Device> &GetDevicePtr() const final { return m_device_ptr; }
 	inline uint32_t GetFrameCount() const { return m_frame_count; }
+	void DebugTraverse() const;
 };
 
 template <typename Derived>
@@ -1640,8 +1711,8 @@ public:
 	}
 	inline RenderGraph() {
 		m_p_result_pool_data = &RGResultPool<Derived>::GetPoolData();
-		m_p_resource_pool_data = &RGResourcePool<Derived>::GetPoolData();
-		m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData();
+		// m_p_resource_pool_data = &RGResourcePool<Derived>::GetPoolData();
+		// m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData();
 	}
 };
 

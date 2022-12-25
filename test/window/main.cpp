@@ -10,10 +10,49 @@
 
 constexpr uint32_t kFrameCount = 3;
 
+class TestBlurSubpass final
+    : public myvk::render_graph::RGPass<TestBlurSubpass, myvk::render_graph::RGPassFlag::kEnableResource |
+                                                             myvk::render_graph::RGPassFlag::kDescriptor |
+                                                             myvk::render_graph::RGPassFlag::kGraphics> {
+public:
+	inline explicit TestBlurSubpass(myvk::render_graph::RGImageBase *image_src) {
+		printf("image_src = %p\n", image_src);
+
+		auto image_dst = CreateResource<myvk::render_graph::RGManagedImage>({"image_dst"});
+		AddDescriptorInput<0, myvk::render_graph::RGUsage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+		    {"image_src"}, image_src, nullptr);
+		AddColorAttachmentInput<0, myvk::render_graph::RGUsage::kColorAttachmentW>({"image_dst"}, image_dst);
+	}
+	inline myvk::render_graph::RGImageBase *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
+
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+};
+
+class TestBlurPass final
+    : public myvk::render_graph::RGPass<TestBlurPass, myvk::render_graph::RGPassFlag::kEnableSubpass> {
+private:
+	uint32_t m_pass = 10;
+
+public:
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+
+	inline explicit TestBlurPass(myvk::render_graph::RGImageBase *image_src) {
+		for (uint32_t i = 0; i < m_pass; ++i) {
+			CreatePass<TestBlurSubpass>(
+			    {"blur_subpass", i},
+			    i == 0 ? image_src : GetPass<TestBlurSubpass>({"blur_subpass", i - 1})->GetImageDstOutput());
+		}
+	}
+	inline myvk::render_graph::RGImageBase *GetImageDstOutput() {
+		return MakeAliasOutput({"image_dst"},
+		                       GetPass<TestBlurSubpass>({"blur_subpass", m_pass - 1})->GetImageDstOutput());
+	}
+};
+
 class TestPass0 final
-    : public myvk::render_graph::RGPass<TestPass0, myvk::render_graph::RGPassFlag::kEnableAllAllocation |
+    : public myvk::render_graph::RGPass<TestPass0, myvk::render_graph::RGPassFlag::kEnableResource |
                                                        myvk::render_graph::RGPassFlag::kDescriptor |
-                                                       myvk::render_graph::RGPassFlag::kGraphicsSubpass>,
+                                                       myvk::render_graph::RGPassFlag::kGraphics>,
       public myvk::render_graph::RGPool<
           TestPass0, int, myvk::render_graph::RGPoolVariant<int, double>,
           myvk::render_graph::RGPoolVariant<myvk::render_graph::RGBufferBase, myvk::render_graph::RGBufferAlias>> {
@@ -45,9 +84,9 @@ public:
 			                   VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT>({"draw_list_gen", i}, managed_buffer);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
-			auto output_buffer = GetBufferOutput({"draw_list_gen", i});
+			auto output_buffer = MakeBufferOutput({"draw_list_gen", i});
 			printf("output_buffer = %p\n", output_buffer);
-			output_buffer = GetBufferOutput({"draw_list_gen", i});
+			output_buffer = MakeBufferOutput({"draw_list_gen", i});
 			printf("output_buffer2 = %p\n", output_buffer);
 
 			AddColorAttachmentInput<0, myvk::render_graph::RGUsage::kColorAttachmentW>({"noise_tex", i}, managed_image);
@@ -55,9 +94,9 @@ public:
 			//    dynamic_cast<myvk::render_graph::RGManagedBuffer *>(input->GetResource()));
 			// auto output_image_invalid = GetBufferOutput({"noise_tex", i});
 			// printf("output_image_invalid = %p\n", output_image_invalid);
-			auto output_image = GetImageOutput({"noise_tex", i});
+			auto output_image = MakeImageOutput({"noise_tex", i});
 			printf("output_image = %p, id = %d\n", output_image, output_image->GetKey().GetID());
-			output_image = GetImageOutput({"noise_tex", i});
+			output_image = MakeImageOutput({"noise_tex", i});
 			printf("output_image = %p, id = %d, producer_pass = %p, this = %p\n", output_image,
 			       output_image->GetKey().GetID(), output_image->GetProducerPassPtr(),
 			       dynamic_cast<myvk::render_graph::RGPassBase *>(this));
@@ -100,14 +139,13 @@ public:
 
 		printf("Create TestPass0\n");
 	}
-	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return GetBufferOutput({"draw_list_gen", 2}); }
-	myvk::render_graph::RGImageBase *GetNoiseTexOutput() { return GetImageOutput({"noise_tex", 2}); }
+	myvk::render_graph::RGBufferBase *GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
+	myvk::render_graph::RGImageBase *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
 
-class TestPass1 final
-    : public myvk::render_graph::RGPass<TestPass1, myvk::render_graph::RGPassFlag::kEnableAllAllocation |
-                                                       myvk::render_graph::RGPassFlag::kDescriptor |
-                                                       myvk::render_graph::RGPassFlag::kGraphicsSubpass> {
+class TestPass1 final : public myvk::render_graph::RGPass<TestPass1, myvk::render_graph::RGPassFlag::kEnableResource |
+                                                                         myvk::render_graph::RGPassFlag::kDescriptor |
+                                                                         myvk::render_graph::RGPassFlag::kGraphics> {
 public:
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
 
@@ -121,18 +159,26 @@ public:
 		AddInputAttachmentInput<0, 1>({"noise_tex_rw"}, noise_tex);
 
 		auto final_img = CreateResource<myvk::render_graph::RGManagedImage>({"final_img"});
+		printf("final_img = %p\n", final_img);
 		AddColorAttachmentInput<0, myvk::render_graph::RGUsage::kColorAttachmentW>({"color_attachment"}, final_img);
 	}
 
-	auto *GetColorOutput() { return GetImageOutput({"color_attachment"}); }
+	auto *GetColorOutput() { return MakeImageOutput({"color_attachment"}); }
 };
 
 class TestRenderGraph final : public myvk::render_graph::RenderGraph<TestRenderGraph> {
 public:
 	TestRenderGraph() {
 		auto *test_pass_0 = CreatePass<TestPass0>({"test_pass_0"});
-		auto *test_pass_1 =
-		    CreatePass<TestPass1>({"test_pass_1"}, test_pass_0->GetDrawListOutput(), test_pass_0->GetNoiseTexOutput());
+		auto *test_blur_pass = CreatePass<TestBlurPass>({"test_blur_pass"}, test_pass_0->GetNoiseTexOutput());
+
+		printf("blur_output = %p\n", test_blur_pass->GetImageDstOutput());
+		printf("blur_output = %p\n", test_blur_pass->GetImageDstOutput());
+		printf("blur_output = %p\n", test_blur_pass->GetImageDstOutput());
+
+		auto *test_pass_1 = CreatePass<TestPass1>({"test_pass_1"}, test_pass_0->GetDrawListOutput(),
+		                                          test_blur_pass->GetImageDstOutput());
+		printf("color_output = %p\n", test_pass_1->GetColorOutput());
 		AddResult({"output"}, test_pass_1->GetColorOutput());
 	}
 };
@@ -154,6 +200,7 @@ int main() {
 	}
 
 	myvk::Ptr<TestRenderGraph> render_graph = myvk::render_graph::RenderGraph<TestRenderGraph>::Create(device);
+	render_graph->DebugTraverse();
 
 	// object_pool.DeleteBuffer("draw_list");
 
