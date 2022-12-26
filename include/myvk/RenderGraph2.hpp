@@ -82,7 +82,7 @@ class RGPoolKey {
 public:
 	using LengthType = uint8_t;
 	using IDType = uint16_t;
-	constexpr static const std::size_t kMaxStrLen = 32 - sizeof(LengthType) - sizeof(IDType);
+	inline constexpr static const std::size_t kMaxStrLen = 32 - sizeof(LengthType) - sizeof(IDType);
 
 private:
 	union {
@@ -139,9 +139,10 @@ template <typename Value> using PoolKeyMap = std::unordered_map<RGPoolKey, Value
 
 template <typename Type> class TypeTraits {
 private:
-	constexpr static bool kIsRGObject = std::is_base_of_v<RGObjectBase, Type>;
-	constexpr static bool kAlterPtr = (kIsRGObject && !std::is_final_v<Type>) || !std::is_move_constructible_v<Type>;
-	constexpr static bool kAlterOptional = !kAlterPtr && (kIsRGObject || !std::is_default_constructible_v<Type>);
+	inline constexpr static bool kIsRGObject = std::is_base_of_v<RGObjectBase, Type>;
+	inline constexpr static bool kAlterPtr =
+	    (kIsRGObject && !std::is_final_v<Type>) || !std::is_move_constructible_v<Type>;
+	inline constexpr static bool kAlterOptional = !kAlterPtr && (kIsRGObject || !std::is_default_constructible_v<Type>);
 
 public:
 	using AlterType = std::conditional_t<kAlterPtr, std::unique_ptr<Type>,
@@ -149,15 +150,16 @@ public:
 	using VariantAlterType = std::conditional_t<kAlterPtr, std::unique_ptr<Type>, Type>;
 
 	template <typename TypeToCons>
-	constexpr static bool kCanConstruct =
+	inline constexpr static bool kCanConstruct =
 	    kAlterPtr ? (std::is_base_of_v<Type, TypeToCons> || std::is_same_v<Type, TypeToCons>)
 	              : std::is_same_v<Type, TypeToCons>;
 	template <typename TypeToGet>
-	constexpr static bool kCanGet = kAlterPtr ? (std::is_base_of_v<Type, TypeToGet> ||
-	                                             std::is_base_of_v<TypeToGet, Type> || std::is_same_v<Type, TypeToGet>)
-	                                          : (std::is_base_of_v<TypeToGet, Type> || std::is_same_v<Type, TypeToGet>);
+	inline constexpr static bool kCanGet =
+	    kAlterPtr ? (std::is_base_of_v<Type, TypeToGet> || std::is_base_of_v<TypeToGet, Type> ||
+	                 std::is_same_v<Type, TypeToGet>)
+	              : (std::is_base_of_v<TypeToGet, Type> || std::is_same_v<Type, TypeToGet>);
 
-	constexpr static bool kCanReset = kAlterPtr || kAlterOptional;
+	inline constexpr static bool kCanReset = kAlterPtr || kAlterOptional;
 
 	template <typename TypeToCons, typename... Args, typename = std::enable_if_t<kCanConstruct<TypeToCons>>>
 	inline static TypeToCons *Initialize(AlterType &val, Args &&...args) {
@@ -209,10 +211,10 @@ public:
 
 template <class T> struct is_unique_ptr_impl : std::false_type {};
 template <class T, class D> struct is_unique_ptr_impl<std::unique_ptr<T, D>> : std::true_type {};
-template <class T> constexpr bool kIsUniquePtr = is_unique_ptr_impl<std::decay_t<T>>::value;
+template <class T> inline constexpr bool kIsUniquePtr = is_unique_ptr_impl<std::decay_t<T>>::value;
 
 template <typename VariantType, typename TypeToCons, bool UniquePtr, size_t I = 0>
-constexpr size_t GetVariantConstructIndex() {
+inline constexpr size_t GetVariantConstructIndex() {
 	if constexpr (I >= std::variant_size_v<VariantType>) {
 		return -1;
 	} else {
@@ -231,9 +233,9 @@ constexpr size_t GetVariantConstructIndex() {
 	}
 }
 template <typename VariantType, typename TypeToCons, bool UniquePtr>
-constexpr bool kVariantCanConstruct = GetVariantConstructIndex<VariantType, TypeToCons, UniquePtr>() != -1;
+inline constexpr bool kVariantCanConstruct = GetVariantConstructIndex<VariantType, TypeToCons, UniquePtr>() != -1;
 
-template <typename VariantType, typename TypeToGet, size_t I = 0> constexpr bool VariantCanGet() {
+template <typename VariantType, typename TypeToGet, size_t I = 0> inline constexpr bool VariantCanGet() {
 	if constexpr (I >= std::variant_size_v<VariantType>)
 		return false;
 	else {
@@ -275,10 +277,10 @@ private:
 public:
 	using AlterType = Type;
 	template <typename TypeToCons>
-	constexpr static bool kCanConstruct =
+	inline constexpr static bool kCanConstruct =
 	    kVariantCanConstruct<Type, TypeToCons, false> || kVariantCanConstruct<Type, TypeToCons, true>;
-	template <typename TypeToGet> constexpr static bool kCanGet = VariantCanGet<Type, TypeToGet>();
-	constexpr static bool kCanReset = true;
+	template <typename TypeToGet> inline constexpr static bool kCanGet = VariantCanGet<Type, TypeToGet>();
+	inline constexpr static bool kCanReset = true;
 
 	template <typename TypeToCons, typename... Args, typename = std::enable_if_t<kCanConstruct<TypeToCons>>>
 	inline static TypeToCons *Initialize(AlterType &val, Args &&...args) {
@@ -334,11 +336,12 @@ template <typename... Types> struct PoolData {
 	template <std::size_t Index> using GetRawType = std::tuple_element_t<Index, std::tuple<Types...>>;
 	template <std::size_t Index> using GetAlterType = std::tuple_element_t<Index, TypeTuple>;
 	template <std::size_t Index, typename T>
-	static constexpr bool kCanConstruct = _details_rg_pool_::TypeTraits<GetRawType<Index>>::template kCanConstruct<T>;
+	inline static constexpr bool kCanConstruct =
+	    _details_rg_pool_::TypeTraits<GetRawType<Index>>::template kCanConstruct<T>;
 	template <std::size_t Index, typename T>
-	static constexpr bool kCanGet = _details_rg_pool_::TypeTraits<GetRawType<Index>>::template kCanGet<T>;
+	inline static constexpr bool kCanGet = _details_rg_pool_::TypeTraits<GetRawType<Index>>::template kCanGet<T>;
 	template <std::size_t Index>
-	static constexpr bool kCanReset = _details_rg_pool_::TypeTraits<GetRawType<Index>>::kCanReset;
+	inline static constexpr bool kCanReset = _details_rg_pool_::TypeTraits<GetRawType<Index>>::kCanReset;
 
 	_details_rg_pool_::PoolKeyMap<TypeTuple> pool;
 
@@ -723,168 +726,173 @@ struct RGUsageInfo {
 	bool is_descriptor;
 	VkDescriptorType descriptor_type;
 };
-constexpr VkPipelineStageFlags2 __PIPELINE_STAGE_ALL_SHADERS_BIT =
+inline constexpr VkPipelineStageFlags2 __PIPELINE_STAGE_ALL_SHADERS_BIT =
     VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT |
     VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT | VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT |
     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
 
-template <RGUsage> constexpr RGUsageInfo kRGUsageInfo{};
+template <RGUsage> inline constexpr RGUsageInfo kRGUsageInfo{};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kPreserveImage> = {0, 0, RGResourceType::kImage, 0, {}, 0, 0, false, {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kPreserveImage> = {0,     0, RGResourceType::kImage, 0, {}, 0, 0,
+                                                                      false, {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kPreserveBuffer> = {0, 0, RGResourceType::kBuffer, 0, {}, 0, 0, false, {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kPreserveBuffer> = {0,     0, RGResourceType::kBuffer, 0, {}, 0, 0,
+                                                                       false, {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kColorAttachmentW> = {0,
-                                                                  VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                                                  RGResourceType::kImage,
-                                                                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                                                  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                                                  VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                                                  0,
-                                                                  false,
-                                                                  {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kColorAttachmentW> = {
+    0,
+    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+    RGResourceType::kImage,
+    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+    0,
+    false,
+    {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kColorAttachmentRW> = {VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
-                                                                   VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-                                                                   RGResourceType::kImage,
-                                                                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-                                                                   VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                                                                   VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                                                   0,
-                                                                   false,
-                                                                   {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kColorAttachmentRW> = {
+    VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT,
+    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+    RGResourceType::kImage,
+    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+    0,
+    false,
+    {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kDepthAttachmentR> = {VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                                                                  0,
-                                                                  RGResourceType::kImage,
-                                                                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                                                  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                                                  VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
-                                                                  0,
-                                                                  false,
-                                                                  {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kDepthAttachmentR> = {
+    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+    0,
+    RGResourceType::kImage,
+    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT,
+    0,
+    false,
+    {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kDepthAttachmentRW> = {VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
-                                                                   VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-                                                                   RGResourceType::kImage,
-                                                                   VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                                                   VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                                                                   VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT |
-                                                                       VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-                                                                   0,
-                                                                   false,
-                                                                   {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kDepthAttachmentRW> = {
+    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+    VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    RGResourceType::kImage,
+    VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+    0,
+    false,
+    {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kInputAttachment> = {VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
-                                                                 0,
-                                                                 RGResourceType::kImage,
-                                                                 VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-                                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                                                                 VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-                                                                 0,
-                                                                 true,
-                                                                 VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kInputAttachment> = {VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
+                                                                        0,
+                                                                        RGResourceType::kImage,
+                                                                        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+                                                                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                                                        VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                                                                        0,
+                                                                        true,
+                                                                        VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT};
 // TODO: Is it correct?
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kPresent> = {
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kPresent> = {
     0, 0, RGResourceType::kImage, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 0, false, {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kSampledImage> = {
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kSampledImage> = {
     VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,      0, RGResourceType::kImage,           VK_IMAGE_USAGE_SAMPLED_BIT,
     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, __PIPELINE_STAGE_ALL_SHADERS_BIT, true,
     VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageR> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT, //
-                                                               0,
-                                                               RGResourceType::kImage,
-                                                               VK_IMAGE_USAGE_STORAGE_BIT,
-                                                               VK_IMAGE_LAYOUT_GENERAL,
-                                                               0,
-                                                               __PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                               true,
-                                                               VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageR> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT, //
+                                                                      0,
+                                                                      RGResourceType::kImage,
+                                                                      VK_IMAGE_USAGE_STORAGE_BIT,
+                                                                      VK_IMAGE_LAYOUT_GENERAL,
+                                                                      0,
+                                                                      __PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                      true,
+                                                                      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageW> = {0,
-                                                               VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                                                               RGResourceType::kImage,
-                                                               VK_IMAGE_USAGE_STORAGE_BIT,
-                                                               VK_IMAGE_LAYOUT_GENERAL,
-                                                               0,
-                                                               __PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                               true,
-                                                               VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageW> = {0,
+                                                                      VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                                      RGResourceType::kImage,
+                                                                      VK_IMAGE_USAGE_STORAGE_BIT,
+                                                                      VK_IMAGE_LAYOUT_GENERAL,
+                                                                      0,
+                                                                      __PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                      true,
+                                                                      VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageRW> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-                                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                                                                RGResourceType::kImage,
-                                                                VK_IMAGE_USAGE_STORAGE_BIT,
-                                                                VK_IMAGE_LAYOUT_GENERAL,
-                                                                0,
-                                                                __PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                                true,
-                                                                VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageImageRW> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                                                                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                                       RGResourceType::kImage,
+                                                                       VK_IMAGE_USAGE_STORAGE_BIT,
+                                                                       VK_IMAGE_LAYOUT_GENERAL,
+                                                                       0,
+                                                                       __PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                       true,
+                                                                       VK_DESCRIPTOR_TYPE_STORAGE_IMAGE};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kUniformBuffer> = {VK_ACCESS_2_UNIFORM_READ_BIT, //
-                                                               0,
-                                                               RGResourceType::kBuffer,
-                                                               VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                                                               {},
-                                                               0,
-                                                               __PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                               true,
-                                                               VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kUniformBuffer> = {VK_ACCESS_2_UNIFORM_READ_BIT, //
+                                                                      0,
+                                                                      RGResourceType::kBuffer,
+                                                                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                                                      {},
+                                                                      0,
+                                                                      __PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                      true,
+                                                                      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferR> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT, //
-                                                                0,
-                                                                RGResourceType::kBuffer,
-                                                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                                                {},
-                                                                0,
-                                                                __PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                                true,
-                                                                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferR> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT, //
+                                                                       0,
+                                                                       RGResourceType::kBuffer,
+                                                                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                                                       {},
+                                                                       0,
+                                                                       __PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                       true,
+                                                                       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferW> = {0, //
-                                                                VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                                                                RGResourceType::kBuffer,
-                                                                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                                                {},
-                                                                0,
-                                                                __PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                                true,
-                                                                VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferW> = {0, //
+                                                                       VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                                       RGResourceType::kBuffer,
+                                                                       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                                                       {},
+                                                                       0,
+                                                                       __PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                       true,
+                                                                       VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferRW> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
-                                                                 VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
-                                                                 RGResourceType::kBuffer,
-                                                                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                                                                 {},
-                                                                 0,
-                                                                 __PIPELINE_STAGE_ALL_SHADERS_BIT,
-                                                                 true,
-                                                                 VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kStorageBufferRW> = {VK_ACCESS_2_SHADER_STORAGE_READ_BIT,
+                                                                        VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT,
+                                                                        RGResourceType::kBuffer,
+                                                                        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                                                                        {},
+                                                                        0,
+                                                                        __PIPELINE_STAGE_ALL_SHADERS_BIT,
+                                                                        true,
+                                                                        VK_DESCRIPTOR_TYPE_STORAGE_BUFFER};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kVertexBuffer> = {VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
-                                                              0,
-                                                              RGResourceType::kBuffer,
-                                                              VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-                                                              {},
-                                                              VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
-                                                              0,
-                                                              false,
-                                                              {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kVertexBuffer> = {VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT,
+                                                                     0,
+                                                                     RGResourceType::kBuffer,
+                                                                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                                                                     {},
+                                                                     VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT,
+                                                                     0,
+                                                                     false,
+                                                                     {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kIndexBuffer> = {VK_ACCESS_2_INDEX_READ_BIT, //
-                                                             0,
-                                                             RGResourceType::kBuffer,
-                                                             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                                                             {},
-                                                             VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT,
-                                                             0,
-                                                             false,
-                                                             {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kIndexBuffer> = {VK_ACCESS_2_INDEX_READ_BIT, //
+                                                                    0,
+                                                                    RGResourceType::kBuffer,
+                                                                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                                                                    {},
+                                                                    VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT,
+                                                                    0,
+                                                                    false,
+                                                                    {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferImageSrc> = {
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferImageSrc> = {
     VK_ACCESS_2_TRANSFER_READ_BIT, //
     0,
     RGResourceType::kImage,
@@ -895,7 +903,7 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferImageSrc> = {
     false,
     {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferImageDst> = {
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferImageDst> = {
     0, //
     VK_ACCESS_2_TRANSFER_WRITE_BIT,
     RGResourceType::kImage,
@@ -907,17 +915,18 @@ constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferImageDst> = {
     false,
     {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferBufferSrc> = {VK_ACCESS_2_TRANSFER_READ_BIT, //
-                                                                   0,
-                                                                   RGResourceType::kBuffer,
-                                                                   VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                                                                   {},
-                                                                   VK_PIPELINE_STAGE_2_COPY_BIT, // ONLY Copy as SRC
-                                                                   0,
-                                                                   false,
-                                                                   {}};
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferBufferSrc> = {
+    VK_ACCESS_2_TRANSFER_READ_BIT, //
+    0,
+    RGResourceType::kBuffer,
+    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+    {},
+    VK_PIPELINE_STAGE_2_COPY_BIT, // ONLY Copy as SRC
+    0,
+    false,
+    {}};
 template <>
-constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferBufferDst> = {
+inline constexpr RGUsageInfo kRGUsageInfo<RGUsage::kTransferBufferDst> = {
     0, //
     VK_ACCESS_2_TRANSFER_WRITE_BIT,
     RGResourceType::kBuffer,
@@ -935,89 +944,97 @@ private:
 public:
 	inline constexpr const RGUsageInfo &operator[](RGUsage usage) const { return kArr[(std::size_t)usage]; }
 };
-constexpr RGUsageInfoTable<std::make_index_sequence<(std::size_t)RGUsage::__RG_USAGE_NUM>> kRGUsageInfoTable{};
+inline constexpr RGUsageInfoTable<std::make_index_sequence<(std::size_t)RGUsage::__RG_USAGE_NUM>> kRGUsageInfoTable{};
 
 // Is Descriptor
-template <RGUsage Usage> constexpr bool kRGUsageIsDescriptor = kRGUsageInfo<Usage>.is_descriptor;
+template <RGUsage Usage> inline constexpr bool kRGUsageIsDescriptor = kRGUsageInfo<Usage>.is_descriptor;
 inline constexpr bool RGUsageIsDescriptor(RGUsage usage) { return kRGUsageInfoTable[usage].is_descriptor; }
 // Get Descriptor Type
-template <RGUsage Usage> constexpr VkDescriptorType kRGUsageGetDescriptorType = kRGUsageInfo<Usage>.descriptor_type;
+template <RGUsage Usage>
+inline constexpr VkDescriptorType kRGUsageGetDescriptorType = kRGUsageInfo<Usage>.descriptor_type;
 inline constexpr VkDescriptorType RGUsageGetDescriptorType(RGUsage usage) {
 	return kRGUsageInfoTable[usage].descriptor_type;
 }
 // Get Read Access Flags
-template <RGUsage Usage> constexpr VkAccessFlags2 kRGUsageGetReadAccessFlags = kRGUsageInfo<Usage>.read_access_flags;
+template <RGUsage Usage>
+inline constexpr VkAccessFlags2 kRGUsageGetReadAccessFlags = kRGUsageInfo<Usage>.read_access_flags;
 inline constexpr VkAccessFlags2 RGUsageGetReadAccessFlags(RGUsage usage) {
 	return kRGUsageInfoTable[usage].read_access_flags;
 }
 // Get Write Access Flags
-template <RGUsage Usage> constexpr VkAccessFlags2 kRGUsageGetWriteAccessFlags = kRGUsageInfo<Usage>.write_access_flags;
+template <RGUsage Usage>
+inline constexpr VkAccessFlags2 kRGUsageGetWriteAccessFlags = kRGUsageInfo<Usage>.write_access_flags;
 inline constexpr VkAccessFlags2 RGUsageGetWriteAccessFlags(RGUsage usage) {
 	return kRGUsageInfoTable[usage].write_access_flags;
 }
 // Get Access Flags
 template <RGUsage Usage>
-constexpr VkAccessFlags2 kRGUsageGetAccessFlags =
+inline constexpr VkAccessFlags2 kRGUsageGetAccessFlags =
     kRGUsageGetReadAccessFlags<Usage> | kRGUsageGetWriteAccessFlags<Usage>;
 inline constexpr VkAccessFlags2 RGUsageGetAccessFlags(RGUsage usage) {
 	return RGUsageGetReadAccessFlags(usage) | RGUsageGetWriteAccessFlags(usage);
 }
 // Is Read-Only
-template <RGUsage Usage> constexpr bool kRGUsageIsReadOnly = kRGUsageGetWriteAccessFlags<Usage> == 0;
+template <RGUsage Usage> inline constexpr bool kRGUsageIsReadOnly = kRGUsageGetWriteAccessFlags<Usage> == 0;
 inline constexpr bool RGUsageIsReadOnly(RGUsage usage) { return RGUsageGetWriteAccessFlags(usage) == 0; }
 // Is For Buffer
 template <RGUsage Usage>
-constexpr bool kRGUsageForBuffer = kRGUsageInfo<Usage>.resource_type == RGResourceType::kBuffer;
+inline constexpr bool kRGUsageForBuffer = kRGUsageInfo<Usage>.resource_type == RGResourceType::kBuffer;
 inline constexpr bool RGUsageForBuffer(RGUsage usage) {
 	return kRGUsageInfoTable[usage].resource_type == RGResourceType::kBuffer;
 }
 // Is For Image
-template <RGUsage Usage> constexpr bool kRGUsageForImage = kRGUsageInfo<Usage>.resource_type == RGResourceType::kImage;
+template <RGUsage Usage>
+inline constexpr bool kRGUsageForImage = kRGUsageInfo<Usage>.resource_type == RGResourceType::kImage;
 inline constexpr bool RGUsageForImage(RGUsage usage) {
 	return kRGUsageInfoTable[usage].resource_type == RGResourceType::kImage;
 }
 // Is Color Attachment
 template <RGUsage Usage>
-constexpr bool kRGUsageIsColorAttachment = Usage == RGUsage::kColorAttachmentW || Usage == RGUsage::kColorAttachmentRW;
+inline constexpr bool kRGUsageIsColorAttachment =
+    Usage == RGUsage::kColorAttachmentW || Usage == RGUsage::kColorAttachmentRW;
 inline constexpr bool RGUsageIsColorAttachment(RGUsage usage) {
 	return usage == RGUsage::kColorAttachmentW || usage == RGUsage::kColorAttachmentRW;
 }
 // Is Depth Attachment
 template <RGUsage Usage>
-constexpr bool kRGUsageIsDepthAttachment = Usage == RGUsage::kDepthAttachmentR || Usage == RGUsage::kDepthAttachmentRW;
+inline constexpr bool kRGUsageIsDepthAttachment =
+    Usage == RGUsage::kDepthAttachmentR || Usage == RGUsage::kDepthAttachmentRW;
 inline constexpr bool RGUsageIsDepthAttachment(RGUsage usage) {
 	return usage == RGUsage::kDepthAttachmentR || usage == RGUsage::kDepthAttachmentRW;
 }
 // Is Attachment
 template <RGUsage Usage>
-constexpr bool kRGUsageIsAttachment =
+inline constexpr bool kRGUsageIsAttachment =
     kRGUsageIsColorAttachment<Usage> || kRGUsageIsDepthAttachment<Usage> || Usage == RGUsage::kInputAttachment;
 inline constexpr bool RGUsageIsAttachment(RGUsage usage) {
 	return RGUsageIsColorAttachment(usage) || RGUsageIsDepthAttachment(usage) || usage == RGUsage::kInputAttachment;
 }
 // Has Specified Pipeline Stages
 template <RGUsage Usage>
-constexpr bool kRGUsageHasSpecifiedPipelineStages = kRGUsageInfo<Usage>.specified_pipeline_stages;
+inline constexpr bool kRGUsageHasSpecifiedPipelineStages = kRGUsageInfo<Usage>.specified_pipeline_stages;
 inline constexpr bool RGUsageHasSpecifiedPipelineStages(RGUsage usage) {
 	return kRGUsageInfoTable[usage].specified_pipeline_stages;
 }
 // Get Specified Pipeline Stages
 template <RGUsage Usage>
-constexpr VkPipelineStageFlags2 kRGUsageGetSpecifiedPipelineStages = kRGUsageInfo<Usage>.specified_pipeline_stages;
+inline constexpr VkPipelineStageFlags2 kRGUsageGetSpecifiedPipelineStages =
+    kRGUsageInfo<Usage>.specified_pipeline_stages;
 inline constexpr VkPipelineStageFlags2 RGUsageGetSpecifiedPipelineStages(RGUsage usage) {
 	return kRGUsageInfoTable[usage].specified_pipeline_stages;
 }
 // Get Optional Pipeline Stages
 template <RGUsage Usage>
-constexpr VkPipelineStageFlags2 kRGUsageGetOptionalPipelineStages = kRGUsageInfo<Usage>.optional_pipeline_stages;
+inline constexpr VkPipelineStageFlags2 kRGUsageGetOptionalPipelineStages = kRGUsageInfo<Usage>.optional_pipeline_stages;
 inline constexpr VkPipelineStageFlags2 RGUsageGetOptionalPipelineStages(RGUsage usage) {
 	return kRGUsageInfoTable[usage].optional_pipeline_stages;
 }
 // Get Image Layout
-template <RGUsage Usage> constexpr VkImageLayout kRGUsageGetImageLayout = kRGUsageInfo<Usage>.image_layout;
+template <RGUsage Usage> inline constexpr VkImageLayout kRGUsageGetImageLayout = kRGUsageInfo<Usage>.image_layout;
 inline constexpr VkImageLayout RGUsageGetImageLayout(RGUsage usage) { return kRGUsageInfoTable[usage].image_layout; }
 // Get Resource Creation Usages
-template <RGUsage Usage> constexpr VkFlags kRGUsageGetCreationUsages = kRGUsageInfo<Usage>.resource_creation_usages;
+template <RGUsage Usage>
+inline constexpr VkFlags kRGUsageGetCreationUsages = kRGUsageInfo<Usage>.resource_creation_usages;
 inline constexpr VkFlags RGUsageGetCreationUsages(RGUsage usage) {
 	return kRGUsageInfoTable[usage].resource_creation_usages;
 }
