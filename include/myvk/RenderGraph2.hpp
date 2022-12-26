@@ -429,6 +429,7 @@ protected:
 	// Create Tag and Initialize the Main Object
 	template <std::size_t Index, typename TypeToCons, typename... Args>
 	inline TypeToCons *CreateAndInitialize(const RGPoolKey &key, Args &&...args) {
+		// TODO: Delete this branch ?
 		if (m_data.pool.find(key) != m_data.pool.end())
 			return nullptr;
 		auto it = m_data.pool.insert({key, typename PoolData::TypeTuple{}}).first;
@@ -1081,28 +1082,23 @@ template <RGUsageClass A, RGUsageClass B> inline constexpr bool RGUsageMinus(RGU
 #pragma region SECTION : Resource IO
 
 // Alias Output Pool (for Sub-pass)
-namespace _details_rg_pool_ {
-using AliasOutputPool = PoolData<RGPoolVariant<RGBufferAlias, RGImageAlias>>;
-}
 template <typename Derived>
-class RGAliasOutputPool : public RGPool<Derived, RGPoolVariant<RGBufferAlias, RGImageAlias>> {
+class RGAliasOutputPool : public RGPool<Derived, RGBufferAlias>, public RGPool<Derived, RGImageAlias> {
 private:
-	using AliasOutputPool = RGPool<Derived, RGPoolVariant<RGBufferAlias, RGImageAlias>>;
-
 	template <typename RGType, typename RGAliasType>
 	inline RGType *make_alias_output(const RGPoolKey &output_key, RGType *resource) {
-		RGAliasType *alias = AliasOutputPool ::template Get<0, RGAliasType>(output_key);
-		RGAliasType *new_alias;
+		using Pool = RGPool<Derived, RGAliasType>;
+		RGAliasType *alias = Pool ::template Get<0, RGAliasType>(output_key);
 		if (alias == nullptr) {
-			new_alias = AliasOutputPool ::template CreateAndInitialize<0, RGAliasType>(output_key, resource);
+			alias = Pool ::template CreateAndInitialize<0, RGAliasType>(output_key, resource);
 		} else {
 			if (alias->GetPointedResource() == resource)
 				return alias;
-			new_alias = AliasOutputPool ::template Initialize<0, RGAliasType>(output_key, resource);
+			alias = Pool ::template Initialize<0, RGAliasType>(output_key, resource);
 		}
 		// Redirect ProducerPassPtr
-		static_cast<RGResourceBase *>(new_alias)->set_producer_pass_ptr(resource->GetProducerPassPtr());
-		return new_alias;
+		static_cast<RGResourceBase *>(alias)->set_producer_pass_ptr(resource->GetProducerPassPtr());
+		return alias;
 	}
 
 public:
@@ -1111,15 +1107,21 @@ public:
 	inline virtual ~RGAliasOutputPool() = default;
 
 protected:
-	inline RGBufferBase *MakeAliasOutput(const RGPoolKey &alias_output_key, RGBufferBase *buffer_output) {
-		return make_alias_output<RGBufferBase, RGBufferAlias>(alias_output_key, buffer_output);
+	inline RGBufferBase *MakeBufferAliasOutput(const RGPoolKey &buffer_alias_output_key, RGBufferBase *buffer_output) {
+		return make_alias_output<RGBufferBase, RGBufferAlias>(buffer_alias_output_key, buffer_output);
 	}
-	inline RGImageBase *MakeAliasOutput(const RGPoolKey &alias_output_key, RGImageBase *image_output) {
-		return make_alias_output<RGImageBase, RGImageAlias>(alias_output_key, image_output);
+	inline RGImageBase *MakeImageAliasOutput(const RGPoolKey &image_alias_output_key, RGImageBase *image_output) {
+		return make_alias_output<RGImageBase, RGImageAlias>(image_alias_output_key, image_output);
 	}
 	// TODO: MakeCombinedImageOutput
-	inline void RemoveAliasOutput(const RGPoolKey &alias_output_key) { AliasOutputPool::Delete(alias_output_key); }
-	inline void ClearAliasOutputs() { AliasOutputPool::Clear(); }
+	inline void RemoveBufferAliasOutput(const RGPoolKey &buffer_alias_output_key) {
+		RGPool<Derived, RGBufferAlias>::Delete(buffer_alias_output_key);
+	}
+	inline void RemoveImageAliasOutput(const RGPoolKey &image_alias_output_key) {
+		RGPool<Derived, RGImageAlias>::Delete(image_alias_output_key);
+	}
+	inline void ClearBufferAliasOutputs() { RGPool<Derived, RGBufferAlias>::Clear(); }
+	inline void ClearImageAliasOutputs() { RGPool<Derived, RGImageAlias>::Clear(); }
 };
 
 // Resource Input
@@ -1379,6 +1381,7 @@ public:
 	inline RGDescriptorInputSlot(RGDescriptorInputSlot &&) noexcept = default;
 	inline ~RGDescriptorInputSlot() = default;
 
+protected:
 	inline const RGDescriptorSetData &GetDescriptorSetData() const { return m_descriptor_set_data; }
 
 	template <uint32_t Binding, RGUsage Usage,
@@ -1482,6 +1485,7 @@ public:
 	inline RGAttachmentInputSlot(RGAttachmentInputSlot &&) noexcept = default;
 	inline ~RGAttachmentInputSlot() = default;
 
+protected:
 	inline const RGAttachmentData &GetAttachmentData() const { return m_attachment_data; }
 
 	template <uint32_t Index, RGUsage Usage, typename = std::enable_if_t<kRGUsageIsColorAttachment<Usage>>>

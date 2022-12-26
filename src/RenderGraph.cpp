@@ -13,7 +13,7 @@ void RenderGraphBase::pass_graph_traverse(RGPassBase *pass) const {
 		auto dep_resource = dep_input->GetResource();
 		auto dep_pass = dep_resource->GetProducerPassPtr();
 		// Skip internal resource inputs
-		if (dep_pass != pass && dep_pass->m_traversal_data.in_degree++ == 0)
+		if (dep_pass && dep_pass != pass && dep_pass->m_traversal_data.in_degree++ == 0)
 			pass_graph_traverse(dep_pass);
 	}
 	m_pass_graph_nodes.push_back(pass);
@@ -28,7 +28,8 @@ void RenderGraphBase::DebugTraverse() const {
 
 	for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it) {
 		RGResourceBase *resource = *m_p_result_pool_data->ValueGet<0, RGResourceBase *>(it);
-		pass_graph_traverse(resource->GetProducerPassPtr());
+		if (resource->GetProducerPassPtr())
+			pass_graph_traverse(resource->GetProducerPassPtr());
 	}
 
 	for (auto &node : m_pass_graph_nodes) {
