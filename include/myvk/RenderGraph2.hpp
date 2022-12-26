@@ -1574,7 +1574,9 @@ private:
 	const RGAttachmentData *m_p_attachment_data{};
 
 	mutable struct {
+#ifndef NDEBUG
 		bool in_stack;
+#endif
 		uint32_t in_degree;
 	} m_traversal_data{};
 

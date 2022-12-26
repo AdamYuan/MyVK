@@ -4,8 +4,10 @@
 namespace myvk::render_graph {
 
 void RenderGraphBase::pass_graph_traverse(RGPassBase *pass) const {
+#ifndef NDEBUG
 	assert(!pass->m_traversal_data.in_stack); // Detect cycle
 	pass->m_traversal_data.in_stack = true;
+#endif
 	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
 		auto dep_input = pass->m_p_input_pool_data->ValueGet<0, RGInput>(it);
 		auto dep_resource = dep_input->GetResource();
@@ -15,7 +17,9 @@ void RenderGraphBase::pass_graph_traverse(RGPassBase *pass) const {
 			pass_graph_traverse(dep_pass);
 	}
 	m_pass_graph_nodes.push_back(pass);
+#ifndef NDEBUG
 	pass->m_traversal_data.in_stack = false;
+#endif
 }
 void RenderGraphBase::DebugTraverse() const {
 	for (auto &node : m_pass_graph_nodes)
