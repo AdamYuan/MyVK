@@ -11,7 +11,7 @@
 #include <utility>
 #include <variant>
 
-namespace myvk::render_graph {
+namespace myvk_rg {
 ///////////////////////////
 // SECTION: Base Objects //
 ///////////////////////////
@@ -497,7 +497,7 @@ public:
 	inline RGBufferBase(RGBufferBase &&) noexcept = default;
 
 	inline RGResourceType GetType() const final { return RGResourceType::kBuffer; }
-	virtual const Ptr<BufferBase> &GetVkBuffer() const = 0;
+	virtual const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const = 0;
 };
 
 enum class RGAttachmentLoadOp { kClear, kLoad, kDontCare };
@@ -508,7 +508,7 @@ public:
 	inline RGImageBase(RGImageBase &&) noexcept = default;
 
 	inline RGResourceType GetType() const final { return RGResourceType::kImage; }
-	virtual const Ptr<ImageView> &GetVkImageView() const = 0;
+	virtual const myvk::Ptr<myvk::ImageView> &GetVkImageView() const = 0;
 
 	virtual RGAttachmentLoadOp GetLoadOp() const = 0;
 	virtual const VkClearValue &GetClearValue() const = 0;
@@ -553,13 +553,14 @@ public:
 #ifdef MYVK_ENABLE_GLFW
 class RGSwapchainImage final : public RGExternalImageBase {
 private:
-	Ptr<FrameManager> m_frame_manager;
+	myvk::Ptr<myvk::FrameManager> m_frame_manager;
 
 public:
-	inline explicit RGSwapchainImage(Ptr<FrameManager> frame_manager) : m_frame_manager{std::move(frame_manager)} {}
+	inline explicit RGSwapchainImage(myvk::Ptr<myvk::FrameManager> frame_manager)
+	    : m_frame_manager{std::move(frame_manager)} {}
 	inline RGSwapchainImage(RGSwapchainImage &&) noexcept = default;
 	~RGSwapchainImage() final = default;
-	inline const Ptr<ImageView> &GetVkImageView() const final {
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const final {
 		return m_frame_manager->GetCurrentSwapchainImageView();
 	}
 };
@@ -577,7 +578,7 @@ public:
 
 	inline RGImageBase *GetPointedResource() const { return m_pointed_image; }
 
-	inline const Ptr<ImageView> &GetVkImageView() const final { return m_pointed_image->GetVkImageView(); }
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const final { return m_pointed_image->GetVkImageView(); }
 	inline RGAttachmentLoadOp GetLoadOp() const final { return m_pointed_image->GetLoadOp(); }
 	const VkClearValue &GetClearValue() const final { return m_pointed_image->GetClearValue(); }
 
@@ -596,7 +597,7 @@ public:
 
 	inline RGBufferBase *GetPointedResource() const { return m_pointed_buffer; }
 
-	inline const Ptr<BufferBase> &GetVkBuffer() const final { return m_pointed_buffer->GetVkBuffer(); }
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const final { return m_pointed_buffer->GetVkBuffer(); }
 
 	bool IsAlias() const final { return true; }
 	RGResourceState GetState() const final { return m_pointed_buffer->GetState(); }
@@ -610,8 +611,8 @@ public:
 	inline RGManagedBuffer(RGManagedBuffer &&) noexcept = default;
 	~RGManagedBuffer() override = default;
 
-	const Ptr<BufferBase> &GetVkBuffer() const final {
-		static Ptr<BufferBase> x;
+	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const final {
+		static myvk::Ptr<myvk::BufferBase> x;
 		return x;
 	}
 	bool IsAlias() const final { return false; }
@@ -623,8 +624,8 @@ public:
 	inline RGManagedImage(RGManagedImage &&) noexcept = default;
 	~RGManagedImage() override = default;
 
-	const Ptr<ImageView> &GetVkImageView() const final {
-		static Ptr<ImageView> x;
+	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const final {
+		static myvk::Ptr<myvk::ImageView> x;
 		return x;
 	}
 	bool IsAlias() const final { return false; }
@@ -1242,33 +1243,33 @@ protected:
 class RGDescriptorBinding {
 private:
 	const RGInput *m_p_input{};
-	Ptr<Sampler> m_sampler{};
+	myvk::Ptr<myvk::Sampler> m_sampler{};
 
 public:
 	inline RGDescriptorBinding() = default;
-	inline explicit RGDescriptorBinding(const RGInput *input, const Ptr<Sampler> &sampler = nullptr)
+	inline explicit RGDescriptorBinding(const RGInput *input, const myvk::Ptr<myvk::Sampler> &sampler = nullptr)
 	    : m_p_input{input}, m_sampler{sampler} {}
 	inline void SetInput(const RGInput *input) { m_p_input = input; }
-	inline void SetSampler(const Ptr<Sampler> &sampler) { m_sampler = sampler; }
+	inline void SetSampler(const myvk::Ptr<myvk::Sampler> &sampler) { m_sampler = sampler; }
 	inline void Reset() {
 		m_sampler.reset();
 		m_p_input = nullptr;
 	}
 	inline const RGInput *GetInputPtr() const { return m_p_input; }
-	inline const Ptr<Sampler> &GetVkSampler() const { return m_sampler; }
+	inline const myvk::Ptr<myvk::Sampler> &GetVkSampler() const { return m_sampler; }
 };
 
 class RGDescriptorSetData : public RGObjectBase {
 private:
 	std::unordered_map<uint32_t, RGDescriptorBinding> m_bindings;
 
-	mutable Ptr<DescriptorSetLayout> m_descriptor_set_layout;
-	mutable std::vector<Ptr<DescriptorSet>> m_descriptor_sets;
+	mutable myvk::Ptr<myvk::DescriptorSetLayout> m_descriptor_set_layout;
+	mutable std::vector<myvk::Ptr<myvk::DescriptorSet>> m_descriptor_sets;
 	mutable bool m_updated = true;
 
 public:
 	inline bool IsBindingExist(uint32_t binding) const { return m_bindings.find(binding) != m_bindings.end(); }
-	inline void AddBinding(uint32_t binding, const RGInput *input, const Ptr<Sampler> &sampler = nullptr) {
+	inline void AddBinding(uint32_t binding, const RGInput *input, const myvk::Ptr<myvk::Sampler> &sampler = nullptr) {
 		m_bindings.insert({binding, RGDescriptorBinding{input, sampler}});
 		m_updated = true;
 	}
@@ -1281,7 +1282,7 @@ public:
 		m_updated = true;
 	}
 
-	const Ptr<DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
+	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
 };
 
 class RGAttachmentData {
@@ -1346,7 +1347,7 @@ private:
 	template <typename RGType>
 	inline RGInput *add_input_descriptor(const RGPoolKey &input_key, RGType *resource, RGUsage usage,
 	                                     VkPipelineStageFlags2 pipeline_stage_flags, uint32_t binding,
-	                                     const Ptr<Sampler> &sampler = nullptr,
+	                                     const myvk::Ptr<myvk::Sampler> &sampler = nullptr,
 	                                     uint32_t attachment_index = UINT32_MAX) {
 		assert(!m_descriptor_set_data.IsBindingExist(binding));
 		if (m_descriptor_set_data.IsBindingExist(binding))
@@ -1420,7 +1421,8 @@ protected:
 	template <uint32_t Binding, RGUsage Usage,
 	          typename = std::enable_if_t<Usage == RGUsage::kSampledImage &&
 	                                      kRGUsageHasSpecifiedPipelineStages<Usage> && kRGUsageForImage<Usage>>>
-	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image, const Ptr<Sampler> &sampler) {
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image,
+	                               const myvk::Ptr<myvk::Sampler> &sampler) {
 		return add_input_descriptor(input_key, image, Usage, kRGUsageGetSpecifiedPipelineStages<Usage>, Binding,
 		                            sampler);
 	}
@@ -1429,10 +1431,11 @@ protected:
 	              Usage == RGUsage::kSampledImage && !kRGUsageHasSpecifiedPipelineStages<Usage> &&
 	              (PipelineStageFlags & kRGUsageGetOptionalPipelineStages<Usage>) == PipelineStageFlags &&
 	              kRGUsageForImage<Usage>>>
-	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image, const Ptr<Sampler> &sampler) {
+	inline bool AddDescriptorInput(const RGPoolKey &input_key, RGImageBase *image,
+	                               const myvk::Ptr<myvk::Sampler> &sampler) {
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
 	}
-	inline const Ptr<DescriptorSetLayout> &GetDescriptorSetLayout() const {
+	inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetDescriptorSetLayout() const {
 		return m_descriptor_set_data.GetVkDescriptorSetLayout();
 	}
 };
@@ -1599,7 +1602,7 @@ public:
 
 	inline bool IsPassGroup() const { return m_p_pass_pool_sequence; }
 
-	virtual void CmdExecute(const Ptr<CommandBuffer> &command_buffer) = 0;
+	virtual void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) = 0;
 };
 
 template <typename Derived> class RGPassPool : public RGPool<Derived, RGPassBase> {
@@ -1679,7 +1682,7 @@ class RGPassGroup
       public RGPassPool<Derived>,
       public RGAliasOutputPool<Derived> {
 public:
-	void CmdExecute(const Ptr<CommandBuffer> &) final {}
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &) final {}
 
 	inline RGPassGroup() { m_p_pass_pool_sequence = &RGPassPool<Derived>::GetPassSequence(); }
 	inline RGPassGroup(RGPassGroup &&) noexcept = default;
@@ -1715,9 +1718,9 @@ protected:
 	inline void ClearResults() { ResultPool::Clear(); }
 };
 
-class RenderGraphBase : public DeviceObjectBase {
+class RenderGraphBase : public myvk::DeviceObjectBase {
 private:
-	Ptr<Device> m_device_ptr;
+	myvk::Ptr<myvk::Device> m_device_ptr;
 	uint32_t m_frame_count{};
 	VkExtent2D m_canvas_size{};
 
@@ -1727,8 +1730,8 @@ private:
 	// const _details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
 
 	mutable std::vector<RGPassBase *> m_pass_sequence;
-	void visit_pass_graph(RGPassBase *pass) const;
-	void extract_visited_pass(const std::vector<RGPassBase *> *p_cur_seq) const;
+	void _visit_pass_graph(RGPassBase *pass) const;
+	void _extract_visited_pass(const std::vector<RGPassBase *> *p_cur_seq) const;
 
 	bool m_pass_graph_updated = true, m_resource_updated = true;
 
@@ -1743,7 +1746,7 @@ protected:
 	inline void SetCanvasSize(const VkExtent2D &canvas_size) {}
 
 public:
-	inline const Ptr<Device> &GetDevicePtr() const final { return m_device_ptr; }
+	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 	inline uint32_t GetFrameCount() const { return m_frame_count; }
 	void gen_pass_sequence() const;
 };
@@ -1754,7 +1757,8 @@ class RenderGraph : public RenderGraphBase,
                     public RGResourcePool<Derived>,
                     public RGResultPool<Derived> {
 public:
-	template <typename... Args> inline static Ptr<Derived> Create(const Ptr<Device> &device_ptr, Args &&...args) {
+	template <typename... Args>
+	inline static myvk::Ptr<Derived> Create(const myvk::Ptr<myvk::Device> &device_ptr, Args &&...args) {
 		static_assert(std::is_base_of_v<RenderGraph<Derived>, Derived>);
 
 		auto ret = std::make_shared<Derived>(std::forward<Args>(args)...);
@@ -1774,6 +1778,6 @@ public:
 static_assert(std::is_same_v<RGPoolVariant<RGBufferAlias, RGObjectBase, RGResourceBase, RGImageAlias>,
                              std::variant<std::monostate, RGImageAlias, std::unique_ptr<RGResourceBase>,
                                           std::unique_ptr<RGObjectBase>, RGBufferAlias>>);
-} // namespace myvk::render_graph
+} // namespace myvk_rg
 
 #endif

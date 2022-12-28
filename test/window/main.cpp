@@ -10,8 +10,6 @@
 
 constexpr uint32_t kFrameCount = 3;
 
-namespace myvk_rg = myvk::render_graph;
-
 class GBufferPass final
     : public myvk_rg::RGPass<GBufferPass, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics, true> {
 public:
@@ -68,11 +66,11 @@ public:
 
 class BlurPass final : public myvk_rg::RGPassGroup<BlurPass> {
 private:
-	uint32_t m_pass = 10;
+	uint32_t m_subpass_count = 10;
 
 public:
 	inline explicit BlurPass(myvk_rg::RGImageBase *image_src) {
-		for (uint32_t i = 0; i < m_pass; ++i) {
+		for (uint32_t i = 0; i < m_subpass_count; ++i) {
 			PushPass<BlurSubpass>({"blur_subpass", i},
 			                      i == 0 ? image_src
 			                             : GetPass<BlurSubpass>({"blur_subpass", i - 1})->GetImageDstOutput());
@@ -80,7 +78,7 @@ public:
 	}
 	inline myvk_rg::RGImageBase *GetImageDstOutput() {
 		return MakeImageAliasOutput({"image_dst"},
-		                            GetPass<BlurSubpass>({"blur_subpass", m_pass - 1})->GetImageDstOutput());
+		                            GetPass<BlurSubpass>({"blur_subpass", m_subpass_count - 1})->GetImageDstOutput());
 	}
 };
 

@@ -1,9 +1,9 @@
 #include "myvk/RenderGraph2.hpp"
 #include <iostream>
 
-namespace myvk::render_graph {
+namespace myvk_rg {
 
-void RenderGraphBase::visit_pass_graph(RGPassBase *pass) const {
+void RenderGraphBase::_visit_pass_graph(RGPassBase *pass) const {
 	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
 		auto dep_input = pass->m_p_input_pool_data->ValueGet<0, RGInput>(it);
 		auto dep_resource = dep_input->GetResource();
@@ -11,17 +11,17 @@ void RenderGraphBase::visit_pass_graph(RGPassBase *pass) const {
 		// Skip internal resource inputs
 		if (dep_pass && dep_pass != pass && !dep_pass->m_traversal_data.visited) {
 			dep_pass->m_traversal_data.visited = true;
-			visit_pass_graph(dep_pass);
+			_visit_pass_graph(dep_pass);
 		}
 	}
 }
-void RenderGraphBase::extract_visited_pass(const std::vector<RGPassBase *> *p_cur_seq) const {
+void RenderGraphBase::_extract_visited_pass(const std::vector<RGPassBase *> *p_cur_seq) const {
 	for (auto pass : *p_cur_seq) {
 		if (pass->m_traversal_data.visited) {
 			pass->m_traversal_data.index = m_pass_sequence.size();
 			m_pass_sequence.push_back(pass);
 		} else if (pass->m_p_pass_pool_sequence)
-			extract_visited_pass(pass->m_p_pass_pool_sequence);
+			_extract_visited_pass(pass->m_p_pass_pool_sequence);
 	}
 }
 void RenderGraphBase::gen_pass_sequence() const {
@@ -33,10 +33,10 @@ void RenderGraphBase::gen_pass_sequence() const {
 		RGResourceBase *resource = *m_p_result_pool_data->ValueGet<0, RGResourceBase *>(it);
 		if (resource->GetProducerPassPtr()) {
 			resource->GetProducerPassPtr()->m_traversal_data.visited = true;
-			visit_pass_graph(resource->GetProducerPassPtr());
+			_visit_pass_graph(resource->GetProducerPassPtr());
 		}
 	}
-	extract_visited_pass(m_p_pass_pool_sequence);
+	_extract_visited_pass(m_p_pass_pool_sequence);
 	for (auto pass : m_pass_sequence) {
 		std::cout << pass->GetKey().GetName() << ":" << pass->GetKey().GetID()
 		          << ".degree = " << pass->m_traversal_data.index << std::endl;
@@ -59,7 +59,7 @@ inline constexpr VkShaderStageFlags ShaderStagesFromPipelineStages(VkPipelineSta
 		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
 	return ret;
 }
-const Ptr<DescriptorSetLayout> &RGDescriptorSetData::GetVkDescriptorSetLayout() const {
+const myvk::Ptr<myvk::DescriptorSetLayout> &RGDescriptorSetData::GetVkDescriptorSetLayout() const {
 	if (m_updated) {
 		if (m_bindings.empty()) {
 			m_descriptor_set_layout = nullptr;
@@ -89,4 +89,4 @@ const Ptr<DescriptorSetLayout> &RGDescriptorSetData::GetVkDescriptorSetLayout() 
 	}
 	return m_descriptor_set_layout;
 }
-} // namespace myvk::render_graph
+} // namespace myvk_rg
