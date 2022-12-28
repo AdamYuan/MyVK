@@ -454,6 +454,8 @@ protected:
 		auto it = m_data.pool.find(key);
 		return it != m_data.pool.end() && m_data.template ValueIsInitialized<Index>(it);
 	}
+	// Check whether a Tag exists
+	inline bool Exist(const RGPoolKey &key) const { return m_data.pool.find(key) != m_data.pool.end(); }
 	// Reset an Object of a Tag
 	template <std::size_t Index> inline void Reset(const RGPoolKey &key) {
 		auto it = m_data.pool.find(key);
@@ -1285,7 +1287,7 @@ public:
 class RGAttachmentData {
 private:
 	std::vector<const RGInput *> m_color_attachments, m_input_attachments;
-	const RGInput *m_depth_attachment;
+	const RGInput *m_depth_attachment{};
 
 public:
 	inline RGAttachmentData() {
@@ -1571,20 +1573,23 @@ using PassPoolData = PoolData<RGPassBase>;
 
 class RGPassBase : public RGObjectBase {
 private:
+	// PassGroup
+	const std::vector<RGPassBase *> *m_p_pass_pool_sequence{};
+
+	// Pass
 	const _details_rg_pool_::InputPoolData *m_p_input_pool_data{};
-	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
-	// const _details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
 	const RGDescriptorSetData *m_p_descriptor_set_data{};
 	const RGAttachmentData *m_p_attachment_data{};
+	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 
 	mutable struct {
-#ifndef NDEBUG
-		bool in_stack;
-#endif
-		uint32_t in_degree;
+		uint32_t index;
+		bool visited;
+		// uint32_t in_degree;
 	} m_traversal_data{};
 
-	template <typename, uint8_t> friend class RGPass;
+	template <typename, uint8_t, bool> friend class RGPass;
+	template <typename, bool> friend class RGPassGroup;
 	friend class RenderGraphBase;
 
 public:
@@ -1592,12 +1597,15 @@ public:
 	inline RGPassBase(RGPassBase &&) noexcept = default;
 	inline ~RGPassBase() override = default;
 
+	inline bool IsPassGroup() const { return m_p_pass_pool_sequence; }
+
 	virtual void CmdExecute(const Ptr<CommandBuffer> &command_buffer) = 0;
 };
 
 template <typename Derived> class RGPassPool : public RGPool<Derived, RGPassBase> {
 private:
 	using PassPool = RGPool<Derived, RGPassBase>;
+	std::vector<RGPassBase *> m_pass_sequence;
 
 public:
 	inline RGPassPool() = default;
@@ -1606,17 +1614,26 @@ public:
 
 protected:
 	template <typename PassType, typename... Args, typename = std::enable_if_t<std::is_base_of_v<RGPassBase, PassType>>>
-	inline PassType *CreatePass(const RGPoolKey &pass_key, Args &&...args) {
-		return PassPool::template CreateAndInitialize<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
+	inline PassType *PushPass(const RGPoolKey &pass_key, Args &&...args) {
+		PassType *ret =
+		    PassPool::template CreateAndInitialize<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
+		assert(ret);
+		m_pass_sequence.push_back(ret);
+		return ret;
 	}
-	inline void DeletePass(const RGPoolKey &pass_key) { return PassPool::Delete(pass_key); }
+	// inline void DeletePass(const RGPoolKey &pass_key) { return PassPool::Delete(pass_key); }
+
+	const std::vector<RGPassBase *> &GetPassSequence() const { return m_pass_sequence; }
 
 	template <typename PassType = RGPassBase, typename = std::enable_if_t<std::is_base_of_v<RGPassBase, PassType> ||
 	                                                                      std::is_same_v<RGPassBase, PassType>>>
 	inline PassType *GetPass(const RGPoolKey &pass_key) const {
 		return PassPool::template Get<0, PassType>(pass_key);
 	}
-	inline void ClearPasses() { PassPool::Clear(); }
+	inline void ClearPasses() {
+		m_pass_sequence.clear();
+		PassPool::Clear();
+	}
 };
 
 namespace _details_rg_pass_ {
@@ -1628,22 +1645,17 @@ struct NoAttachmentInputSlot {};
 } // namespace _details_rg_pass_
 
 struct RGPassFlag {
-	enum : uint8_t { kEnableResource = 1u, kEnableSubpass = 2u, kDescriptor = 4u, kGraphics = 8u, kAsyncCompute = 16u };
+	enum : uint8_t { kDescriptor = 4u, kGraphics = 8u, kCompute = 16u };
 };
 
-template <typename Derived, uint8_t Flags>
+template <typename Derived, uint8_t Flags, bool EnableResource = false>
 class RGPass : public RGPassBase,
                public RGInputPool<Derived>,
-               public std::conditional_t<(Flags & RGPassFlag::kEnableResource) != 0, RGResourcePool<Derived>,
-                                         _details_rg_pass_::NoResourcePool>,
+               public std::conditional_t<EnableResource, RGResourcePool<Derived>, _details_rg_pass_::NoResourcePool>,
                public std::conditional_t<(Flags & RGPassFlag::kDescriptor) != 0, RGDescriptorInputSlot<Derived>,
                                          _details_rg_pass_::NoDescriptorInputSlot>,
                public std::conditional_t<(Flags & RGPassFlag::kGraphics) != 0, RGAttachmentInputSlot<Derived>,
-                                         _details_rg_pass_::NoAttachmentInputSlot>,
-               public std::conditional_t<(Flags & RGPassFlag::kEnableSubpass) != 0, RGPassPool<Derived>,
-                                         _details_rg_pass_::NoPassPool>,
-               public std::conditional_t<(Flags & RGPassFlag::kEnableSubpass) != 0, RGAliasOutputPool<Derived>,
-                                         _details_rg_pass_::NoAliasOutputPool> {
+                                         _details_rg_pass_::NoAttachmentInputSlot> {
 public:
 	inline RGPass() {
 		m_p_input_pool_data = &RGInputPool<Derived>::GetPoolData();
@@ -1658,6 +1670,20 @@ public:
 	}
 	inline RGPass(RGPass &&) noexcept = default;
 	inline ~RGPass() override = default;
+};
+
+template <typename Derived, bool EnableResource = false>
+class RGPassGroup
+    : public RGPassBase,
+      public std::conditional_t<EnableResource, RGResourcePool<Derived>, _details_rg_pass_::NoResourcePool>,
+      public RGPassPool<Derived>,
+      public RGAliasOutputPool<Derived> {
+public:
+	void CmdExecute(const Ptr<CommandBuffer> &) final {}
+
+	inline RGPassGroup() { m_p_pass_pool_sequence = &RGPassPool<Derived>::GetPassSequence(); }
+	inline RGPassGroup(RGPassGroup &&) noexcept = default;
+	inline ~RGPassGroup() override = default;
 };
 
 #pragma endregion
@@ -1684,6 +1710,7 @@ protected:
 		assert(resource);
 		return ResultPool::template CreateAndInitialize<0, RGResourceBase *>(result_key, resource);
 	}
+	inline bool IsResultExist(const RGPoolKey &result_key) const { return ResultPool::Exist(result_key); }
 	inline void RemoveResult(const RGPoolKey &result_key) { ResultPool::Delete(result_key); }
 	inline void ClearResults() { ResultPool::Clear(); }
 };
@@ -1694,12 +1721,14 @@ private:
 	uint32_t m_frame_count{};
 	VkExtent2D m_canvas_size{};
 
+	const std::vector<RGPassBase *> *m_p_pass_pool_sequence{};
 	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
 	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 	// const _details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
 
-	mutable std::vector<RGPassBase *> m_pass_graph_nodes;
-	void pass_graph_traverse(RGPassBase *pass) const;
+	mutable std::vector<RGPassBase *> m_pass_sequence;
+	void visit_pass_graph(RGPassBase *pass) const;
+	void extract_visited_pass(const std::vector<RGPassBase *> *p_cur_seq) const;
 
 	bool m_pass_graph_updated = true, m_resource_updated = true;
 
@@ -1716,7 +1745,7 @@ protected:
 public:
 	inline const Ptr<Device> &GetDevicePtr() const final { return m_device_ptr; }
 	inline uint32_t GetFrameCount() const { return m_frame_count; }
-	void DebugTraverse() const;
+	void gen_pass_sequence() const;
 };
 
 template <typename Derived>
@@ -1734,8 +1763,8 @@ public:
 	}
 	inline RenderGraph() {
 		m_p_result_pool_data = &RGResultPool<Derived>::GetPoolData();
+		m_p_pass_pool_sequence = &RGPassPool<Derived>::GetPassSequence();
 		// m_p_resource_pool_data = &RGResourcePool<Derived>::GetPoolData();
-		// m_p_pass_pool_data = &RGPassPool<Derived>::GetPoolData();
 	}
 };
 
