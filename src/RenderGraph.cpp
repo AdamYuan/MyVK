@@ -3,9 +3,9 @@
 
 namespace myvk_rg {
 
-void RenderGraphBase::_visit_pass_graph(RGPassBase *pass) const {
+void RenderGraphBase::_visit_pass_graph(PassBase *pass) const {
 	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
-		auto dep_input = pass->m_p_input_pool_data->ValueGet<0, RGInput>(it);
+		auto dep_input = pass->m_p_input_pool_data->ValueGet<0, Input>(it);
 		auto dep_resource = dep_input->GetResource();
 		auto dep_pass = dep_resource->GetProducerPassPtr();
 		// Skip internal resource inputs
@@ -15,7 +15,7 @@ void RenderGraphBase::_visit_pass_graph(RGPassBase *pass) const {
 		}
 	}
 }
-void RenderGraphBase::_extract_visited_pass(const std::vector<RGPassBase *> *p_cur_seq) const {
+void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const {
 	for (auto pass : *p_cur_seq) {
 		if (pass->m_traversal_data.visited) {
 			pass->m_traversal_data.index = m_pass_sequence.size();
@@ -30,7 +30,7 @@ void RenderGraphBase::gen_pass_sequence() const {
 	m_pass_sequence.clear();
 
 	for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it) {
-		RGResourceBase *resource = *m_p_result_pool_data->ValueGet<0, RGResourceBase *>(it);
+		ResourceBase *resource = *m_p_result_pool_data->ValueGet<0, ResourceBase *>(it);
 		if (resource->GetProducerPassPtr()) {
 			resource->GetProducerPassPtr()->m_traversal_data.visited = true;
 			_visit_pass_graph(resource->GetProducerPassPtr());
@@ -59,7 +59,7 @@ inline constexpr VkShaderStageFlags ShaderStagesFromPipelineStages(VkPipelineSta
 		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
 	return ret;
 }
-const myvk::Ptr<myvk::DescriptorSetLayout> &RGDescriptorSetData::GetVkDescriptorSetLayout() const {
+const myvk::Ptr<myvk::DescriptorSetLayout> &DescriptorSetData::GetVkDescriptorSetLayout() const {
 	if (m_updated) {
 		if (m_bindings.empty()) {
 			m_descriptor_set_layout = nullptr;
@@ -73,7 +73,7 @@ const myvk::Ptr<myvk::DescriptorSetLayout> &RGDescriptorSetData::GetVkDescriptor
 				bindings.emplace_back();
 				VkDescriptorSetLayoutBinding &info = bindings.back();
 				info.binding = binding_data.first;
-				info.descriptorType = RGUsageGetDescriptorType(binding_data.second.GetInputPtr()->GetUsage());
+				info.descriptorType = UsageGetDescriptorType(binding_data.second.GetInputPtr()->GetUsage());
 				info.descriptorCount = 1;
 				info.stageFlags =
 				    ShaderStagesFromPipelineStages(binding_data.second.GetInputPtr()->GetUsagePipelineStages());

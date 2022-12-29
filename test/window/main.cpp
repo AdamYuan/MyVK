@@ -11,17 +11,17 @@
 constexpr uint32_t kFrameCount = 3;
 
 class GBufferPass final
-    : public myvk_rg::RGPass<GBufferPass, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics, true> {
+    : public myvk_rg::Pass<GBufferPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 public:
 	inline GBufferPass() {
-		auto depth = CreateResource<myvk_rg::RGManagedImage>({"depth"});
-		auto albedo = CreateResource<myvk_rg::RGManagedImage>({"albedo"});
-		auto normal = CreateResource<myvk_rg::RGManagedImage>({"normal"});
-		auto bright = CreateResource<myvk_rg::RGManagedImage>({"bright"});
-		AddColorAttachmentInput<0, myvk_rg::RGUsage::kColorAttachmentW>({"albedo"}, albedo);
-		AddColorAttachmentInput<1, myvk_rg::RGUsage::kColorAttachmentW>({"normal"}, normal);
-		AddColorAttachmentInput<2, myvk_rg::RGUsage::kColorAttachmentW>({"bright"}, bright);
-		SetDepthAttachmentInput<myvk_rg::RGUsage::kDepthAttachmentRW>({"depth"}, depth);
+		auto depth = CreateResource<myvk_rg::ManagedImage>({"depth"});
+		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"});
+		auto normal = CreateResource<myvk_rg::ManagedImage>({"normal"});
+		auto bright = CreateResource<myvk_rg::ManagedImage>({"bright"});
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"albedo"}, albedo);
+		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentW>({"normal"}, normal);
+		AddColorAttachmentInput<2, myvk_rg::Usage::kColorAttachmentW>({"bright"}, bright);
+		SetDepthAttachmentInput<myvk_rg::Usage::kDepthAttachmentRW>({"depth"}, depth);
 	}
 	inline auto GetAlbedoOutput() { return MakeImageOutput({"albedo"}); }
 	inline auto GetNormalOutput() { return MakeImageOutput({"normal"}); }
@@ -31,14 +31,14 @@ public:
 };
 
 class WBOITGenPass final
-    : public myvk_rg::RGPass<WBOITGenPass, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics, true> {
+    : public myvk_rg::Pass<WBOITGenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 public:
-	inline explicit WBOITGenPass(myvk_rg::RGImageBase *depth_test_img) {
-		auto reveal = CreateResource<myvk_rg::RGManagedImage>({"reveal"});
-		auto accum = CreateResource<myvk_rg::RGManagedImage>({"accum"});
-		AddColorAttachmentInput<0, myvk_rg::RGUsage::kColorAttachmentRW>({"reveal"}, reveal);
-		AddColorAttachmentInput<1, myvk_rg::RGUsage::kColorAttachmentRW>({"accum"}, accum);
-		SetDepthAttachmentInput<myvk_rg::RGUsage::kDepthAttachmentR>({"depth_test"}, depth_test_img);
+	inline explicit WBOITGenPass(myvk_rg::ImageBase *depth_test_img) {
+		auto reveal = CreateResource<myvk_rg::ManagedImage>({"reveal"});
+		auto accum = CreateResource<myvk_rg::ManagedImage>({"accum"});
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"reveal"}, reveal);
+		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentRW>({"accum"}, accum);
+		SetDepthAttachmentInput<myvk_rg::Usage::kDepthAttachmentR>({"depth_test"}, depth_test_img);
 
 		// Should be an assertion fail here
 		// MakeImageOutput({"depth_test"});
@@ -49,86 +49,86 @@ public:
 };
 
 class BlurSubpass final
-    : public myvk_rg::RGPass<BlurSubpass, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics, true> {
+    : public myvk_rg::Pass<BlurSubpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 public:
-	inline explicit BlurSubpass(myvk_rg::RGImageBase *image_src) {
+	inline explicit BlurSubpass(myvk_rg::ImageBase *image_src) {
 		printf("image_src = %p\n", image_src);
 
-		auto image_dst = CreateResource<myvk_rg::RGManagedImage>({"image_dst"});
-		AddDescriptorInput<0, myvk_rg::RGUsage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+		auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"});
+		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 		    {"image_src"}, image_src, nullptr);
-		AddColorAttachmentInput<0, myvk_rg::RGUsage::kColorAttachmentW>({"image_dst"}, image_dst);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"image_dst"}, image_dst);
 	}
-	inline myvk_rg::RGImageBase *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
+	inline myvk_rg::ImageBase *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
 
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 };
 
-class BlurPass final : public myvk_rg::RGPassGroup<BlurPass> {
+class BlurPass final : public myvk_rg::PassGroup<BlurPass> {
 private:
 	uint32_t m_subpass_count = 10;
 
 public:
-	inline explicit BlurPass(myvk_rg::RGImageBase *image_src) {
+	inline explicit BlurPass(myvk_rg::ImageBase *image_src) {
 		for (uint32_t i = 0; i < m_subpass_count; ++i) {
 			PushPass<BlurSubpass>({"blur_subpass", i},
 			                      i == 0 ? image_src
 			                             : GetPass<BlurSubpass>({"blur_subpass", i - 1})->GetImageDstOutput());
 		}
 	}
-	inline myvk_rg::RGImageBase *GetImageDstOutput() {
+	inline myvk_rg::ImageBase *GetImageDstOutput() {
 		return MakeImageAliasOutput({"image_dst"},
 		                            GetPass<BlurSubpass>({"blur_subpass", m_subpass_count - 1})->GetImageDstOutput());
 	}
 };
 
 class ScreenPass final
-    : public myvk_rg::RGPass<ScreenPass, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics> {
+    : public myvk_rg::Pass<ScreenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 public:
-	inline explicit ScreenPass(myvk_rg::RGImageBase *screen_out, myvk_rg::RGImageBase *gbuffer_albedo,
-	                           myvk_rg::RGImageBase *gbuffer_normal, myvk_rg::RGImageBase *wboit_reveal,
-	                           myvk_rg::RGImageBase *wboit_accum) {
+	inline explicit ScreenPass(myvk_rg::ImageBase *screen_out, myvk_rg::ImageBase *gbuffer_albedo,
+	                           myvk_rg::ImageBase *gbuffer_normal, myvk_rg::ImageBase *wboit_reveal,
+	                           myvk_rg::ImageBase *wboit_accum) {
 		AddInputAttachmentInput<0, 0>({"gbuffer_albedo"}, gbuffer_albedo);
 		AddInputAttachmentInput<1, 1>({"gbuffer_normal"}, gbuffer_normal);
 		AddInputAttachmentInput<2, 2>({"wboit_reveal"}, wboit_reveal);
 		AddInputAttachmentInput<3, 3>({"wboit_accum"}, wboit_accum);
-		AddColorAttachmentInput<0, myvk_rg::RGUsage::kColorAttachmentW>({"screen"}, screen_out);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"screen"}, screen_out);
 	}
 	inline auto GetScreenOutput() { return MakeImageOutput({"screen"}); }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 };
 
 class BrightPass final
-    : public myvk_rg::RGPass<BrightPass, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics> {
+    : public myvk_rg::Pass<BrightPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 public:
-	inline explicit BrightPass(myvk_rg::RGImageBase *screen_out, myvk_rg::RGImageBase *screen_in,
-	                           myvk_rg::RGImageBase *blurred_bright) {
+	inline explicit BrightPass(myvk_rg::ImageBase *screen_out, myvk_rg::ImageBase *screen_in,
+	                           myvk_rg::ImageBase *blurred_bright) {
 		AddInputAttachmentInput<0, 0>({"screen_in"}, screen_in);
 		AddInputAttachmentInput<1, 1>({"blurred_bright"}, blurred_bright);
-		AddColorAttachmentInput<0, myvk_rg::RGUsage::kColorAttachmentW>({"screen_out"}, screen_out);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"screen_out"}, screen_out);
 	}
 	inline auto GetScreenOutput() { return MakeImageOutput({"screen_out"}); }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 };
 
 class TestPass0 final
-    : public myvk_rg::RGPass<TestPass0, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics, true>,
-      public myvk_rg::RGPool<TestPass0, int, myvk_rg::RGPoolVariant<int, double>,
-                             myvk_rg::RGPoolVariant<myvk_rg::RGBufferBase, myvk_rg::RGBufferAlias>> {
+    : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true>,
+      public myvk_rg::Pool<TestPass0, int, myvk_rg::PoolVariant<int, double>,
+                           myvk_rg::PoolVariant<myvk_rg::BufferBase, myvk_rg::BufferAlias>> {
 public:
-	using TestPool = myvk_rg::RGPool<TestPass0, int, myvk_rg::RGPoolVariant<int, double>,
-	                                 myvk_rg::RGPoolVariant<myvk_rg::RGBufferBase, myvk_rg::RGBufferAlias>>;
+	using TestPool = myvk_rg::Pool<TestPass0, int, myvk_rg::PoolVariant<int, double>,
+	                               myvk_rg::PoolVariant<myvk_rg::BufferBase, myvk_rg::BufferAlias>>;
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
 
 	TestPass0() {
 		for (int i = 0; i < 3; ++i) {
-			auto managed_buffer = CreateResource<myvk_rg::RGManagedBuffer>({"draw_list", i});
+			auto managed_buffer = CreateResource<myvk_rg::ManagedBuffer>({"draw_list", i});
 			std::cout << managed_buffer->GetKey().GetName() << " " << managed_buffer->GetKey().GetID() << std::endl;
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}),
 			       GetImageResource({"draw_list", i}));
 
-			auto managed_image = CreateResource<myvk_rg::RGManagedImage>({"noise_tex", i});
+			auto managed_image = CreateResource<myvk_rg::ManagedImage>({"noise_tex", i});
 			std::cout << managed_image->GetKey().GetName() << " " << managed_image->GetKey().GetID() << std::endl;
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"noise_tex", i}),
 			       GetImageResource({"noise_tex", i}));
@@ -138,18 +138,18 @@ public:
 				RemoveInput({"noise_tex", i - 1});
 			}
 
-			AddDescriptorInput<0, myvk_rg::RGUsage::kStorageBufferW, VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT>(
+			AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferW, VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT>(
 			    {"draw_list_gen", i}, managed_buffer);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
-			//    dynamic_cast<myvk_rg::RGManagedBuffer *>(input->GetResource()));
+			//    dynamic_cast<myvk_rg::ManagedBuffer *>(input->GetResource()));
 			auto output_buffer = MakeBufferOutput({"draw_list_gen", i});
 			printf("output_buffer = %p\n", output_buffer);
 			output_buffer = MakeBufferOutput({"draw_list_gen", i});
 			printf("output_buffer2 = %p\n", output_buffer);
 
-			AddColorAttachmentInput<0, myvk_rg::RGUsage::kColorAttachmentW>({"noise_tex", i}, managed_image);
+			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"noise_tex", i}, managed_image);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
-			//    dynamic_cast<myvk_rg::RGManagedBuffer *>(input->GetResource()));
+			//    dynamic_cast<myvk_rg::ManagedBuffer *>(input->GetResource()));
 			// auto output_image_invalid = GetBufferOutput({"noise_tex", i});
 			// printf("output_image_invalid = %p\n", output_image_invalid);
 			auto output_image = MakeImageOutput({"noise_tex", i});
@@ -157,7 +157,7 @@ public:
 			output_image = MakeImageOutput({"noise_tex", i});
 			printf("output_image = %p, id = %d, producer_pass = %p, this = %p\n", output_image,
 			       output_image->GetKey().GetID(), output_image->GetProducerPassPtr(),
-			       dynamic_cast<myvk_rg::RGPassBase *>(this));
+			       dynamic_cast<myvk_rg::PassBase *>(this));
 		}
 
 		auto managed_buffer = GetBufferResource({"draw_list", 1});
@@ -178,46 +178,43 @@ public:
 		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
 		       TestPool::template Get<1, double>({"Int"}));
 
-		TestPool::template Initialize<2, myvk_rg::RGBufferAlias>({"Int"}, managed_buffer);
-		printf("Value: RGBufferBase =%p, RGBufferAlias =%p\n",
-		       TestPool::template Get<2, myvk_rg::RGBufferBase>({"Int"}),
-		       TestPool::template Get<2, myvk_rg::RGBufferAlias>({"Int"}));
+		TestPool::template Initialize<2, myvk_rg::BufferAlias>({"Int"}, managed_buffer);
+		printf("Value: BufferBase =%p, BufferAlias =%p\n", TestPool::template Get<2, myvk_rg::BufferBase>({"Int"}),
+		       TestPool::template Get<2, myvk_rg::BufferAlias>({"Int"}));
 
-		TestPool::template Initialize<2, myvk_rg::RGManagedBuffer>({"Int"});
-		printf("Value: RGManagedBuffer =%p, RGBufferAlias =%p; IsInitialized=%d\n",
-		       TestPool::template Get<2, myvk_rg::RGManagedBuffer>({"Int"}),
-		       TestPool::template Get<2, myvk_rg::RGBufferAlias>({"Int"}),
-		       TestPool::template IsInitialized<2>({"Int"}));
+		TestPool::template Initialize<2, myvk_rg::ManagedBuffer>({"Int"});
+		printf("Value: ManagedBuffer =%p, BufferAlias =%p; IsInitialized=%d\n",
+		       TestPool::template Get<2, myvk_rg::ManagedBuffer>({"Int"}),
+		       TestPool::template Get<2, myvk_rg::BufferAlias>({"Int"}), TestPool::template IsInitialized<2>({"Int"}));
 
 		TestPool::template Reset<2>({"Int"});
-		printf("Value: RGManagedBuffer =%p, RGBufferAlias =%p; IsInitialized=%d\n",
-		       TestPool::template Get<2, myvk_rg::RGManagedBuffer>({"Int"}),
-		       TestPool::template Get<2, myvk_rg::RGBufferAlias>({"Int"}),
-		       TestPool::template IsInitialized<2>({"Int"}));
+		printf("Value: ManagedBuffer =%p, BufferAlias =%p; IsInitialized=%d\n",
+		       TestPool::template Get<2, myvk_rg::ManagedBuffer>({"Int"}),
+		       TestPool::template Get<2, myvk_rg::BufferAlias>({"Int"}), TestPool::template IsInitialized<2>({"Int"}));
 
 		printf("Create TestPass0\n");
 	}
-	myvk_rg::RGBufferBase *GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
-	myvk_rg::RGImageBase *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
+	myvk_rg::BufferBase *GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
+	myvk_rg::ImageBase *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
 
 class TestPass1 final
-    : public myvk_rg::RGPass<TestPass1, myvk_rg::RGPassFlag::kDescriptor | myvk_rg::RGPassFlag::kGraphics, true> {
+    : public myvk_rg::Pass<TestPass1, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 public:
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
 
-	TestPass1(myvk_rg::RGBufferBase *draw_list, myvk_rg::RGImageBase *noise_tex) {
+	TestPass1(myvk_rg::BufferBase *draw_list, myvk_rg::ImageBase *noise_tex) {
 		printf("Create TestPass\n");
-		AddDescriptorInput<0, myvk_rg::RGUsage::kStorageBufferR,
+		AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferR,
 		                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT>(
 		    {"draw_list_rw"}, draw_list);
-		// AddDescriptorInput<1, myvk_rg::RGUsage::kStorageImageR, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+		// AddDescriptorInput<1, myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 		//     {"noise_tex_rw"}, noise_tex);
 		AddInputAttachmentInput<0, 1>({"noise_tex_rw"}, noise_tex);
 
-		auto final_img = CreateResource<myvk_rg::RGManagedImage>({"final_img"});
+		auto final_img = CreateResource<myvk_rg::ManagedImage>({"final_img"});
 		printf("final_img = %p\n", final_img);
-		AddColorAttachmentInput<0, myvk_rg::RGUsage::kColorAttachmentW>({"color_attachment"}, final_img);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"color_attachment"}, final_img);
 	}
 
 	auto *GetColorOutput() { return MakeImageOutput({"color_attachment"}); }
@@ -244,10 +241,10 @@ public:
 			auto blur_bright_pass = PushPass<BlurPass>({"blur_bright_pass"}, gbuffer_pass->GetBrightOutput());
 			auto wboit_gen_pass = PushPass<WBOITGenPass>({"wboit_gen_pass"}, gbuffer_pass->GetDepthOutput());
 			auto screen_pass = PushPass<ScreenPass>(
-			    {"screen_pass"}, CreateResource<myvk_rg::RGManagedImage>({"screen1"}), gbuffer_pass->GetAlbedoOutput(),
+			    {"screen_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen1"}), gbuffer_pass->GetAlbedoOutput(),
 			    gbuffer_pass->GetNormalOutput(), wboit_gen_pass->GetRevealOutput(), wboit_gen_pass->GetAccumOutput());
 			auto bright_pass =
-			    PushPass<BrightPass>({"bright_pass"}, CreateResource<myvk_rg::RGManagedImage>({"screen2"}),
+			    PushPass<BrightPass>({"bright_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen2"}),
 			                         screen_pass->GetScreenOutput(), blur_bright_pass->GetImageDstOutput());
 			AddResult({"final"}, bright_pass->GetScreenOutput());
 		}
