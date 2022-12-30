@@ -2,9 +2,11 @@
 #define MYVK_RG_RESOURCE_IO_HPP
 
 #include "Pool.hpp"
-#include "Resource.hpp"
-#include "ResourceUsage.hpp"
-#include <variant>
+#include "myvk_rg/Resource.hpp"
+#include "myvk_rg/Usage.hpp"
+
+#include "myvk/DescriptorSet.hpp"
+#include "myvk/Sampler.hpp"
 
 namespace myvk_rg {
 

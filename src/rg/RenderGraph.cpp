@@ -1,4 +1,4 @@
-#include "myvk_rg/RenderGraph2.hpp"
+#include "myvk_rg/RenderGraph.hpp"
 #include <iostream>
 
 namespace myvk_rg {

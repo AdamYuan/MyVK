@@ -1,112 +1,23 @@
 #ifndef MYVK_RG_RESOURCE_HPP
 #define MYVK_RG_RESOURCE_HPP
 
+#include "../myvk/Buffer.hpp"
 #include "../myvk/FrameManager.hpp"
-#include "ObjectBase.hpp"
+#include "../myvk/ImageView.hpp"
+
+#include "Pool.hpp"
+#include "ResourceBase.hpp"
 #include <cassert>
 #include <cinttypes>
 #include <type_traits>
 
 namespace myvk_rg {
-// Resource Base and Types
-enum class ResourceType : uint8_t { kImage, kBuffer };
-enum class ResourceState : uint8_t { kManaged, kCombinedImage, kExternal, kAlias };
-#define MAKE_RESOURCE_CLASS_VAL(Type, State) uint8_t(static_cast<uint8_t>(State) << 1u | static_cast<uint8_t>(Type))
-enum class ResourceClass : uint8_t {
-	kManagedImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kManaged),
-	kExternalImageBase = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kExternal),
-	kCombinedImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kCombinedImage),
-	kImageAlias = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kAlias),
-	kManagedBuffer = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kManaged),
-	kExternalBufferBase = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kExternal),
-	kBufferAlias = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kAlias)
-};
-#define MAKE_RESOURCE_CLASS(Type, State) static_cast<ResourceClass>(MAKE_RESOURCE_CLASS_VAL(Type, State))
-
-class ManagedImage;
-class ExternalImageBase;
-class CombinedImage;
-class ImageAlias;
-class ManagedBuffer;
-class ExternalBufferBase;
-class BufferAlias;
-
-namespace _details_resource_trait_ {
-template <typename T> struct ResourceTrait;
-template <> struct ResourceTrait<ManagedImage> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kManaged;
-};
-template <> struct ResourceTrait<ExternalImageBase> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kExternal;
-};
-template <> struct ResourceTrait<CombinedImage> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kCombinedImage;
-};
-template <> struct ResourceTrait<ImageAlias> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kAlias;
-};
-template <> struct ResourceTrait<ManagedBuffer> {
-	static constexpr ResourceType kType = ResourceType::kBuffer;
-	static constexpr ResourceState kState = ResourceState::kManaged;
-};
-template <> struct ResourceTrait<ExternalBufferBase> {
-	static constexpr ResourceType kType = ResourceType::kBuffer;
-	static constexpr ResourceState kState = ResourceState::kExternal;
-};
-template <> struct ResourceTrait<BufferAlias> {
-	static constexpr ResourceType kType = ResourceType::kBuffer;
-	static constexpr ResourceState kState = ResourceState::kAlias;
-};
-} // namespace _details_resource_trait_
-
-// Used in Visit function
-template <typename RawType> class ResourceVisitorTrait {
-private:
-	using Type = std::remove_pointer_t<std::decay_t<RawType>>;
-
-public:
-	static constexpr ResourceType kType = _details_resource_trait_::ResourceTrait<Type>::kType;
-	static constexpr ResourceState kState = _details_resource_trait_::ResourceTrait<Type>::kState;
-	static constexpr ResourceClass kClass = MAKE_RESOURCE_CLASS(kType, kState);
-};
-
-class ResourceBase : public ObjectBase {
-private:
-	ResourceClass m_class{};
-	PassBase *m_producer_pass_ptr{};
-
-	inline void set_producer_pass_ptr(PassBase *producer_pass_ptr) { m_producer_pass_ptr = producer_pass_ptr; }
-
-	template <typename, typename...> friend class Pool;
-	template <typename> friend class AliasOutputPool;
-
-public:
-	inline ~ResourceBase() override = default;
-	inline ResourceBase(ResourceClass resource_class) : m_class{resource_class} {}
-	inline ResourceBase(ResourceBase &&) noexcept = default;
-
-	inline ResourceType GetType() const { return static_cast<ResourceType>(static_cast<uint8_t>(m_class) & 1u); }
-	inline ResourceState GetState() const { return static_cast<ResourceState>(static_cast<uint8_t>(m_class) >> 1u); }
-
-	// TODO: Is that actually needed ?
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Visit(Visitor &&visitor);
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Visit(Visitor &&visitor) const;
-	// virtual bool IsPerFrame() const = 0;
-	// virtual void Resize(uint32_t width, uint32_t height) {}
-
-	inline PassBase *GetProducerPassPtr() const { return m_producer_pass_ptr; }
-};
-
 class BufferBase : public ResourceBase {
 public:
 	// inline constexpr ResourceType GetType() const { return ResourceType::kBuffer; }
 
 	inline ~BufferBase() override = default;
-	inline explicit BufferBase(ResourceState state) : ResourceBase(MAKE_RESOURCE_CLASS(ResourceType::kBuffer, state)) {}
+	inline explicit BufferBase(ResourceState state) : ResourceBase(MakeResourceClass(ResourceType::kBuffer, state)) {}
 	inline BufferBase(BufferBase &&) noexcept = default;
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> inline Visit(Visitor &&visitor);
@@ -122,7 +33,7 @@ public:
 	// inline constexpr ResourceType GetType() const { return ResourceType::kImage; }
 
 	inline ~ImageBase() override = default;
-	inline explicit ImageBase(ResourceState state) : ResourceBase(MAKE_RESOURCE_CLASS(ResourceType::kImage, state)) {}
+	inline explicit ImageBase(ResourceState state) : ResourceBase(MakeResourceClass(ResourceType::kImage, state)) {}
 	inline ImageBase(ImageBase &&) noexcept = default;
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> inline Visit(Visitor &&visitor);
@@ -380,9 +291,45 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Buffer
 	return {};
 }
 
-} // namespace myvk_rg
+template <typename Derived>
+class ResourcePool
+	: public Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>> {
+private:
+	using _ResourcePool =
+		Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>>;
 
-#undef MAKE_RESOURCE_CLASS_VAL
-#undef MAKE_RESOURCE_CLASS
+public:
+	inline ResourcePool() = default;
+	inline ResourcePool(ResourcePool &&) noexcept = default;
+	inline ~ResourcePool() override = default;
+
+protected:
+	template <typename Type, typename... Args,
+		typename = std::enable_if_t<std::is_base_of_v<BufferBase, Type> || std::is_base_of_v<ImageBase, Type>>>
+	inline Type *CreateResource(const PoolKey &resource_key, Args &&...args) {
+		return _ResourcePool::template CreateAndInitialize<0, Type, Args...>(resource_key, std::forward<Args>(args)...);
+	}
+	inline void DeleteResource(const PoolKey &resource_key) { return _ResourcePool::Delete(resource_key); }
+
+	template <typename BufferType = BufferBase, typename = std::enable_if_t<std::is_base_of_v<BufferBase, BufferType> ||
+	                                                                        std::is_same_v<BufferBase, BufferType>>>
+	inline BufferType *GetBufferResource(const PoolKey &resource_buffer_key) const {
+		return _ResourcePool::template Get<0, BufferType>(resource_buffer_key);
+	}
+	template <typename ImageType = ImageBase, typename = std::enable_if_t<std::is_base_of_v<ImageBase, ImageType> ||
+	                                                                      std::is_same_v<ImageBase, ImageType>>>
+	inline ImageType *GetImageResource(const PoolKey &resource_image_key) const {
+		return _ResourcePool::template Get<0, ImageType>(resource_image_key);
+	}
+	template <typename ResourceType = ResourceBase,
+		typename = std::enable_if_t<std::is_base_of_v<ResourceBase, ResourceType> ||
+		                            std::is_same_v<ResourceBase, ResourceType>>>
+	inline ResourceType *GetResource(const PoolKey &resource_image_key) const {
+		return _ResourcePool::template Get<0, ResourceType>(resource_image_key);
+	}
+	inline void ClearResources() { _ResourcePool::Clear(); }
+};
+
+} // namespace myvk_rg
 
 #endif

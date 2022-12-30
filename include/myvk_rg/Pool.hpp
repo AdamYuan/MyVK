@@ -2,12 +2,17 @@
 #define MYVK_RG_POOL_HPP
 
 #include "ObjectBase.hpp"
-#include "Resource.hpp"
+#include "ResourceBase.hpp"
 #include <cinttypes>
+#include <cstdio>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
+#include <variant>
 
 namespace myvk_rg {
 
