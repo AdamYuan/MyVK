@@ -18,19 +18,29 @@ private:
 protected:
 	inline bool AddResult(const PoolKey &result_key, ResourceBase *resource) {
 		assert(resource);
+		m_compile_phrase.generate_pass_sequence = true;
 		return _ResultPool::template CreateAndInitialize<0, ResourceBase *>(result_key, resource);
 	}
 	inline bool IsResultExist(const PoolKey &result_key) const { return _ResultPool::Exist(result_key); }
-	inline void RemoveResult(const PoolKey &result_key) { _ResultPool::Delete(result_key); }
-	inline void ClearResults() { _ResultPool::Clear(); }
+	inline void RemoveResult(const PoolKey &result_key) {
+		m_compile_phrase.generate_pass_sequence = true;
+		_ResultPool::Delete(result_key);
+	}
+	inline void ClearResults() {
+		m_compile_phrase.generate_pass_sequence = true;
+		_ResultPool::Clear();
+	}
 
 public:
+	inline ~RenderGraph() override = default;
+
 	template <typename... Args>
 	inline static myvk::Ptr<Derived> Create(const myvk::Ptr<myvk::Device> &device_ptr, Args &&...args) {
 		static_assert(std::is_base_of_v<RenderGraph<Derived>, Derived>);
 
-		auto ret = std::make_shared<Derived>(std::forward<Args>(args)...);
+		auto ret = std::make_shared<Derived>();
 		dynamic_cast<RenderGraphBase *>(ret.get())->m_device_ptr = device_ptr;
+		ret->MYVK_RG_INITIALIZER_FUNC(std::forward<Args>(args)...);
 		return ret;
 	}
 	inline RenderGraph() {

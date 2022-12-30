@@ -3,8 +3,7 @@
 
 #include "Resource.hpp"
 
-namespace myvk_rg::_details_ {
-
+namespace myvk_rg {
 enum class Usage {
 	kPreserveImage,
 	kPreserveBuffer,
@@ -30,6 +29,10 @@ enum class Usage {
 	kTransferBufferDst,
 	___USAGE_NUM
 };
+}
+
+namespace myvk_rg::_details_ {
+
 struct UsageInfo {
 	VkAccessFlags2 read_access_flags, write_access_flags;
 

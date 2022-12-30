@@ -24,7 +24,7 @@ void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur
 			_extract_visited_pass(pass->m_p_pass_pool_sequence);
 	}
 }
-void RenderGraphBase::gen_pass_sequence() const {
+void RenderGraphBase::generate_pass_sequence() const {
 	for (auto pass : m_pass_sequence)
 		pass->m_traversal_data.visited = false;
 	m_pass_sequence.clear();
@@ -59,8 +59,9 @@ inline constexpr VkShaderStageFlags ShaderStagesFromPipelineStages(VkPipelineSta
 		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
 	return ret;
 }
-const myvk::Ptr<myvk::DescriptorSetLayout> &DescriptorSetData::GetVkDescriptorSetLayout() const {
-	if (m_updated) {
+
+const myvk::Ptr<myvk::DescriptorSetLayout> &DescriptorSetData::GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &device) const {
+	if (m_modified) {
 		if (m_bindings.empty()) {
 			m_descriptor_set_layout = nullptr;
 		} else {
@@ -83,10 +84,11 @@ const myvk::Ptr<myvk::DescriptorSetLayout> &DescriptorSetData::GetVkDescriptorSe
 					info.pImmutableSamplers = &immutable_samplers.back();
 				}
 			}
-			m_descriptor_set_layout = myvk::DescriptorSetLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), bindings);
+			m_descriptor_set_layout = myvk::DescriptorSetLayout::Create(device, bindings);
 		}
-		m_updated = false;
+		m_modified = false;
 	}
 	return m_descriptor_set_layout;
 }
+
 } // namespace myvk_rg::_details_

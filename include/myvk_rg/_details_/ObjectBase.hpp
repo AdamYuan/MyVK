@@ -17,7 +17,6 @@ private:
 	inline void set_key_ptr(const PoolKey *key_ptr) { m_key_ptr = key_ptr; }
 
 	template <typename, typename...> friend class Pool;
-	template <typename> friend class DescriptorInputSlot;
 
 public:
 	inline ObjectBase() = default;
@@ -31,6 +30,6 @@ public:
 	// inline ObjectBase &operator=(ObjectBase &&r) noexcept = default;
 };
 
-}
+} // namespace myvk_rg::_details_
 
 #endif

@@ -1,8 +1,10 @@
 #ifndef MYVK_RG_POOL_HPP
 #define MYVK_RG_POOL_HPP
 
+#include "Macro.hpp"
 #include "ObjectBase.hpp"
 #include "ResourceBase.hpp"
+
 #include <cinttypes>
 #include <cstdio>
 #include <limits>
@@ -333,10 +335,12 @@ private:
 
 	template <std::size_t Index, typename TypeToCons, typename... Args, typename MapIterator>
 	inline TypeToCons *initialize_and_set_rg_data(const MapIterator &it, Args &&...args) {
-		TypeToCons *ptr = m_data.template ValueInitialize<Index, TypeToCons>(it, std::forward<Args>(args)...);
 		// Initialize ObjectBase
 		if constexpr (std::is_base_of_v<ObjectBase, TypeToCons>) {
 			static_assert(std::is_base_of_v<RenderGraphBase, Derived> || std::is_base_of_v<ObjectBase, Derived>);
+			TypeToCons *ptr = m_data.template ValueInitialize<Index, TypeToCons>(it);
+			if (!ptr)
+				return nullptr;
 
 			auto base_ptr = static_cast<ObjectBase *>(ptr);
 			base_ptr->set_key_ptr(&(it->first));
@@ -344,14 +348,17 @@ private:
 				base_ptr->set_render_graph_ptr((RenderGraphBase *)static_cast<const Derived *>(this));
 			else
 				base_ptr->set_render_graph_ptr(((ObjectBase *)static_cast<const Derived *>(this))->GetRenderGraphPtr());
+			// Initialize ResourceBase
+			if constexpr (std::is_base_of_v<ResourceBase, TypeToCons>) {
+				auto resource_ptr = static_cast<ResourceBase *>(ptr);
+				if constexpr (std::is_base_of_v<PassBase, Derived>)
+					resource_ptr->set_producer_pass_ptr((PassBase *)static_cast<const Derived *>(this));
+			}
+			ptr->MYVK_RG_INITIALIZER_FUNC(std::forward<Args>(args)...);
+			return ptr;
+		} else {
+			return m_data.template ValueInitialize<Index, TypeToCons>(it, std::forward<Args>(args)...);
 		}
-		// Initialize ResourceBase
-		if constexpr (std::is_base_of_v<ResourceBase, TypeToCons>) {
-			auto resource_ptr = static_cast<ResourceBase *>(ptr);
-			if constexpr (std::is_base_of_v<PassBase, Derived>)
-				resource_ptr->set_producer_pass_ptr((PassBase *)static_cast<const Derived *>(this));
-		}
-		return ptr;
 	}
 
 public:
@@ -420,6 +427,6 @@ protected:
 	inline void Clear() { m_data.pool.clear(); }
 };
 
-} // namespace myvk_rg
+} // namespace myvk_rg::_details_
 
 #endif

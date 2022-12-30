@@ -1,10 +1,11 @@
 #ifndef MYVK_RG_RENDER_GRAPH_BASE_HPP
 #define MYVK_RG_RENDER_GRAPH_BASE_HPP
 
-#include "PassBase.hpp"
+#include <myvk/DeviceObjectBase.hpp>
 
 namespace myvk_rg::_details_ {
 
+class PassBase;
 namespace _details_rg_pool_ {
 using ResultPoolData = PoolData<ResourceBase *>;
 }
@@ -23,24 +24,40 @@ private:
 	void _visit_pass_graph(PassBase *pass) const;
 	void _extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const;
 
-	bool m_pass_graph_updated = true, m_resource_updated = true;
+	struct {
+		bool generate_pass_sequence : 1, merge_subpass : 1, generate_vk_resource : 1, generate_vk_render_pass : 1,
+		    generate_vk_descriptor : 1;
+	} m_compile_phrase{};
+	void generate_pass_sequence() const;
 
 	template <typename> friend class RenderGraph;
+	template <typename> friend class ImageAttachmentInfo;
+	template <typename> friend class PassPool;
+	template <typename> friend class InputPool;
 
 protected:
 	inline void SetFrameCount(uint32_t frame_count) {
 		if (m_frame_count != frame_count)
-			m_resource_updated = true;
+			m_compile_phrase.generate_pass_sequence = true;
 		m_frame_count = frame_count;
 	}
 	inline void SetCanvasSize(const VkExtent2D &canvas_size) {}
 
 public:
+	inline RenderGraphBase() = default;
+	inline ~RenderGraphBase() override = default;
+
 	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 	inline uint32_t GetFrameCount() const { return m_frame_count; }
-	void gen_pass_sequence() const;
+	inline void Compile() {
+		if (m_compile_phrase.generate_pass_sequence) {
+			generate_pass_sequence();
+			m_compile_phrase.generate_pass_sequence = false;
+			m_compile_phrase.merge_subpass = true;
+		}
+	}
 };
 
-} // namespace myvk_rg
+} // namespace myvk_rg::_details_
 
 #endif

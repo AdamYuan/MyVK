@@ -1,9 +1,10 @@
 #ifndef MYVK_RG_RESOURCE_IO_HPP
 #define MYVK_RG_RESOURCE_IO_HPP
 
-#include "myvk_rg/_details_/Pool.hpp"
-#include "myvk_rg/_details_/Resource.hpp"
-#include "myvk_rg/_details_/Usage.hpp"
+#include "Pool.hpp"
+#include "RenderGraphBase.hpp"
+#include "Resource.hpp"
+#include "Usage.hpp"
 
 #include "myvk/DescriptorSet.hpp"
 #include "myvk/Sampler.hpp"
@@ -93,8 +94,19 @@ template <typename Derived> class InputPool : public Pool<Derived, Input, PoolVa
 private:
 	using _InputPool = Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias>>;
 
+	inline RenderGraphBase *get_render_graph_ptr() {
+		static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
+		if constexpr (std::is_base_of_v<ObjectBase, Derived>)
+			return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
+		else
+			return static_cast<RenderGraphBase *>(static_cast<Derived *>(this));
+	}
+
 	template <typename... Args> inline Input *add_input(const PoolKey &input_key, Args &&...input_args) {
-		return _InputPool::template CreateAndInitialize<0, Input>(input_key, std::forward<Args>(input_args)...);
+		auto ret = _InputPool::template CreateAndInitialize<0, Input>(input_key, std::forward<Args>(input_args)...);
+		assert(ret);
+		get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
+		return ret;
 	}
 
 	template <typename Type, typename AliasType> inline Type *make_output(const PoolKey &input_key) {
@@ -184,30 +196,33 @@ public:
 	inline const myvk::Ptr<myvk::Sampler> &GetVkSampler() const { return m_sampler; }
 };
 
-class DescriptorSetData : public ObjectBase {
+class DescriptorSetData {
 private:
 	std::unordered_map<uint32_t, DescriptorBinding> m_bindings;
 
 	mutable myvk::Ptr<myvk::DescriptorSetLayout> m_descriptor_set_layout;
 	mutable std::vector<myvk::Ptr<myvk::DescriptorSet>> m_descriptor_sets;
-	mutable bool m_updated = true;
+
+	mutable bool m_modified = true;
+
+	template <typename> friend class DescriptorInputSlot;
 
 public:
 	inline bool IsBindingExist(uint32_t binding) const { return m_bindings.find(binding) != m_bindings.end(); }
 	inline void AddBinding(uint32_t binding, const Input *input, const myvk::Ptr<myvk::Sampler> &sampler = nullptr) {
 		m_bindings.insert({binding, DescriptorBinding{input, sampler}});
-		m_updated = true;
+		m_modified = true;
 	}
 	inline void RemoveBinding(uint32_t binding) {
 		m_bindings.erase(binding);
-		m_updated = true;
+		m_modified = true;
 	}
 	inline void ClearBindings() {
 		m_bindings.clear();
-		m_updated = true;
+		m_modified = true;
 	}
 
-	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
+	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &device) const;
 };
 
 class AttachmentData {
@@ -269,6 +284,14 @@ private:
 		return (const InputPool<Derived> *)static_cast<const Derived *>(this);
 	}
 
+	inline const RenderGraphBase *get_render_graph_ptr() const {
+		static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
+		if constexpr (std::is_base_of_v<ObjectBase, Derived>)
+			return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
+		else
+			return static_cast<const RenderGraphBase *>(static_cast<const Derived *>(this));
+	}
+
 	template <typename Type>
 	inline Input *add_input_descriptor(const PoolKey &input_key, Type *resource, Usage usage,
 	                                   VkPipelineStageFlags2 pipeline_stage_flags, uint32_t binding,
@@ -298,14 +321,7 @@ private:
 	template <typename> friend class AttachmentInputSlot;
 
 public:
-	inline DescriptorInputSlot() {
-		static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
-		if constexpr (std::is_base_of_v<ObjectBase, Derived>)
-			m_descriptor_set_data.set_render_graph_ptr(
-			    ((ObjectBase *)static_cast<Derived *>(this))->GetRenderGraphPtr());
-		else
-			m_descriptor_set_data.set_render_graph_ptr((RenderGraphBase *)static_cast<Derived *>(this));
-	}
+	inline DescriptorInputSlot() = default;
 	inline DescriptorInputSlot(DescriptorInputSlot &&) noexcept = default;
 	inline ~DescriptorInputSlot() = default;
 
@@ -359,7 +375,7 @@ protected:
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
 	}
 	inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetDescriptorSetLayout() const {
-		return m_descriptor_set_data.GetVkDescriptorSetLayout();
+		return m_descriptor_set_data.GetVkDescriptorSetLayout(get_render_graph_ptr()->GetDevicePtr());
 	}
 };
 
@@ -475,6 +491,7 @@ template <typename Derived> void InputPool<Derived>::RemoveInput(const PoolKey &
 			((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_remove_input(input);
 	}
 	InputPool::Delete(input_key);
+	get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
 }
 
 template <typename Derived> void InputPool<Derived>::ClearInputs() {
@@ -483,8 +500,9 @@ template <typename Derived> void InputPool<Derived>::ClearInputs() {
 	if constexpr (std::is_base_of_v<AttachmentInputSlot<Derived>, Derived>)
 		((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_clear_inputs();
 	InputPool::Clear();
+	get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
 }
 
-} // namespace myvk_rg
+} // namespace myvk_rg::_details_
 
 #endif

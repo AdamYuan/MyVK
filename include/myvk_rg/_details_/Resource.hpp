@@ -1,12 +1,15 @@
 #ifndef MYVK_RG_RESOURCE_HPP
 #define MYVK_RG_RESOURCE_HPP
 
-#include "myvk/Buffer.hpp"
-#include "myvk/FrameManager.hpp"
-#include "myvk/ImageView.hpp"
+#include <myvk/Buffer.hpp>
+#include <myvk/FrameManager.hpp>
+#include <myvk/ImageView.hpp>
 
+#include "Macro.hpp"
 #include "Pool.hpp"
+#include "RenderGraphBase.hpp"
 #include "ResourceBase.hpp"
+
 #include <cassert>
 #include <cinttypes>
 #include <type_traits>
@@ -42,43 +45,53 @@ public:
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
 		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
 	};
-
-	// virtual AttachmentLoadOp GetLoadOp() const = 0;
-	// virtual const VkClearValue &GetClearValue() const = 0;
 };
 
 // TODO: Attachment
-enum class AttachmentLoadOp { kClear, kLoad, kDontCare };
-class ImageAttachmentInfo {};
+template <typename Derived> class ImageAttachmentInfo {
+private:
+	inline RenderGraphBase *get_render_graph_ptr() {
+		return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
+	}
+	VkAttachmentLoadOp m_load_op{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
+	VkClearValue m_clear_value{};
+
+public:
+	ImageAttachmentInfo() { static_assert(std::is_base_of_v<ObjectBase, Derived>); }
+	ImageAttachmentInfo(VkAttachmentLoadOp load_op, const VkClearValue &clear_value)
+	    : m_load_op{load_op}, m_clear_value{clear_value} {
+		static_assert(std::is_base_of_v<ObjectBase, Derived>);
+	}
+
+	inline void SetLoadOp(VkAttachmentLoadOp load_op) {
+		if (m_load_op != load_op) {
+			m_load_op = load_op;
+			get_render_graph_ptr()->m_compile_phrase.generate_vk_render_pass = true;
+		}
+	}
+	inline void SetClearColorValue(const VkClearColorValue &clear_color_value) {
+		m_clear_value.color = clear_color_value;
+	}
+	inline void SetClearDepthStencilValue(const VkClearDepthStencilValue &clear_depth_stencil_value) {
+		m_clear_value.depthStencil = clear_depth_stencil_value;
+	}
+
+	inline VkAttachmentLoadOp GetLoadOp() const { return m_load_op; }
+	inline const VkClearValue &GetClearValue() const { return m_clear_value; }
+};
 
 // External
 // TODO: External barriers (pipeline stage + access + image layout, begin & end)
-class ExternalImageBase : public ImageBase {
+class ExternalImageBase : public ImageBase, public ImageAttachmentInfo<ExternalImageBase> {
 public:
 	inline ExternalImageBase() : ImageBase(ResourceState::kExternal) {}
 	inline ExternalImageBase(ExternalImageBase &&) noexcept = default;
 	inline ~ExternalImageBase() override = default;
 
-private:
-	AttachmentLoadOp m_load_op{AttachmentLoadOp::kDontCare};
-	VkClearValue m_clear_value{};
-
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kExternal; }
 
 	virtual const myvk::Ptr<myvk::ImageView> &GetVkImageView() const = 0;
-
-	template <AttachmentLoadOp LoadOp, typename = std::enable_if_t<LoadOp != AttachmentLoadOp::kClear>>
-	inline void SetLoadOp() {
-		m_load_op = LoadOp;
-	}
-	template <AttachmentLoadOp LoadOp, typename = std::enable_if_t<LoadOp == AttachmentLoadOp::kClear>>
-	inline void SetLoadOp(const VkClearValue &clear_value) {
-		m_load_op = LoadOp;
-		m_clear_value = clear_value;
-	}
-	inline AttachmentLoadOp GetLoadOp() const { return m_load_op; }
-	inline const VkClearValue &GetClearValue() const { return m_clear_value; }
 };
 class ExternalBufferBase : public BufferBase {
 public:
@@ -95,9 +108,12 @@ class SwapchainImage final : public ExternalImageBase {
 private:
 	myvk::Ptr<myvk::FrameManager> m_frame_manager;
 
+	MYVK_RG_OBJECT_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+		m_frame_manager = frame_manager;
+	}
+
 public:
-	inline explicit SwapchainImage(myvk::Ptr<myvk::FrameManager> frame_manager)
-	    : m_frame_manager{std::move(frame_manager)} {}
+	inline SwapchainImage() = default;
 	inline SwapchainImage(SwapchainImage &&) noexcept = default;
 	~SwapchainImage() final = default;
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const final {
@@ -108,17 +124,20 @@ public:
 // Alias
 class ImageAlias final : public ImageBase {
 private:
-	const ImageBase *m_pointed_image;
+	const ImageBase *m_pointed_image{};
+
+	MYVK_RG_OBJECT_INLINE_INITIALIZER(ImageBase *image) {
+		m_pointed_image = image->Visit([](auto *image) -> const ImageBase * {
+			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
+				return image->GetPointedResource();
+			return image;
+		});
+	}
 
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kAlias; }
 
-	inline explicit ImageAlias(ImageBase *image)
-	    : ImageBase(ResourceState::kAlias), m_pointed_image{image->Visit([](auto *image) -> const ImageBase * {
-		      if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
-			      return image->GetPointedResource();
-		      return image;
-	      })} {}
+	inline ImageAlias() : ImageBase(ResourceState::kAlias) {}
 	inline ImageAlias(ImageAlias &&) noexcept = default;
 	inline ~ImageAlias() final = default;
 
@@ -128,17 +147,20 @@ public:
 };
 class BufferAlias final : public BufferBase {
 private:
-	const BufferBase *m_pointed_buffer;
+	const BufferBase *m_pointed_buffer{};
+
+	MYVK_RG_OBJECT_INLINE_INITIALIZER(BufferBase *buffer) {
+		m_pointed_buffer = buffer->Visit([](auto *buffer) -> const BufferBase * {
+			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
+				return buffer->GetPointedResource();
+			return buffer;
+		});
+	}
 
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kAlias; }
 
-	inline explicit BufferAlias(BufferBase *buffer)
-	    : BufferBase(ResourceState::kAlias), m_pointed_buffer{buffer->Visit([](auto *buffer) -> const BufferBase * {
-		      if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
-			      return buffer->GetPointedResource();
-		      return buffer;
-	      })} {}
+	inline BufferAlias() : BufferBase(ResourceState::kAlias) {}
 	inline BufferAlias(BufferAlias &&) = default;
 	inline ~BufferAlias() final = default;
 
@@ -153,6 +175,8 @@ class ManagedBuffer final : public BufferBase {
 private:
 	bool m_persistent{false};
 
+	MYVK_RG_OBJECT_INLINE_INITIALIZER() {}
+
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
 
@@ -165,7 +189,10 @@ public:
 		return x;
 	}
 };
-class ManagedImage final : public ImageBase {
+class ManagedImage final : public ImageBase, public ImageAttachmentInfo<ManagedImage> {
+private:
+	MYVK_RG_OBJECT_INLINE_INITIALIZER() {}
+
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
 
@@ -177,15 +204,12 @@ public:
 		static myvk::Ptr<myvk::ImageView> x;
 		return x;
 	}
-
-	inline AttachmentLoadOp GetLoadOp() const { return {}; }
-	const VkClearValue &GetClearValue() const {
-		static VkClearValue x;
-		return x;
-	}
 };
 
 class CombinedImage final : public ImageBase {
+private:
+	MYVK_RG_OBJECT_INLINE_INITIALIZER() {}
+
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kCombinedImage; }
 
@@ -293,10 +317,10 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Buffer
 
 template <typename Derived>
 class ResourcePool
-	: public Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>> {
+    : public Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>> {
 private:
 	using _ResourcePool =
-		Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>>;
+	    Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>>;
 
 public:
 	inline ResourcePool() = default;
@@ -305,7 +329,7 @@ public:
 
 protected:
 	template <typename Type, typename... Args,
-		typename = std::enable_if_t<std::is_base_of_v<BufferBase, Type> || std::is_base_of_v<ImageBase, Type>>>
+	          typename = std::enable_if_t<std::is_base_of_v<BufferBase, Type> || std::is_base_of_v<ImageBase, Type>>>
 	inline Type *CreateResource(const PoolKey &resource_key, Args &&...args) {
 		return _ResourcePool::template CreateAndInitialize<0, Type, Args...>(resource_key, std::forward<Args>(args)...);
 	}
@@ -322,14 +346,14 @@ protected:
 		return _ResourcePool::template Get<0, ImageType>(resource_image_key);
 	}
 	template <typename ResourceType = ResourceBase,
-		typename = std::enable_if_t<std::is_base_of_v<ResourceBase, ResourceType> ||
-		                            std::is_same_v<ResourceBase, ResourceType>>>
+	          typename = std::enable_if_t<std::is_base_of_v<ResourceBase, ResourceType> ||
+	                                      std::is_same_v<ResourceBase, ResourceType>>>
 	inline ResourceType *GetResource(const PoolKey &resource_image_key) const {
 		return _ResourcePool::template Get<0, ResourceType>(resource_image_key);
 	}
 	inline void ClearResources() { _ResourcePool::Clear(); }
 };
 
-} // namespace myvk_rg
+} // namespace myvk_rg::_details_
 
 #endif

@@ -94,7 +94,7 @@ public:
 	inline ResourceType GetType() const { return static_cast<ResourceType>(static_cast<uint8_t>(m_class) & 1u); }
 	inline ResourceState GetState() const { return static_cast<ResourceState>(static_cast<uint8_t>(m_class) >> 1u); }
 
-	// TODO: Is that actually needed ?
+	// TODO: Is that actually needed ? (currently implemented in Resource.hpp)
 	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Visit(Visitor &&visitor) const;
 	// virtual bool IsPerFrame() const = 0;
@@ -103,6 +103,6 @@ public:
 	inline PassBase *GetProducerPassPtr() const { return m_producer_pass_ptr; }
 };
 
-} // namespace myvk_rg
+} // namespace myvk_rg::_details_
 
 #endif
