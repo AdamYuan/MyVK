@@ -3,7 +3,7 @@
 
 #include "PassBase.hpp"
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 namespace _details_rg_pool_ {
 using ResultPoolData = PoolData<ResourceBase *>;

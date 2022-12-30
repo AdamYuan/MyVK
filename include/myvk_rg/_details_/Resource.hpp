@@ -1,9 +1,9 @@
 #ifndef MYVK_RG_RESOURCE_HPP
 #define MYVK_RG_RESOURCE_HPP
 
-#include "../myvk/Buffer.hpp"
-#include "../myvk/FrameManager.hpp"
-#include "../myvk/ImageView.hpp"
+#include "myvk/Buffer.hpp"
+#include "myvk/FrameManager.hpp"
+#include "myvk/ImageView.hpp"
 
 #include "Pool.hpp"
 #include "ResourceBase.hpp"
@@ -11,7 +11,7 @@
 #include <cinttypes>
 #include <type_traits>
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 class BufferBase : public ResourceBase {
 public:
 	// inline constexpr ResourceType GetType() const { return ResourceType::kBuffer; }

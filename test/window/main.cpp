@@ -33,7 +33,7 @@ public:
 class WBOITGenPass final
     : public myvk_rg::Pass<WBOITGenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 public:
-	inline explicit WBOITGenPass(myvk_rg::ImageBase *depth_test_img) {
+	inline explicit WBOITGenPass(myvk_rg::Image *depth_test_img) {
 		auto reveal = CreateResource<myvk_rg::ManagedImage>({"reveal"});
 		auto accum = CreateResource<myvk_rg::ManagedImage>({"accum"});
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"reveal"}, reveal);
@@ -51,7 +51,7 @@ public:
 class BlurSubpass final
     : public myvk_rg::Pass<BlurSubpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 public:
-	inline explicit BlurSubpass(myvk_rg::ImageBase *image_src) {
+	inline explicit BlurSubpass(myvk_rg::Image *image_src) {
 		printf("image_src = %p\n", image_src);
 
 		auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"});
@@ -59,7 +59,7 @@ public:
 		    {"image_src"}, image_src, nullptr);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"image_dst"}, image_dst);
 	}
-	inline myvk_rg::ImageBase *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
+	inline myvk_rg::Image *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
 
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 };
@@ -69,14 +69,14 @@ private:
 	uint32_t m_subpass_count = 10;
 
 public:
-	inline explicit BlurPass(myvk_rg::ImageBase *image_src) {
+	inline explicit BlurPass(myvk_rg::Image *image_src) {
 		for (uint32_t i = 0; i < m_subpass_count; ++i) {
 			PushPass<BlurSubpass>({"blur_subpass", i},
 			                      i == 0 ? image_src
 			                             : GetPass<BlurSubpass>({"blur_subpass", i - 1})->GetImageDstOutput());
 		}
 	}
-	inline myvk_rg::ImageBase *GetImageDstOutput() {
+	inline myvk_rg::Image *GetImageDstOutput() {
 		return MakeImageAliasOutput({"image_dst"},
 		                            GetPass<BlurSubpass>({"blur_subpass", m_subpass_count - 1})->GetImageDstOutput());
 	}
@@ -85,9 +85,9 @@ public:
 class ScreenPass final
     : public myvk_rg::Pass<ScreenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 public:
-	inline explicit ScreenPass(myvk_rg::ImageBase *screen_out, myvk_rg::ImageBase *gbuffer_albedo,
-	                           myvk_rg::ImageBase *gbuffer_normal, myvk_rg::ImageBase *wboit_reveal,
-	                           myvk_rg::ImageBase *wboit_accum) {
+	inline explicit ScreenPass(myvk_rg::Image *screen_out, myvk_rg::Image *gbuffer_albedo,
+	                           myvk_rg::Image *gbuffer_normal, myvk_rg::Image *wboit_reveal,
+	                           myvk_rg::Image *wboit_accum) {
 		AddInputAttachmentInput<0, 0>({"gbuffer_albedo"}, gbuffer_albedo);
 		AddInputAttachmentInput<1, 1>({"gbuffer_normal"}, gbuffer_normal);
 		AddInputAttachmentInput<2, 2>({"wboit_reveal"}, wboit_reveal);
@@ -101,8 +101,7 @@ public:
 class BrightPass final
     : public myvk_rg::Pass<BrightPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 public:
-	inline explicit BrightPass(myvk_rg::ImageBase *screen_out, myvk_rg::ImageBase *screen_in,
-	                           myvk_rg::ImageBase *blurred_bright) {
+	inline explicit BrightPass(myvk_rg::Image *screen_out, myvk_rg::Image *screen_in, myvk_rg::Image *blurred_bright) {
 		AddInputAttachmentInput<0, 0>({"screen_in"}, screen_in);
 		AddInputAttachmentInput<1, 1>({"blurred_bright"}, blurred_bright);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"screen_out"}, screen_out);
@@ -112,13 +111,8 @@ public:
 };
 
 class TestPass0 final
-    : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true>,
-      public myvk_rg::Pool<TestPass0, int, myvk_rg::PoolVariant<int, double>,
-                           myvk_rg::PoolVariant<myvk_rg::BufferBase, myvk_rg::BufferAlias>> {
+    : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 public:
-	using TestPool = myvk_rg::Pool<TestPass0, int, myvk_rg::PoolVariant<int, double>,
-	                               myvk_rg::PoolVariant<myvk_rg::BufferBase, myvk_rg::BufferAlias>>;
-
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
 
 	TestPass0() {
@@ -157,45 +151,15 @@ public:
 			output_image = MakeImageOutput({"noise_tex", i});
 			printf("output_image = %p, id = %d, producer_pass = %p, this = %p\n", output_image,
 			       output_image->GetKey().GetID(), output_image->GetProducerPassPtr(),
-			       dynamic_cast<myvk_rg::PassBase *>(this));
+			       dynamic_cast<myvk_rg::_details_::PassBase *>(this));
 		}
 
 		auto managed_buffer = GetBufferResource({"draw_list", 1});
 
-		TestPool::template CreateAndInitialize<0, int>({"Int"}, 1);
-		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
-		TestPool::template Initialize<1, double>({"Int"}, 2.0);
-		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
-		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
-		       TestPool::template Get<1, double>({"Int"}));
-		printf("Reset\n");
-		TestPool::template Reset<1>({"Int"});
-		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
-		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
-		       TestPool::template Get<1, double>({"Int"}));
-		TestPool::template Initialize<1, int>({"Int"}, 2);
-		printf("Initialized: %d\n", TestPool::template IsInitialized<1>({"Int"}));
-		printf("Value: p_int=%p, p_double=%p\n", TestPool::template Get<1, int>({"Int"}),
-		       TestPool::template Get<1, double>({"Int"}));
-
-		TestPool::template Initialize<2, myvk_rg::BufferAlias>({"Int"}, managed_buffer);
-		printf("Value: BufferBase =%p, BufferAlias =%p\n", TestPool::template Get<2, myvk_rg::BufferBase>({"Int"}),
-		       TestPool::template Get<2, myvk_rg::BufferAlias>({"Int"}));
-
-		TestPool::template Initialize<2, myvk_rg::ManagedBuffer>({"Int"});
-		printf("Value: ManagedBuffer =%p, BufferAlias =%p; IsInitialized=%d\n",
-		       TestPool::template Get<2, myvk_rg::ManagedBuffer>({"Int"}),
-		       TestPool::template Get<2, myvk_rg::BufferAlias>({"Int"}), TestPool::template IsInitialized<2>({"Int"}));
-
-		TestPool::template Reset<2>({"Int"});
-		printf("Value: ManagedBuffer =%p, BufferAlias =%p; IsInitialized=%d\n",
-		       TestPool::template Get<2, myvk_rg::ManagedBuffer>({"Int"}),
-		       TestPool::template Get<2, myvk_rg::BufferAlias>({"Int"}), TestPool::template IsInitialized<2>({"Int"}));
-
 		printf("Create TestPass0\n");
 	}
-	myvk_rg::BufferBase *GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
-	myvk_rg::ImageBase *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
+	myvk_rg::Buffer *GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
+	myvk_rg::Image *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
 
 class TestPass1 final
@@ -203,7 +167,7 @@ class TestPass1 final
 public:
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
 
-	TestPass1(myvk_rg::BufferBase *draw_list, myvk_rg::ImageBase *noise_tex) {
+	TestPass1(myvk_rg::Buffer *draw_list, myvk_rg::Image *noise_tex) {
 		printf("Create TestPass\n");
 		AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferR,
 		                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT>(

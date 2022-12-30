@@ -3,7 +3,7 @@
 
 #include "Resource.hpp"
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 enum class Usage {
 	kPreserveImage,
@@ -376,6 +376,6 @@ template <UsageClass A, UsageClass B> inline constexpr bool UsageMinus(Usage x) 
     return UsageIntersect<A, UsageComplement<B>>(x);
 }*/
 
-} // namespace myvk_rg
+} // namespace myvk_rg::_details_
 
 #endif

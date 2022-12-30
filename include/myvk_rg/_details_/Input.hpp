@@ -1,14 +1,14 @@
 #ifndef MYVK_RG_RESOURCE_IO_HPP
 #define MYVK_RG_RESOURCE_IO_HPP
 
-#include "Pool.hpp"
-#include "myvk_rg/Resource.hpp"
-#include "myvk_rg/Usage.hpp"
+#include "myvk_rg/_details_/Pool.hpp"
+#include "myvk_rg/_details_/Resource.hpp"
+#include "myvk_rg/_details_/Usage.hpp"
 
 #include "myvk/DescriptorSet.hpp"
 #include "myvk/Sampler.hpp"
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 // Alias Output Pool (for Sub-pass)
 template <typename Derived>

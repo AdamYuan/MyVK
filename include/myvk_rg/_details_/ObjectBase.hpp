@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_BASE_HPP
 #define MYVK_RG_BASE_HPP
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 class RenderGraphBase;
 class PassBase;

@@ -14,7 +14,7 @@
 #include <unordered_map>
 #include <variant>
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 // Pool Key
 class PoolKey {

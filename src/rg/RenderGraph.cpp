@@ -1,7 +1,7 @@
 #include "myvk_rg/RenderGraph.hpp"
 #include <iostream>
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 void RenderGraphBase::_visit_pass_graph(PassBase *pass) const {
 	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
@@ -89,4 +89,4 @@ const myvk::Ptr<myvk::DescriptorSetLayout> &DescriptorSetData::GetVkDescriptorSe
 	}
 	return m_descriptor_set_layout;
 }
-} // namespace myvk_rg
+} // namespace myvk_rg::_details_

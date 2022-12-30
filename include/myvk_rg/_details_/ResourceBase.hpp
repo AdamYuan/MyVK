@@ -5,7 +5,7 @@
 #include <cinttypes>
 #include <type_traits>
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 // Resource Base and Types
 enum class ResourceType : uint8_t { kImage, kBuffer };

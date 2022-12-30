@@ -1,47 +1,36 @@
+#ifdef MYVK_ENABLE_RG
+
 #ifndef MYVK_RG_RENDER_GRAPH_HPP
 #define MYVK_RG_RENDER_GRAPH_HPP
 
-#include "Pass.hpp"
-#include "RenderGraphBase.hpp"
-#include "Resource.hpp"
+#include "myvk_rg/_details_/Pass.hpp"
+#include "myvk_rg/_details_/RenderGraph.hpp"
+#include "myvk_rg/_details_/Resource.hpp"
 
 namespace myvk_rg {
 
-template <typename Derived>
-class RenderGraph : public RenderGraphBase,
-                    public PassPool<Derived>,
-                    public ResourcePool<Derived>,
-                    public Pool<Derived, ResourceBase *> {
-private:
-	using _ResultPool = Pool<Derived, ResourceBase *>;
+using PoolKey = _details_::PoolKey;
 
-public:
-	template <typename... Args>
-	inline static myvk::Ptr<Derived> Create(const myvk::Ptr<myvk::Device> &device_ptr, Args &&...args) {
-		static_assert(std::is_base_of_v<RenderGraph<Derived>, Derived>);
+using Usage = _details_::Usage;
 
-		auto ret = std::make_shared<Derived>(std::forward<Args>(args)...);
-		dynamic_cast<RenderGraphBase *>(ret.get())->m_device_ptr = device_ptr;
-		return ret;
-	}
-	inline RenderGraph() {
-		m_p_result_pool_data = &_ResultPool::GetPoolData();
-		m_p_pass_pool_sequence = &PassPool<Derived>::GetPassSequence();
-		// m_p_resource_pool_data = &ResourcePool<Derived>::GetPoolData();
-	}
-	inline bool AddResult(const PoolKey &result_key, ResourceBase *resource) {
-		assert(resource);
-		return _ResultPool::template CreateAndInitialize<0, ResourceBase *>(result_key, resource);
-	}
-	inline bool IsResultExist(const PoolKey &result_key) const { return _ResultPool::Exist(result_key); }
-	inline void RemoveResult(const PoolKey &result_key) { _ResultPool::Delete(result_key); }
-	inline void ClearResults() { _ResultPool::Clear(); }
-};
+using PassFlag = _details_::PassFlag;
+template <typename Derived, uint8_t Flags, bool EnableResource = false>
+using Pass = _details_::Pass<Derived, Flags, EnableResource>;
+template <typename Derived, bool EnableResource = false>
+using PassGroup = _details_::PassGroup<Derived, EnableResource>;
 
-// TODO: Debug Type Traits
-static_assert(std::is_same_v<PoolVariant<BufferAlias, ObjectBase, ResourceBase, ImageAlias>,
-                             std::variant<std::monostate, ImageAlias, std::unique_ptr<ResourceBase>,
-                                          std::unique_ptr<ObjectBase>, BufferAlias>>);
+using Image = _details_::ImageBase;
+using ManagedImage = _details_::ManagedImage;
+using ExternalImageBase = _details_::ExternalImageBase;
+
+using Buffer = _details_::BufferBase;
+using ManagedBuffer = _details_::ManagedBuffer;
+using ExternalBufferBase = _details_::ExternalBufferBase;
+
+template <typename Derived> using RenderGraph = _details_::RenderGraph<Derived>;
+
 } // namespace myvk_rg
+
+#endif
 
 #endif

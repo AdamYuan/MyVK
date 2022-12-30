@@ -5,7 +5,7 @@
 
 #include "myvk/CommandBuffer.hpp"
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 class PassBase : public ObjectBase {
 private:

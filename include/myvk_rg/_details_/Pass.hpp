@@ -3,9 +3,9 @@
 
 #include "Input.hpp"
 #include "PassBase.hpp"
-#include "Resource.hpp"
+#include "myvk_rg/_details_/Resource.hpp"
 
-namespace myvk_rg {
+namespace myvk_rg::_details_ {
 
 namespace _details_rg_pass_ {
 struct NoResourcePool {};
@@ -19,7 +19,7 @@ struct PassFlag {
 	enum : uint8_t { kDescriptor = 4u, kGraphics = 8u, kCompute = 16u };
 };
 
-template <typename Derived, uint8_t Flags, bool EnableResource = false>
+template <typename Derived, uint8_t Flags, bool EnableResource>
 class Pass : public PassBase,
              public InputPool<Derived>,
              public std::conditional_t<EnableResource, ResourcePool<Derived>, _details_rg_pass_::NoResourcePool>,
@@ -43,7 +43,7 @@ public:
 	inline ~Pass() override = default;
 };
 
-template <typename Derived, bool EnableResource = false>
+template <typename Derived, bool EnableResource>
 class PassGroup : public PassBase,
                   public std::conditional_t<EnableResource, ResourcePool<Derived>, _details_rg_pass_::NoResourcePool>,
                   public PassPool<Derived>,
