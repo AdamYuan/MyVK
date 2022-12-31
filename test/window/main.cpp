@@ -13,6 +13,7 @@ constexpr uint32_t kFrameCount = 3;
 class GBufferPass final
     : public myvk_rg::Pass<GBufferPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 private:
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
 		auto depth = CreateResource<myvk_rg::ManagedImage>({"depth"});
 		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"});
@@ -35,6 +36,7 @@ public:
 class WBOITGenPass final
     : public myvk_rg::Pass<WBOITGenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 private:
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_test_img) {
 		auto reveal = CreateResource<myvk_rg::ManagedImage>({"reveal"});
 		auto accum = CreateResource<myvk_rg::ManagedImage>({"accum"});
@@ -55,6 +57,7 @@ public:
 class BlurSubpass final
     : public myvk_rg::Pass<BlurSubpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 private:
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
 		printf("image_src = %p\n", image_src);
 
@@ -78,6 +81,7 @@ class BlurPass final : public myvk_rg::PassGroup<BlurPass> {
 private:
 	uint32_t m_subpass_count = 10;
 
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
 		for (uint32_t i = 0; i < m_subpass_count; ++i) {
 			PushPass<BlurSubpass>({"blur_subpass", i},
@@ -98,6 +102,7 @@ public:
 class ScreenPass final
     : public myvk_rg::Pass<ScreenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *screen_out, myvk_rg::Image *gbuffer_albedo,
 	                           myvk_rg::Image *gbuffer_normal, myvk_rg::Image *wboit_reveal,
 	                           myvk_rg::Image *wboit_accum) {
@@ -118,6 +123,7 @@ public:
 class BrightPass final
     : public myvk_rg::Pass<BrightPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *screen_out, myvk_rg::Image *screen_in, myvk_rg::Image *blurred_bright) {
 		AddInputAttachmentInput<0, 0>({"screen_in"}, screen_in);
 		AddInputAttachmentInput<1, 1>({"blurred_bright"}, blurred_bright);
@@ -134,6 +140,7 @@ public:
 class TestPass0 final
     : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 private:
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
 		for (int i = 0; i < 3; ++i) {
 			auto managed_buffer = CreateResource<myvk_rg::ManagedBuffer>({"draw_list", i});
@@ -173,8 +180,6 @@ private:
 			       dynamic_cast<myvk_rg::_details_::PassBase *>(this));
 		}
 
-		auto managed_buffer = GetBufferResource({"draw_list", 1});
-
 		printf("Create TestPass0\n");
 	}
 
@@ -189,6 +194,7 @@ public:
 class TestPass1 final
     : public myvk_rg::Pass<TestPass1, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
 private:
+	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Buffer *draw_list, myvk_rg::Image *noise_tex) {
 		printf("Create TestPass\n");
 		AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferR,
@@ -213,6 +219,7 @@ public:
 
 class TestRenderGraph final : public myvk_rg::RenderGraph<TestRenderGraph> {
 private:
+	MYVK_RG_RENDER_GRAPH_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
 		{
 			auto test_pass_0 = PushPass<TestPass0>({"test_pass_0"});

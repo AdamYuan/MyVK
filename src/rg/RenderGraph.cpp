@@ -4,15 +4,22 @@
 namespace myvk_rg::_details_ {
 
 void RenderGraphBase::_visit_pass_graph(PassBase *pass) const {
-	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
-		auto dep_input = pass->m_p_input_pool_data->ValueGet<0, Input>(it);
-		auto dep_resource = dep_input->GetResource();
-		auto dep_pass = dep_resource->GetProducerPassPtr();
-		// Skip internal resource inputs
+	const auto visit_dep = [this, pass](PassBase *dep_pass) -> void {
 		if (dep_pass && dep_pass != pass && !dep_pass->m_traversal_data.visited) {
 			dep_pass->m_traversal_data.visited = true;
 			_visit_pass_graph(dep_pass);
 		}
+	};
+	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
+		auto dep_input = pass->m_p_input_pool_data->ValueGet<0, Input>(it);
+		auto dep_resource = dep_input->GetResource();
+		dep_resource->Visit([visit_dep](auto *resource) -> void {
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kClass == ResourceClass::kCombinedImage) {
+				for (auto *sub_image : resource->GetImages())
+					visit_dep(sub_image->GetProducerPassPtr());
+			} else
+				visit_dep(resource->GetProducerPassPtr());
+		});
 	}
 }
 void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const {
@@ -60,7 +67,8 @@ inline constexpr VkShaderStageFlags ShaderStagesFromPipelineStages(VkPipelineSta
 	return ret;
 }
 
-const myvk::Ptr<myvk::DescriptorSetLayout> &DescriptorSetData::GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &device) const {
+const myvk::Ptr<myvk::DescriptorSetLayout> &
+DescriptorSetData::GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &device) const {
 	if (m_modified) {
 		if (m_bindings.empty()) {
 			m_descriptor_set_layout = nullptr;

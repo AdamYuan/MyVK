@@ -68,7 +68,7 @@ template <> struct ResourceTrait<BufferAlias> {
 // Used in Visit function
 template <typename RawType> class ResourceVisitorTrait {
 private:
-	using Type = std::remove_pointer_t<std::decay_t<RawType>>;
+	using Type = std::decay_t<std::remove_pointer_t<std::decay_t<RawType>>>;
 
 public:
 	static constexpr ResourceType kType = _details_resource_trait_::ResourceTrait<Type>::kType;

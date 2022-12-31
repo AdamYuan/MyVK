@@ -51,14 +51,15 @@ public:
 template <typename Derived> class ImageAttachmentInfo {
 private:
 	inline RenderGraphBase *get_render_graph_ptr() {
+		static_assert(std::is_base_of_v<ObjectBase, Derived>);
 		return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
 	}
 	VkAttachmentLoadOp m_load_op{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
 	VkClearValue m_clear_value{};
 
 public:
-	ImageAttachmentInfo() { static_assert(std::is_base_of_v<ObjectBase, Derived>); }
-	ImageAttachmentInfo(VkAttachmentLoadOp load_op, const VkClearValue &clear_value)
+	inline ImageAttachmentInfo() = default;
+	inline ImageAttachmentInfo(VkAttachmentLoadOp load_op, const VkClearValue &clear_value)
 	    : m_load_op{load_op}, m_clear_value{clear_value} {
 		static_assert(std::is_base_of_v<ObjectBase, Derived>);
 	}
@@ -108,9 +109,8 @@ class SwapchainImage final : public ExternalImageBase {
 private:
 	myvk::Ptr<myvk::FrameManager> m_frame_manager;
 
-	MYVK_RG_OBJECT_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
-		m_frame_manager = frame_manager;
-	}
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) { m_frame_manager = frame_manager; }
 
 public:
 	inline SwapchainImage() = default;
@@ -126,7 +126,8 @@ class ImageAlias final : public ImageBase {
 private:
 	const ImageBase *m_pointed_image{};
 
-	MYVK_RG_OBJECT_INLINE_INITIALIZER(ImageBase *image) {
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(ImageBase *image) {
 		m_pointed_image = image->Visit([](auto *image) -> const ImageBase * {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
 				return image->GetPointedResource();
@@ -149,7 +150,8 @@ class BufferAlias final : public BufferBase {
 private:
 	const BufferBase *m_pointed_buffer{};
 
-	MYVK_RG_OBJECT_INLINE_INITIALIZER(BufferBase *buffer) {
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(BufferBase *buffer) {
 		m_pointed_buffer = buffer->Visit([](auto *buffer) -> const BufferBase * {
 			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
 				return buffer->GetPointedResource();
@@ -170,12 +172,48 @@ public:
 };
 
 // Managed Resources
-// TODO: Complete this
-class ManagedBuffer final : public BufferBase {
+template <typename Derived, typename SizeType> class ManagedResourceInfo {
+public:
+	using SizeFunc = std::function<SizeType(const VkExtent2D &)>;
+
+private:
+	inline RenderGraphBase *get_render_graph_ptr() {
+		static_assert(std::is_base_of_v<ObjectBase, Derived>);
+		return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
+	}
+
+	bool m_persistence{false};
+	SizeType m_size{};
+	SizeFunc m_size_func{};
+
+public:
+	inline bool GetPersistence() const { return m_persistence; }
+	inline void SetPersistence(bool persistence = true) {
+		if (m_persistence != persistence) {
+			m_persistence = persistence;
+			get_render_graph_ptr()->m_compile_phrase.generate_vk_resource = true; // TODO: or merge_subpass
+		}
+	}
+	inline const SizeType &GetSize() const { return m_size; }
+	inline void SetSize(const SizeType &size) {
+		if (m_size != size) {
+			m_size = size;
+			get_render_graph_ptr()->m_compile_phrase.generate_vk_resource = true;
+		}
+	}
+	inline const SizeFunc &GetSizeFunc() const { return m_size_func; }
+	template <typename Func> inline void SetSizeFunc(Func &&func) {
+		m_size_func = func;
+		SetSize(m_size_func(get_render_graph_ptr()->m_canvas_size));
+	}
+};
+
+class ManagedBuffer final : public BufferBase, public ManagedResourceInfo<ManagedBuffer, VkDeviceSize> {
 private:
 	bool m_persistent{false};
 
-	MYVK_RG_OBJECT_INLINE_INITIALIZER() {}
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER() {}
 
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
@@ -184,14 +222,45 @@ public:
 	inline ManagedBuffer(ManagedBuffer &&) noexcept = default;
 	~ManagedBuffer() override = default;
 
-	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
 		static myvk::Ptr<myvk::BufferBase> x;
 		return x;
 	}
 };
-class ManagedImage final : public ImageBase, public ImageAttachmentInfo<ManagedImage> {
+
+class ImageSize {
 private:
-	MYVK_RG_OBJECT_INLINE_INITIALIZER() {}
+	VkExtent3D m_extent;
+	uint32_t m_base_mip_level, m_mip_levels;
+
+public:
+	inline ImageSize() = default;
+	inline explicit ImageSize(const VkExtent2D &extent_2d, uint32_t layer_count = 1, uint32_t base_mip_level = 0,
+	                          uint32_t mip_levels = 1)
+	    : m_extent{extent_2d.width, extent_2d.height, layer_count}, m_base_mip_level{base_mip_level}, m_mip_levels{
+	                                                                                                      mip_levels} {}
+	inline explicit ImageSize(const VkExtent3D &extent_3d, uint32_t base_mip_level = 0, uint32_t mip_levels = 1)
+	    : m_extent{extent_3d}, m_base_mip_level{base_mip_level}, m_mip_levels{mip_levels} {}
+	inline ImageSize(ImageSize &&) noexcept = default;
+
+	inline const VkExtent3D &GetExtent() const { return m_extent; }
+	inline uint32_t GetBaseMipLevel() const { return m_base_mip_level; }
+	inline uint32_t GetMipLevelCount() const { return m_mip_levels; }
+	inline uint32_t GetArrayLayers() const { return m_extent.depth; }
+
+	// TODO: Implement this
+	inline void Merge1D(const ImageSize &r) {}
+	inline void Merge2D(const ImageSize &r) {}
+	inline bool Merge3D(const ImageSize &r) {}
+};
+class ManagedImage final : public ImageBase,
+                           public ImageAttachmentInfo<ManagedImage>,
+                           public ManagedResourceInfo<ManagedImage, ImageSize> {
+private:
+	bool m_persistent{false};
+
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER() {}
 
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
@@ -208,13 +277,26 @@ public:
 
 class CombinedImage final : public ImageBase {
 private:
-	MYVK_RG_OBJECT_INLINE_INITIALIZER() {}
+	VkImageViewType m_view_type;
+	std::vector<const ImageBase *> m_images;
+
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(VkImageViewType view_type, std::vector<const ImageBase *> &&images) {
+		m_view_type = view_type;
+		m_images = std::move(images);
+	}
+	template <typename Iterator>
+	MYVK_RG_INLINE_INITIALIZER(VkImageViewType view_type, Iterator images_begin, Iterator images_end) {
+		m_view_type = view_type;
+		m_images = {images_begin, images_end};
+	}
 
 public:
 	// inline constexpr ResourceState GetState() const { return ResourceState::kCombinedImage; }
 
 	inline CombinedImage() : ImageBase(ResourceState::kManaged) {}
 	inline CombinedImage(CombinedImage &&) noexcept = default;
+	inline const std::vector<const ImageBase *> &GetImages() const { return m_images; }
 	~CombinedImage() override = default;
 };
 
@@ -236,7 +318,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Resour
 		return visitor(static_cast<BufferAlias *>(this));
 	}
 	assert(false);
-	return {};
+	return visitor(static_cast<BufferAlias *>(nullptr));
 }
 template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ResourceBase::Visit(Visitor &&visitor) const {
 	switch (m_class) {
@@ -256,7 +338,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Resour
 		return visitor(static_cast<const BufferAlias *>(this));
 	}
 	assert(false);
-	return {};
+	return visitor(static_cast<const BufferAlias *>(nullptr));
 }
 
 template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageBase::Visit(Visitor &&visitor) {
@@ -271,7 +353,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageB
 		return visitor(static_cast<ImageAlias *>(this));
 	}
 	assert(false);
-	return {};
+	return visitor(static_cast<ImageAlias *>(nullptr));
 }
 template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
@@ -285,7 +367,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageB
 		return visitor(static_cast<const ImageAlias *>(this));
 	}
 	assert(false);
-	return {};
+	return visitor(static_cast<const ImageAlias *>(nullptr));
 }
 
 template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> BufferBase::Visit(Visitor &&visitor) {
@@ -299,7 +381,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Buffer
 	default:
 		assert(false);
 	}
-	return {};
+	return visitor(static_cast<BufferAlias *>(nullptr));
 }
 template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> BufferBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
@@ -312,7 +394,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Buffer
 	default:
 		assert(false);
 	}
-	return {};
+	return visitor(static_cast<const BufferAlias *>(nullptr));
 }
 
 template <typename Derived>

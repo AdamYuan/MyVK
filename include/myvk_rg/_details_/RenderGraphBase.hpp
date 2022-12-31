@@ -32,6 +32,7 @@ private:
 
 	template <typename> friend class RenderGraph;
 	template <typename> friend class ImageAttachmentInfo;
+	template <typename, typename> friend class ManagedResourceInfo;
 	template <typename> friend class PassPool;
 	template <typename> friend class InputPool;
 
