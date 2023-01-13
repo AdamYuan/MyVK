@@ -21,10 +21,9 @@ private:
 	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 
 	mutable struct {
-		uint32_t index;
+		uint32_t id;
 		bool visited;
-		// uint32_t in_degree;
-	} m_traversal_data{};
+	} m_internal_info{};
 
 	template <typename, uint8_t, bool> friend class Pass;
 	template <typename, bool> friend class PassGroup;
@@ -66,7 +65,7 @@ protected:
 		    _PassPool::template CreateAndInitialize<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
 		assert(ret);
 		m_pass_sequence.push_back(ret);
-		get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
+		get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
 		return ret;
 	}
 	// inline void DeletePass(const PoolKey &pass_key) { return PassPool::Delete(pass_key); }
@@ -81,7 +80,7 @@ protected:
 	inline void ClearPasses() {
 		m_pass_sequence.clear();
 		_PassPool::Clear();
-		get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
+		get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
 	}
 };
 

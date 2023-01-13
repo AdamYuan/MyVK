@@ -373,10 +373,16 @@ protected:
 	// Create Tag and Initialize the Main Object
 	template <std::size_t Index, typename TypeToCons, typename... Args>
 	inline TypeToCons *CreateAndInitialize(const PoolKey &key, Args &&...args) {
-		// TODO: Delete this branch ?
 		if (m_data.pool.find(key) != m_data.pool.end())
 			return nullptr;
 		auto it = m_data.pool.insert({key, typename PoolData::TypeTuple{}}).first;
+		return initialize_and_set_rg_data<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
+	}
+	template <std::size_t Index, typename TypeToCons, typename... Args>
+	inline TypeToCons *CreateAndInitializeForce(const PoolKey &key, Args &&...args) {
+		auto it = m_data.pool.find(key);
+		if (it == m_data.pool.end())
+			it = m_data.pool.insert({key, typename PoolData::TypeTuple{}}).first;
 		return initialize_and_set_rg_data<Index, TypeToCons, Args...>(it, std::forward<Args>(args)...);
 	}
 	// Create Tag Only

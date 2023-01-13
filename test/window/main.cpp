@@ -15,10 +15,10 @@ class GBufferPass final
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
-		auto depth = CreateResource<myvk_rg::ManagedImage>({"depth"});
-		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"});
-		auto normal = CreateResource<myvk_rg::ManagedImage>({"normal"});
-		auto bright = CreateResource<myvk_rg::ManagedImage>({"bright"});
+		auto depth = CreateResource<myvk_rg::ManagedImage>({"depth"}, VK_FORMAT_D32_SFLOAT);
+		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"}, VK_FORMAT_R8G8B8A8_UNORM);
+		auto normal = CreateResource<myvk_rg::ManagedImage>({"normal"}, VK_FORMAT_R8G8B8A8_SNORM);
+		auto bright = CreateResource<myvk_rg::ManagedImage>({"bright"}, VK_FORMAT_B10G11R11_UFLOAT_PACK32);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"albedo"}, albedo);
 		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentW>({"normal"}, normal);
 		AddColorAttachmentInput<2, myvk_rg::Usage::kColorAttachmentW>({"bright"}, bright);
@@ -38,9 +38,11 @@ class WBOITGenPass final
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_test_img) {
-		auto reveal = CreateResource<myvk_rg::ManagedImage>({"reveal"});
-		auto accum = CreateResource<myvk_rg::ManagedImage>({"accum"});
+		auto reveal = CreateResource<myvk_rg::ManagedImage>({"reveal"}, VK_FORMAT_B10G11R11_UFLOAT_PACK32);
+		auto accum = CreateResource<myvk_rg::ManagedImage>({"accum"}, VK_FORMAT_R32_SFLOAT);
 		reveal->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
+		reveal->SetCanvasSize();
+
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"reveal"}, reveal);
 		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentRW>({"accum"}, accum);
 		SetDepthAttachmentInput<myvk_rg::Usage::kDepthAttachmentR>({"depth_test"}, depth_test_img);
@@ -61,7 +63,7 @@ private:
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
 		printf("image_src = %p\n", image_src);
 
-		auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"});
+		auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"}, image_src->GetFormat());
 		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 		    {"image_src"}, image_src, nullptr);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"image_dst"}, image_dst);
@@ -148,7 +150,7 @@ private:
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}),
 			       GetImageResource({"draw_list", i}));
 
-			auto managed_image = CreateResource<myvk_rg::ManagedImage>({"noise_tex", i});
+			auto managed_image = CreateResource<myvk_rg::ManagedImage>({"noise_tex", i}, VK_FORMAT_R8_UNORM);
 			std::cout << managed_image->GetKey().GetName() << " " << managed_image->GetKey().GetID() << std::endl;
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"noise_tex", i}),
 			       GetImageResource({"noise_tex", i}));
@@ -204,7 +206,7 @@ private:
 		//     {"noise_tex_rw"}, noise_tex);
 		AddInputAttachmentInput<0, 1>({"noise_tex_rw"}, noise_tex);
 
-		auto final_img = CreateResource<myvk_rg::ManagedImage>({"final_img"});
+		auto final_img = CreateResource<myvk_rg::ManagedImage>({"final_img"}, VK_FORMAT_R8G8B8A8_UNORM);
 		printf("final_img = %p\n", final_img);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"color_attachment"}, final_img);
 	}
@@ -239,11 +241,12 @@ private:
 			auto blur_bright_pass = PushPass<BlurPass>({"blur_bright_pass"}, gbuffer_pass->GetBrightOutput());
 			auto wboit_gen_pass = PushPass<WBOITGenPass>({"wboit_gen_pass"}, gbuffer_pass->GetDepthOutput());
 			auto screen_pass = PushPass<ScreenPass>(
-			    {"screen_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen1"}), gbuffer_pass->GetAlbedoOutput(),
-			    gbuffer_pass->GetNormalOutput(), wboit_gen_pass->GetRevealOutput(), wboit_gen_pass->GetAccumOutput());
-			auto bright_pass =
-			    PushPass<BrightPass>({"bright_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen2"}),
-			                         screen_pass->GetScreenOutput(), blur_bright_pass->GetImageDstOutput());
+			    {"screen_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen1"}, VK_FORMAT_R8G8B8A8_UNORM),
+			    gbuffer_pass->GetAlbedoOutput(), gbuffer_pass->GetNormalOutput(), wboit_gen_pass->GetRevealOutput(),
+			    wboit_gen_pass->GetAccumOutput());
+			auto bright_pass = PushPass<BrightPass>(
+			    {"bright_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen2"}, VK_FORMAT_R8G8B8A8_UNORM),
+			    screen_pass->GetScreenOutput(), blur_bright_pass->GetImageDstOutput());
 			AddResult({"final"}, bright_pass->GetScreenOutput());
 		}
 	}

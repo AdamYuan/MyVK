@@ -74,6 +74,8 @@ public:
 	static constexpr ResourceType kType = _details_resource_trait_::ResourceTrait<Type>::kType;
 	static constexpr ResourceState kState = _details_resource_trait_::ResourceTrait<Type>::kState;
 	static constexpr ResourceClass kClass = MakeResourceClass(kType, kState);
+	static constexpr bool kIsManagedOrCombinedImage =
+	    kClass == ResourceClass::kCombinedImage || kClass == ResourceClass::kManagedImage;
 };
 
 class ResourceBase : public ObjectBase {
@@ -93,6 +95,7 @@ public:
 
 	inline ResourceType GetType() const { return static_cast<ResourceType>(static_cast<uint8_t>(m_class) & 1u); }
 	inline ResourceState GetState() const { return static_cast<ResourceState>(static_cast<uint8_t>(m_class) >> 1u); }
+	inline ResourceClass GetClass() const { return m_class; }
 
 	// TODO: Is that actually needed ? (currently implemented in Resource.hpp)
 	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Visit(Visitor &&visitor);

@@ -13,7 +13,9 @@ namespace myvk_rg::_details_ {
 
 // Alias Output Pool (for Sub-pass)
 template <typename Derived>
-class AliasOutputPool : public Pool<Derived, BufferAlias>, public Pool<Derived, ImageAlias> {
+class AliasOutputPool : public Pool<Derived, BufferAlias>,
+                        public Pool<Derived, ImageAlias>,
+                        public Pool<Derived, CombinedImage> {
 private:
 	template <typename Type, typename AliasType>
 	inline Type *make_alias_output(const PoolKey &output_key, Type *resource) {
@@ -43,7 +45,12 @@ protected:
 	inline ImageBase *MakeImageAliasOutput(const PoolKey &image_alias_output_key, ImageBase *image_output) {
 		return make_alias_output<ImageBase, ImageAlias>(image_alias_output_key, image_output);
 	}
-	// TODO: MakeCombinedImageOutput
+	template <typename... Args>
+	inline ImageBase *MakeCombinedImageOutput(const PoolKey &combined_image_output_key, Args &&...args) {
+		using Pool = Pool<Derived, CombinedImage>;
+		return Pool::template CreateAndInitializeForce<0, CombinedImage>(combined_image_output_key,
+		                                                                 std::forward<Args>(args)...);
+	}
 	inline void RemoveBufferAliasOutput(const PoolKey &buffer_alias_output_key) {
 		Pool<Derived, BufferAlias>::Delete(buffer_alias_output_key);
 	}
@@ -57,7 +64,7 @@ protected:
 // Resource Input
 class Input {
 private:
-	std::variant<ImageBase *, BufferBase *> m_resource_ptr{};
+	ResourceBase *m_resource_ptr{};
 	Usage m_usage{};
 	VkPipelineStageFlags2 m_usage_pipeline_stages{};
 	uint32_t m_descriptor_binding{UINT32_MAX};
@@ -71,14 +78,12 @@ public:
 	    : m_resource_ptr{resource_ptr}, m_usage{usage}, m_usage_pipeline_stages{usage_pipeline_stages},
 	      m_descriptor_binding{descriptor_binding}, m_attachment_index{attachment_index} {}
 	template <typename Type = ResourceBase> inline Type *GetResource() const {
-		return std::visit(
-		    [](auto arg) -> Type * {
-			    using CURType = std::decay_t<decltype(*arg)>;
-			    if constexpr (std::is_same_v<Type, CURType> || std::is_base_of_v<Type, CURType>)
-				    return arg;
-			    return nullptr;
-		    },
-		    m_resource_ptr);
+		return m_resource_ptr->Visit([](auto *resource) -> Type * {
+			using CURType = std::decay_t<decltype(*resource)>;
+			if constexpr (std::is_same_v<Type, CURType> || std::is_base_of_v<Type, CURType>)
+				return resource;
+			return nullptr;
+		});
 	}
 	inline Usage GetUsage() const { return m_usage; }
 	inline VkPipelineStageFlags2 GetUsagePipelineStages() const { return m_usage_pipeline_stages; }
@@ -88,11 +93,12 @@ public:
 
 // Input Pool
 namespace _details_rg_pool_ {
-using InputPoolData = PoolData<Input, PoolVariant<BufferAlias, ImageAlias>>;
+using InputPoolData = PoolData<Input, PoolVariant<BufferAlias, ImageAlias, CombinedImage>>;
 }
-template <typename Derived> class InputPool : public Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias>> {
+template <typename Derived>
+class InputPool : public Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias, CombinedImage>> {
 private:
-	using _InputPool = Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias>>;
+	using _InputPool = Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias, CombinedImage>>;
 
 	inline RenderGraphBase *get_render_graph_ptr() {
 		static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
@@ -105,7 +111,7 @@ private:
 	template <typename... Args> inline Input *add_input(const PoolKey &input_key, Args &&...input_args) {
 		auto ret = _InputPool::template CreateAndInitialize<0, Input>(input_key, std::forward<Args>(input_args)...);
 		assert(ret);
-		get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
+		get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
 		return ret;
 	}
 
@@ -163,7 +169,7 @@ protected:
 	inline bool AddInput(const PoolKey &input_key, ImageBase *image) {
 		return add_input(input_key, image, Usage, PipelineStageFlags);
 	}
-	// TODO: AddCombinedImageInput()
+
 	inline const Input *GetInput(const PoolKey &input_key) const {
 		return _InputPool::template Get<0, Input>(input_key);
 	}
@@ -418,7 +424,6 @@ private:
 
 public:
 	inline AttachmentInputSlot() {
-		// TODO: Should AttachmentData be Object ?
 		/* static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
 		if constexpr (std::is_base_of_v<ObjectBase, Derived>)
 		    m_descriptor_set_data.set_render_graph_ptr(
@@ -491,7 +496,7 @@ template <typename Derived> void InputPool<Derived>::RemoveInput(const PoolKey &
 			((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_remove_input(input);
 	}
 	InputPool::Delete(input_key);
-	get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
+	get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
 }
 
 template <typename Derived> void InputPool<Derived>::ClearInputs() {
@@ -500,7 +505,7 @@ template <typename Derived> void InputPool<Derived>::ClearInputs() {
 	if constexpr (std::is_base_of_v<AttachmentInputSlot<Derived>, Derived>)
 		((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_clear_inputs();
 	InputPool::Clear();
-	get_render_graph_ptr()->m_compile_phrase.generate_pass_sequence = true;
+	get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
 }
 
 } // namespace myvk_rg::_details_

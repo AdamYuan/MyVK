@@ -17,7 +17,7 @@
 namespace myvk_rg::_details_ {
 class BufferBase : public ResourceBase {
 public:
-	// inline constexpr ResourceType GetType() const { return ResourceType::kBuffer; }
+	inline constexpr ResourceType GetType() const { return ResourceType::kBuffer; }
 
 	inline ~BufferBase() override = default;
 	inline explicit BufferBase(ResourceState state) : ResourceBase(MakeResourceClass(ResourceType::kBuffer, state)) {}
@@ -33,7 +33,7 @@ public:
 
 class ImageBase : public ResourceBase {
 public:
-	// inline constexpr ResourceType GetType() const { return ResourceType::kImage; }
+	inline constexpr ResourceType GetType() const { return ResourceType::kImage; }
 
 	inline ~ImageBase() override = default;
 	inline explicit ImageBase(ResourceState state) : ResourceBase(MakeResourceClass(ResourceType::kImage, state)) {}
@@ -45,9 +45,11 @@ public:
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
 		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
 	};
+	inline VkFormat GetFormat() const {
+		return Visit([](auto *image) -> VkFormat { return image->GetFormat(); });
+	}
 };
 
-// TODO: Attachment
 template <typename Derived> class ImageAttachmentInfo {
 private:
 	inline RenderGraphBase *get_render_graph_ptr() {
@@ -90,13 +92,16 @@ public:
 	inline ~ExternalImageBase() override = default;
 
 public:
-	// inline constexpr ResourceState GetState() const { return ResourceState::kExternal; }
+	inline constexpr ResourceState GetState() const { return ResourceState::kExternal; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kExternalImageBase; }
 
 	virtual const myvk::Ptr<myvk::ImageView> &GetVkImageView() const = 0;
+	inline VkFormat GetFormat() const { return GetVkImageView()->GetImagePtr()->GetFormat(); }
 };
 class ExternalBufferBase : public BufferBase {
 public:
-	// inline constexpr ResourceState GetState() const { return ResourceState::kExternal; }
+	inline constexpr ResourceState GetState() const { return ResourceState::kExternal; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kExternalBufferBase; }
 
 	virtual const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const = 0;
 
@@ -136,7 +141,8 @@ private:
 	}
 
 public:
-	// inline constexpr ResourceState GetState() const { return ResourceState::kAlias; }
+	inline constexpr ResourceState GetState() const { return ResourceState::kAlias; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kImageAlias; }
 
 	inline ImageAlias() : ImageBase(ResourceState::kAlias) {}
 	inline ImageAlias(ImageAlias &&) noexcept = default;
@@ -145,6 +151,7 @@ public:
 	inline const ImageBase *GetPointedResource() const { return m_pointed_image; }
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const { return m_pointed_image->GetVkImageView(); }
+	inline VkFormat GetFormat() const { return m_pointed_image->GetFormat(); }
 };
 class BufferAlias final : public BufferBase {
 private:
@@ -160,7 +167,8 @@ private:
 	}
 
 public:
-	// inline constexpr ResourceState GetState() const { return ResourceState::kAlias; }
+	inline constexpr ResourceState GetState() const { return ResourceState::kAlias; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kBufferAlias; }
 
 	inline BufferAlias() : BufferBase(ResourceState::kAlias) {}
 	inline BufferAlias(BufferAlias &&) = default;
@@ -195,7 +203,8 @@ public:
 		}
 	}
 	inline const SizeType &GetSize() const { return m_size; }
-	inline void SetSize(const SizeType &size) {
+	template <typename... Args> inline void SetSize(Args &&...args) {
+		SizeType size{std::forward<Args>(args)...};
 		if (m_size != size) {
 			m_size = size;
 			get_render_graph_ptr()->m_compile_phrase.generate_vk_resource = true;
@@ -210,13 +219,17 @@ public:
 
 class ManagedBuffer final : public BufferBase, public ManagedResourceInfo<ManagedBuffer, VkDeviceSize> {
 private:
-	bool m_persistent{false};
+	mutable struct {
+		uint32_t buffer_id;
+	} m_internal_info;
 
+	friend class RenderGraphBase;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {}
 
 public:
-	// inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
+	inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kManagedBuffer; }
 
 	inline ManagedBuffer() : BufferBase(ResourceState::kManaged) {}
 	inline ManagedBuffer(ManagedBuffer &&) noexcept = default;
@@ -228,46 +241,109 @@ public:
 	}
 };
 
-class ImageSize {
+class SubImageSize {
 private:
-	VkExtent3D m_extent;
-	uint32_t m_base_mip_level, m_mip_levels;
+	VkExtent3D m_extent{};
+	uint32_t m_layers{}, m_base_mip_level{}, m_mip_levels{};
 
 public:
-	inline ImageSize() = default;
-	inline explicit ImageSize(const VkExtent2D &extent_2d, uint32_t layer_count = 1, uint32_t base_mip_level = 0,
-	                          uint32_t mip_levels = 1)
-	    : m_extent{extent_2d.width, extent_2d.height, layer_count}, m_base_mip_level{base_mip_level}, m_mip_levels{
-	                                                                                                      mip_levels} {}
-	inline explicit ImageSize(const VkExtent3D &extent_3d, uint32_t base_mip_level = 0, uint32_t mip_levels = 1)
-	    : m_extent{extent_3d}, m_base_mip_level{base_mip_level}, m_mip_levels{mip_levels} {}
-	inline ImageSize(ImageSize &&) noexcept = default;
+	inline SubImageSize() = default;
+	inline explicit SubImageSize(const VkExtent3D &extent, uint32_t layers = 1, uint32_t base_mip_level = 0,
+	                             uint32_t mip_levels = 1)
+	    : m_extent{extent}, m_layers{layers}, m_base_mip_level{base_mip_level}, m_mip_levels{mip_levels} {}
+	inline explicit SubImageSize(const VkExtent2D &extent_2d, uint32_t layers = 1, uint32_t base_mip_level = 0,
+	                             uint32_t mip_levels = 1)
+	    : m_extent{extent_2d.width, extent_2d.height, 1}, m_layers{layers}, m_base_mip_level{base_mip_level},
+	      m_mip_levels{mip_levels} {}
+	bool operator==(const SubImageSize &r) const {
+		return std::tie(m_extent.width, m_extent.height, m_extent.depth, m_layers, m_base_mip_level, m_mip_levels) ==
+		       std::tie(r.m_extent.width, r.m_extent.height, r.m_extent.depth, r.m_layers, r.m_base_mip_level,
+		                r.m_mip_levels);
+	}
+	bool operator!=(const SubImageSize &r) const {
+		return std::tie(m_extent.width, m_extent.height, m_extent.depth, m_layers, m_base_mip_level, m_mip_levels) !=
+		       std::tie(r.m_extent.width, r.m_extent.height, r.m_extent.depth, r.m_layers, r.m_base_mip_level,
+		                r.m_mip_levels);
+	}
 
 	inline const VkExtent3D &GetExtent() const { return m_extent; }
 	inline uint32_t GetBaseMipLevel() const { return m_base_mip_level; }
 	inline uint32_t GetMipLevelCount() const { return m_mip_levels; }
-	inline uint32_t GetArrayLayers() const { return m_extent.depth; }
+	inline uint32_t GetArrayLayers() const { return m_layers; }
+
+	inline void Merge(const SubImageSize &r) {
+		if (m_layers == 0)
+			*this = r;
+		else {
+			assert(std::tie(m_extent.width, m_extent.height, m_extent.depth) ==
+			       std::tie(r.m_extent.width, r.m_extent.height, r.m_extent.depth));
+
+			if (m_layers == r.m_layers && m_base_mip_level + m_mip_levels == r.m_base_mip_level)
+				m_mip_levels += r.m_mip_levels; // Merge MipMap
+			else if (m_base_mip_level == r.m_base_mip_level && m_mip_levels == r.m_mip_levels)
+				m_layers += r.m_layers; // Merge Layer
+			else
+				assert(false);
+		}
+	}
 
 	// TODO: Implement this
-	inline void Merge1D(const ImageSize &r) {}
-	inline void Merge2D(const ImageSize &r) {}
-	inline bool Merge3D(const ImageSize &r) {}
+	// inline void Merge1D(const ImageSize &r) {}
+	// inline void Merge2D(const ImageSize &r) {}
+	// inline bool Merge3D(const ImageSize &r) {}
 };
+
 class ManagedImage final : public ImageBase,
                            public ImageAttachmentInfo<ManagedImage>,
-                           public ManagedResourceInfo<ManagedImage, ImageSize> {
+                           public ManagedResourceInfo<ManagedImage, SubImageSize> {
 private:
-	bool m_persistent{false};
+	mutable struct {
+		uint32_t image_id;
+		uint32_t base_layer;
+		const CombinedImage *parent;
+	} m_internal_info{};
 
+	VkImageViewType m_view_type{};
+	VkFormat m_format{};
+
+	friend class RenderGraphBase;
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER() {}
+	MYVK_RG_INLINE_INITIALIZER(VkFormat format, VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_2D) {
+		m_format = format;
+		m_view_type = view_type;
+		SetCanvasSize();
+	}
 
 public:
-	// inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
+	inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kManagedImage; }
 
 	inline ManagedImage() : ImageBase(ResourceState::kManaged) {}
 	inline ManagedImage(ManagedImage &&) noexcept = default;
 	~ManagedImage() override = default;
+
+	/* inline void SetViewType(VkImageViewType view_type) {
+	    if (m_view_type != view_type) {
+	        m_view_type = view_type;
+	        GetRenderGraphPtr()->m_compile_phrase.generate_vk_image_view = true;
+	    }
+	} */
+	inline VkImageViewType GetViewType() const { return m_view_type; }
+	inline VkFormat GetFormat() const { return m_format; }
+
+	inline void SetSize2D(const VkExtent2D &extent_2d, uint32_t base_mip_level = 0, uint32_t mip_levels = 1) {
+		SetSize(extent_2d, (uint32_t)1u, base_mip_level, mip_levels);
+	}
+	inline void SetSize2DArray(const VkExtent2D &extent_2d, uint32_t layer_count, uint32_t base_mip_level = 0,
+	                           uint32_t mip_levels = 1) {
+		SetSize(extent_2d, layer_count, base_mip_level, mip_levels);
+	}
+	inline void SetSize3D(const VkExtent3D &extent_3d, uint32_t base_mip_level = 0, uint32_t mip_levels = 1) {
+		SetSize(extent_3d, (uint32_t)1u, base_mip_level, mip_levels);
+	}
+	inline void SetCanvasSize() {
+		SetSizeFunc([](const VkExtent2D &extent) { return SubImageSize{extent}; });
+	}
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
 		static myvk::Ptr<myvk::ImageView> x;
@@ -277,9 +353,17 @@ public:
 
 class CombinedImage final : public ImageBase {
 private:
+	mutable struct {
+		uint32_t image_id;
+		uint32_t base_layer;
+		const CombinedImage *parent;
+		SubImageSize size;
+	} m_internal_info{};
+
 	VkImageViewType m_view_type;
 	std::vector<const ImageBase *> m_images;
 
+	friend class RenderGraphBase;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(VkImageViewType view_type, std::vector<const ImageBase *> &&images) {
 		m_view_type = view_type;
@@ -292,7 +376,11 @@ private:
 	}
 
 public:
-	// inline constexpr ResourceState GetState() const { return ResourceState::kCombinedImage; }
+	inline constexpr ResourceState GetState() const { return ResourceState::kCombinedImage; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kCombinedImage; }
+
+	inline VkImageViewType GetViewType() const { return m_view_type; }
+	inline VkFormat GetFormat() const { return m_images[0]->GetFormat(); }
 
 	inline CombinedImage() : ImageBase(ResourceState::kManaged) {}
 	inline CombinedImage(CombinedImage &&) noexcept = default;
