@@ -19,7 +19,7 @@ protected:
 	inline bool AddResult(const PoolKey &result_key, ResourceBase *resource) {
 		assert(resource);
 		m_compile_phrase.assign_pass_resource_indices = true;
-		return _ResultPool::template CreateAndInitialize<0, ResourceBase *>(result_key, resource);
+		return _ResultPool::template CreateAndInitializeForce<0, ResourceBase *>(result_key, resource);
 	}
 	inline bool IsResultExist(const PoolKey &result_key) const { return _ResultPool::Exist(result_key); }
 	inline void RemoveResult(const PoolKey &result_key) {

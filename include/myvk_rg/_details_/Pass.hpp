@@ -21,8 +21,8 @@ private:
 	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 
 	mutable struct {
-		uint32_t id;
-		bool visited;
+		uint32_t id{};
+		bool visited{};
 	} m_internal_info{};
 
 	template <typename, uint8_t, bool> friend class Pass;

@@ -74,8 +74,11 @@ public:
 	static constexpr ResourceType kType = _details_resource_trait_::ResourceTrait<Type>::kType;
 	static constexpr ResourceState kState = _details_resource_trait_::ResourceTrait<Type>::kState;
 	static constexpr ResourceClass kClass = MakeResourceClass(kType, kState);
-	static constexpr bool kIsManagedOrCombinedImage =
+	static constexpr bool kIsCombinedOrManagedImage =
 	    kClass == ResourceClass::kCombinedImage || kClass == ResourceClass::kManagedImage;
+	static constexpr bool kIsCombinedImageChild = kClass == ResourceClass::kCombinedImage ||
+	                                              kClass == ResourceClass::kManagedImage ||
+	                                              kClass == ResourceClass::kImageAlias;
 };
 
 class ResourceBase : public ObjectBase {
@@ -87,6 +90,7 @@ private:
 
 	template <typename, typename...> friend class Pool;
 	template <typename> friend class AliasOutputPool;
+	friend class CombinedImage;
 
 public:
 	inline ~ResourceBase() override = default;

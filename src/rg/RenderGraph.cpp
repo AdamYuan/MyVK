@@ -5,74 +5,78 @@
 
 namespace myvk_rg::_details_ {
 
-void RenderGraphBase::_traverse_pass_graph(PassBase *pass) const {
+void RenderGraphBase::_visit_resource_dep_pass(const PassBase *pass, const ResourceBase *resource) const {
 	// Mark Visited Pass, Generate Temporal Managed Resource Sets
-	const auto visit_dep = [this, pass](PassBase *dep_pass) -> void {
+	const auto visit_dep_pass = [this, pass](const PassBase *dep_pass) -> void {
 		if (dep_pass && dep_pass != pass && !dep_pass->m_internal_info.visited) {
 			dep_pass->m_internal_info.visited = true;
 			_traverse_pass_graph(dep_pass);
 		}
 	};
+	resource->Visit([this, visit_dep_pass](auto *resource) -> void {
+		constexpr auto kClass = ResourceVisitorTrait<decltype(resource)>::kClass;
+
+		// For CombinedImage, further For Each its Child Images
+		if constexpr (kClass == ResourceClass::kCombinedImage) {
+			if (resource->m_internal_info._has_parent_ == false)
+				m_compile_info._managed_image_set_.insert(resource);
+			// Visit Each SubImage
+			resource->ForEachImage([visit_dep_pass](auto *sub_image) -> void {
+				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
+					sub_image->m_internal_info._has_parent_ = true;
+					if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
+						// Visit Child Image
+						visit_dep_pass(sub_image->GetProducerPassPtr());
+					}
+				} else {
+					// Is ImageAlias
+					sub_image->GetPointedResource()->Visit([](auto *sub_image) -> void {
+						if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage)
+							sub_image->m_internal_info._has_parent_ = true;
+					});
+					visit_dep_pass(sub_image->GetProducerPassPtr());
+				}
+			});
+		} else {
+			if constexpr (kClass == ResourceClass::kManagedImage) {
+				if (resource->m_internal_info._has_parent_ == false)
+					m_compile_info._managed_image_set_.insert(resource);
+			} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
+				m_compile_info._managed_buffer_set_.insert(resource);
+			}
+			visit_dep_pass(resource->GetProducerPassPtr());
+		}
+	});
+}
+void RenderGraphBase::_traverse_pass_graph(const PassBase *pass) const {
 	// For Each Input
 	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
-		auto dep_resource = pass->m_p_input_pool_data->ValueGet<0, Input>(it)->GetResource();
-		dep_resource->Visit([this, visit_dep](auto *resource) -> void {
-			constexpr auto kClass = ResourceVisitorTrait<decltype(resource)>::kClass;
-
-			// For CombinedImage, further For Each its Child Images
-			if constexpr (kClass == ResourceClass::kCombinedImage) {
-				m_compile_info._managed_image_set_.insert(resource);
-				// Visit Each Child Image, Update Size and Base Layer
-				for (auto *sub_image : resource->GetImages()) {
-					// Set Basic Data
-					sub_image->Visit([resource](auto *sub_image) -> void {
-						if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsManagedOrCombinedImage) {
-							// The CombinedImage Structure should be a TREE, not DAG
-							assert(sub_image->m_internal_info.parent == nullptr);
-							sub_image->m_internal_info.parent = resource;
-						} else
-							assert(false);
-					});
-					// Visit Child Image
-					visit_dep(sub_image->GetProducerPassPtr());
-				}
-			} else {
-				if constexpr (kClass == ResourceClass::kManagedImage) {
-					m_compile_info._managed_image_set_.insert(resource);
-				} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
-					m_compile_info._managed_buffer_set_.insert(resource);
-				}
-				visit_dep(resource->GetProducerPassPtr());
-			}
-		});
+		_visit_resource_dep_pass(pass, pass->m_p_input_pool_data->ValueGet<0, Input>(it)->GetResource());
 	}
 }
 void RenderGraphBase::_traverse_combined_image(const CombinedImage *image) {
 	// Visit Each Child Image, Update Size and Base Layer
-	for (auto *sub_image : image->GetImages()) {
-		// Set Basic Data
-		image->m_internal_info.size = {};
-		sub_image->Visit([image](auto *sub_image) -> void {
-			if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsManagedOrCombinedImage) {
-				sub_image->m_internal_info.image_id = image->m_internal_info.image_id;
-				sub_image->m_internal_info.parent =
-				    image->m_internal_info.parent ? image->m_internal_info.parent : image;
-				sub_image->m_internal_info.base_layer =
-				    image->m_internal_info.base_layer + image->m_internal_info.size.GetArrayLayers();
+	image->m_internal_info.size = {};
+	auto *parent = image->m_internal_info.parent ? image->m_internal_info.parent : image;
+	image->ForEachExpandedImage([image, parent](auto *sub_image) -> void {
+		if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
+			sub_image->m_internal_info.image_id = image->m_internal_info.image_id;
+			sub_image->m_internal_info.parent = parent;
+			sub_image->m_internal_info.base_layer =
+			    image->m_internal_info.base_layer + image->m_internal_info.size.GetArrayLayers();
+			sub_image->m_internal_info._has_parent_ = false; // Restore _has_parent_
 
-				// Merge the Size of the Current Child Image
-				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
-					image->m_internal_info.size.Merge(sub_image->GetSize());
-				} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass ==
-				                     ResourceClass::kCombinedImage) {
-					_traverse_combined_image(sub_image); // Further Query SubImage Size
-					image->m_internal_info.size.Merge(sub_image->m_internal_info.size);
-				}
-			} else
-				assert(false);
-		});
-	}
+			// Merge the Size of the Current Child Image
+			if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
+				image->m_internal_info.size.Merge(sub_image->GetSize());
+			} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kCombinedImage) {
+				_traverse_combined_image(sub_image); // Further Query SubImage Size
+				image->m_internal_info.size.Merge(sub_image->m_internal_info.size);
+			}
+		}
+	});
 }
+
 void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const {
 	for (auto pass : *p_cur_seq) {
 		if (pass->m_internal_info.visited) {
@@ -88,10 +92,7 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 		m_compile_info.pass_sequence.clear();
 		for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it) {
 			ResourceBase *resource = *m_p_result_pool_data->ValueGet<0, ResourceBase *>(it);
-			if (resource->GetProducerPassPtr()) {
-				resource->GetProducerPassPtr()->m_internal_info.visited = true;
-				_traverse_pass_graph(resource->GetProducerPassPtr());
-			}
+			_visit_resource_dep_pass(nullptr, resource);
 		}
 		_extract_visited_pass(m_p_pass_pool_sequence);
 	}
@@ -108,16 +109,25 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 
 	{ // Generate ManagedImage List
 		m_compile_info.managed_images.clear();
+		// Add all top-level ManagedImages to the ManagedImage List
 		for (auto *image : m_compile_info._managed_image_set_) {
 			image->Visit([this](auto *image) -> void {
-				if constexpr (ResourceVisitorTrait<decltype(image)>::kIsManagedOrCombinedImage) {
-					if (image->m_internal_info.parent == nullptr) {
+				if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
+					if (!image->m_internal_info._has_parent_) {
 						image->m_internal_info.image_id = m_compile_info.managed_images.size();
-						image->m_internal_info.base_layer = 0;
 						m_compile_info.managed_images.push_back(image);
-						if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage) {
-							_traverse_combined_image(image);
-						}
+					}
+				}
+			});
+		}
+		// Generate CombinedImage Data
+		for (auto *image : m_compile_info.managed_images) {
+			image->Visit([](auto *image) -> void {
+				if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
+					image->m_internal_info.parent = nullptr;
+					image->m_internal_info.base_layer = 0;
+					if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage) {
+						_traverse_combined_image(image);
 					}
 				}
 			});
@@ -130,6 +140,9 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 		          << std::endl;
 	}
 	printf("managed image count: %ld\n", m_compile_info.managed_images.size());
+	// for (auto image : m_compile_info.managed_images) {
+	// 	std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID() << std::endl;
+	// }
 	printf("managed buffer count: %ld\n", m_compile_info.managed_buffers.size());
 }
 

@@ -109,25 +109,30 @@ private:
 	}
 
 	template <typename... Args> inline Input *add_input(const PoolKey &input_key, Args &&...input_args) {
-		auto ret = _InputPool::template CreateAndInitialize<0, Input>(input_key, std::forward<Args>(input_args)...);
+		auto ret =
+		    _InputPool::template CreateAndInitializeForce<0, Input>(input_key, std::forward<Args>(input_args)...);
 		assert(ret);
 		get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
 		return ret;
 	}
 
 	template <typename Type, typename AliasType> inline Type *make_output(const PoolKey &input_key) {
-		const Input *input = _InputPool::template Get<0, Input>(input_key);
-		assert(input && !UsageIsReadOnly(input->GetUsage()));
-		if (!input || UsageIsReadOnly(input->GetUsage())) // Read-Only input should not produce an output
+		const Input *p_input = _InputPool::template Get<0, Input>(input_key);
+		assert(p_input && !UsageIsReadOnly(p_input->GetUsage()));
+		if (!p_input || UsageIsReadOnly(p_input->GetUsage())) // Read-Only input should not produce an output
 			return nullptr;
-		Type *resource = input->GetResource<Type>();
+		Type *resource = p_input->GetResource<Type>();
 		assert(resource);
 		if (!resource)
 			return nullptr;
 		else if (resource->GetProducerPassPtr() == (PassBase *)static_cast<Derived *>(this))
 			return resource;
-		else
-			return _InputPool::template InitializeOrGet<1, AliasType>(input_key, resource);
+		else {
+			AliasType *ret = _InputPool::template InitializeOrGet<1, AliasType>(input_key, resource);
+			if (ret->GetPointedResource() != resource)
+				ret = _InputPool::template Initialize<1, AliasType>(input_key, resource);
+			return ret;
+		}
 	}
 
 	template <typename> friend class DescriptorInputSlot;
