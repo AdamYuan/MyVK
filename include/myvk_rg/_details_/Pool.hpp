@@ -3,7 +3,6 @@
 
 #include "Macro.hpp"
 #include "ObjectBase.hpp"
-// #include "ResourceBase.hpp"
 
 #include <cinttypes>
 #include <cstdio>

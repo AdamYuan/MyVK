@@ -33,8 +33,7 @@ private:
 		std::vector<const ImageBase *> managed_images;                  // Contains CombinedImage and ManagedImage
 		std::vector<const ManagedBuffer *> managed_buffers;             // Contains ManagedBuffer
 	} m_compile_info{};
-	void _visit_resource_dep_pass(const PassBase *pass, const ResourceBase *resource) const;
-	void _traverse_pass_graph(const PassBase *sub_image) const;
+	void _visit_resource_dep_pass(const ResourceBase *resource) const;
 	void _extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const;
 	static void _traverse_combined_image(const CombinedImage *image);
 

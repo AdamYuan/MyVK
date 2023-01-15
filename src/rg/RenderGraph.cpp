@@ -5,23 +5,26 @@
 
 namespace myvk_rg::_details_ {
 
-void RenderGraphBase::_visit_resource_dep_pass(const PassBase *pass, const ResourceBase *resource) const {
+void RenderGraphBase::_visit_resource_dep_pass(const ResourceBase *resource) const {
 	// Mark Visited Pass, Generate Temporal Managed Resource Sets
-	const auto visit_dep_pass = [this, pass](const PassBase *dep_pass) -> void {
-		if (dep_pass && dep_pass != pass && !dep_pass->m_internal_info.visited) {
+	const auto visit_dep_pass = [this](const PassBase *dep_pass) -> void {
+		if (dep_pass && !dep_pass->m_internal_info.visited) {
 			dep_pass->m_internal_info.visited = true;
-			_traverse_pass_graph(dep_pass);
+			// Further Traverse dep_pass's dependent Resources
+			for (auto it = dep_pass->m_p_input_pool_data->pool.begin(); it != dep_pass->m_p_input_pool_data->pool.end();
+			     ++it) {
+				_visit_resource_dep_pass(dep_pass->m_p_input_pool_data->ValueGet<0, Input>(it)->GetResource());
+			}
 		}
 	};
-	resource->Visit([this, visit_dep_pass](auto *resource) -> void {
+	resource->Visit([this, &visit_dep_pass](auto *resource) -> void {
 		constexpr auto kClass = ResourceVisitorTrait<decltype(resource)>::kClass;
-
 		// For CombinedImage, further For Each its Child Images
 		if constexpr (kClass == ResourceClass::kCombinedImage) {
 			if (resource->m_internal_info._has_parent_ == false)
 				m_compile_info._managed_image_set_.insert(resource);
 			// Visit Each SubImage
-			resource->ForEachImage([visit_dep_pass](auto *sub_image) -> void {
+			resource->ForEachImage([&visit_dep_pass](auto *sub_image) -> void {
 				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
 					sub_image->m_internal_info._has_parent_ = true;
 				} else {
@@ -43,12 +46,6 @@ void RenderGraphBase::_visit_resource_dep_pass(const PassBase *pass, const Resou
 				visit_dep_pass(resource->GetProducerPass());
 		}
 	});
-}
-void RenderGraphBase::_traverse_pass_graph(const PassBase *pass) const {
-	// For Each Input
-	for (auto it = pass->m_p_input_pool_data->pool.begin(); it != pass->m_p_input_pool_data->pool.end(); ++it) {
-		_visit_resource_dep_pass(pass, pass->m_p_input_pool_data->ValueGet<0, Input>(it)->GetResource());
-	}
 }
 void RenderGraphBase::_traverse_combined_image(const CombinedImage *image) {
 	// Visit Each Child Image, Update Size and Base Layer
@@ -83,13 +80,12 @@ void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur
 			_extract_visited_pass(pass->m_p_pass_pool_sequence);
 	}
 }
+
 void RenderGraphBase::assign_pass_resource_indices() const {
 	{ // Generate Pass Sequence
 		m_compile_info.pass_sequence.clear();
-		for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it) {
-			ResourceBase *resource = *m_p_result_pool_data->ValueGet<0, ResourceBase *>(it);
-			_visit_resource_dep_pass(nullptr, resource);
-		}
+		for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it)
+			_visit_resource_dep_pass(*m_p_result_pool_data->ValueGet<0, ResourceBase *>(it));
 		_extract_visited_pass(m_p_pass_pool_sequence);
 	}
 

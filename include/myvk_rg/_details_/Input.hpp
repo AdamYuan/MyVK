@@ -56,21 +56,6 @@ protected:
 	inline void ClearImageAliasOutputs() { Pool<Derived, ImageAlias>::Clear(); }
 };
 
-// Combined Image Pool
-template <typename Derived> class CombinedImagePool : public Pool<Derived, CombinedImage> {
-public:
-	template <typename... Args>
-	inline CombinedImage *AddCombinedImage(const PoolKey &combined_image_key, Args &&...args) {
-		using Pool = Pool<Derived, CombinedImage>;
-		return Pool::template CreateAndInitializeForce<0, CombinedImage>(combined_image_key,
-		                                                                 std::forward<Args>(args)...);
-	}
-	inline void RemoveCombinedImage(const PoolKey &combined_image_key) {
-		Pool<Derived, CombinedImage>::Delete(combined_image_key);
-	}
-	inline void ClearCombinedImages() { Pool<Derived, CombinedImage>::Clear(); }
-};
-
 // Resource Input
 class Input {
 private:
