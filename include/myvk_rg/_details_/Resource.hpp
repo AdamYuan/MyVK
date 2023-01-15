@@ -129,10 +129,12 @@ public:
 // Alias
 class ImageAlias final : public ImageBase {
 private:
+	const PassBase *m_producer_pass{};
 	const ImageBase *m_pointed_image{};
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(ImageBase *image) {
+	MYVK_RG_INLINE_INITIALIZER(const PassBase *producer_pass, const ImageBase *image) {
+		m_producer_pass = producer_pass;
 		m_pointed_image = image->Visit([](auto *image) -> const ImageBase * {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
 				return image->GetPointedResource();
@@ -149,16 +151,19 @@ public:
 	inline ~ImageAlias() final = default;
 
 	inline const ImageBase *GetPointedResource() const { return m_pointed_image; }
+	inline const PassBase *GetProducerPass() const { return m_producer_pass; }
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const { return m_pointed_image->GetVkImageView(); }
 	inline VkFormat GetFormat() const { return m_pointed_image->GetFormat(); }
 };
 class BufferAlias final : public BufferBase {
 private:
+	const PassBase *m_producer_pass{};
 	const BufferBase *m_pointed_buffer{};
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(BufferBase *buffer) {
+	MYVK_RG_INLINE_INITIALIZER(const PassBase *producer_pass, BufferBase *buffer) {
+		m_producer_pass = producer_pass;
 		m_pointed_buffer = buffer->Visit([](auto *buffer) -> const BufferBase * {
 			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
 				return buffer->GetPointedResource();
@@ -175,6 +180,7 @@ public:
 	inline ~BufferAlias() final = default;
 
 	inline const BufferBase *GetPointedResource() const { return m_pointed_buffer; }
+	inline const PassBase *GetProducerPass() const { return m_producer_pass; }
 
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const { return m_pointed_buffer->GetVkBuffer(); }
 };
@@ -268,7 +274,7 @@ public:
 
 	inline const VkExtent3D &GetExtent() const { return m_extent; }
 	inline uint32_t GetBaseMipLevel() const { return m_base_mip_level; }
-	inline uint32_t GetMipLevelCount() const { return m_mip_levels; }
+	inline uint32_t GetMipLevels() const { return m_mip_levels; }
 	inline uint32_t GetArrayLayers() const { return m_layers; }
 
 	inline void Merge(const SubImageSize &r) {
@@ -370,13 +376,11 @@ private:
 	friend class RenderGraphBase;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(VkImageViewType view_type, std::vector<const ImageBase *> &&images) {
-		set_producer_pass_ptr(nullptr);
 		m_view_type = view_type;
 		m_images = std::move(images);
 	}
 	template <typename Iterator>
 	MYVK_RG_INLINE_INITIALIZER(VkImageViewType view_type, Iterator images_begin, Iterator images_end) {
-		set_producer_pass_ptr(nullptr);
 		m_view_type = view_type;
 		m_images = {images_begin, images_end};
 	}
@@ -591,10 +595,11 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Buffer
 
 template <typename Derived>
 class ResourcePool
-    : public Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>> {
+    : public Pool<Derived,
+                  PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, CombinedImage, ExternalImageBase>> {
 private:
 	using _ResourcePool =
-	    Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, ExternalImageBase>>;
+	    Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, CombinedImage, ExternalImageBase>>;
 
 public:
 	inline ResourcePool() = default;
@@ -612,6 +617,9 @@ protected:
 	inline Type *CreateResourceForce(const PoolKey &resource_key, Args &&...args) {
 		return _ResourcePool::template CreateAndInitializeForce<0, Type, Args...>(resource_key,
 		                                                                          std::forward<Args>(args)...);
+	}
+	template <typename... Args> inline CombinedImage *MakeCombinedImage(const PoolKey &resource_key, Args &&...args) {
+		return CreateResourceForce<CombinedImage, Args...>(resource_key, std::forward<Args>(args)...);
 	}
 	inline void DeleteResource(const PoolKey &resource_key) { return _ResourcePool::Delete(resource_key); }
 

@@ -25,9 +25,9 @@ private:
 		bool visited{};
 	} m_internal_info{};
 
-	template <typename, uint8_t, bool> friend class Pass;
-	template <typename, bool> friend class PassGroup;
-	template <typename, bool> friend class GraphicsPass;
+	template <typename, uint8_t> friend class Pass;
+	template <typename> friend class PassGroup;
+	template <typename> friend class GraphicsPass;
 	friend class RenderGraphBase;
 
 public:
@@ -96,10 +96,10 @@ struct PassFlag {
 	enum : uint8_t { kDescriptor = 4u, kGraphics = 8u, kCompute = 16u };
 };
 
-template <typename Derived, uint8_t Flags, bool EnableResource>
+template <typename Derived, uint8_t Flags>
 class Pass : public PassBase,
              public InputPool<Derived>,
-             public std::conditional_t<EnableResource, ResourcePool<Derived>, _details_rg_pass_::NoResourcePool>,
+             public ResourcePool<Derived>,
              public std::conditional_t<(Flags & PassFlag::kDescriptor) != 0, DescriptorInputSlot<Derived>,
                                        _details_rg_pass_::NoDescriptorInputSlot>,
              public std::conditional_t<(Flags & PassFlag::kGraphics) != 0, AttachmentInputSlot<Derived>,
@@ -120,9 +120,9 @@ public:
 	inline ~Pass() override = default;
 };
 
-template <typename Derived, bool EnableResource>
+template <typename Derived>
 class PassGroup : public PassBase,
-                  public std::conditional_t<EnableResource, ResourcePool<Derived>, _details_rg_pass_::NoResourcePool>,
+                  public ResourcePool<Derived>,
                   public PassPool<Derived>,
                   public AliasOutputPool<Derived> {
 public:

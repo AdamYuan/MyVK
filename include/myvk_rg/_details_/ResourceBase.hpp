@@ -23,6 +23,12 @@ enum class ResourceClass : uint8_t {
 inline constexpr ResourceClass MakeResourceClass(ResourceType type, ResourceState state) {
 	return static_cast<ResourceClass>(MAKE_RESOURCE_CLASS_VAL(type, state));
 }
+inline constexpr ResourceType GetResourceType(ResourceClass res_class) {
+	return static_cast<ResourceType>(uint8_t(static_cast<uint8_t>(res_class) & 1u));
+}
+inline constexpr ResourceState GetResourceState(ResourceClass res_class) {
+	return static_cast<ResourceState>(uint8_t(static_cast<uint8_t>(res_class) >> 1u));
+}
 #undef MAKE_RESOURCE_CLASS_VAL
 
 class ManagedImage;
@@ -84,9 +90,9 @@ public:
 class ResourceBase : public ObjectBase {
 private:
 	ResourceClass m_class{};
-	PassBase *m_producer_pass_ptr{};
+	// PassBase *m_producer_pass_ptr{};
 
-	inline void set_producer_pass_ptr(PassBase *producer_pass_ptr) { m_producer_pass_ptr = producer_pass_ptr; }
+	// inline void set_producer_pass_ptr(PassBase *producer_pass_ptr) { m_producer_pass_ptr = producer_pass_ptr; }
 
 	template <typename, typename...> friend class Pool;
 	template <typename> friend class AliasOutputPool;
@@ -97,8 +103,8 @@ public:
 	inline ResourceBase(ResourceClass resource_class) : m_class{resource_class} {}
 	inline ResourceBase(ResourceBase &&) noexcept = default;
 
-	inline ResourceType GetType() const { return static_cast<ResourceType>(static_cast<uint8_t>(m_class) & 1u); }
-	inline ResourceState GetState() const { return static_cast<ResourceState>(static_cast<uint8_t>(m_class) >> 1u); }
+	inline ResourceType GetType() const { return GetResourceType(m_class); }
+	inline ResourceState GetState() const { return GetResourceState(m_class); }
 	inline ResourceClass GetClass() const { return m_class; }
 
 	// TODO: Is that actually needed ? (currently implemented in Resource.hpp)
@@ -107,7 +113,7 @@ public:
 	// virtual bool IsPerFrame() const = 0;
 	// virtual void Resize(uint32_t width, uint32_t height) {}
 
-	inline PassBase *GetProducerPassPtr() const { return m_producer_pass_ptr; }
+	// inline PassBase *GetProducerPassPtr() const { return m_producer_pass_ptr; }
 };
 
 } // namespace myvk_rg::_details_

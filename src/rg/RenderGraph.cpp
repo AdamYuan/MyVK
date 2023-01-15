@@ -24,17 +24,13 @@ void RenderGraphBase::_visit_resource_dep_pass(const PassBase *pass, const Resou
 			resource->ForEachImage([visit_dep_pass](auto *sub_image) -> void {
 				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
 					sub_image->m_internal_info._has_parent_ = true;
-					if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
-						// Visit Child Image
-						visit_dep_pass(sub_image->GetProducerPassPtr());
-					}
 				} else {
 					// Is ImageAlias
 					sub_image->GetPointedResource()->Visit([](auto *sub_image) -> void {
 						if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage)
 							sub_image->m_internal_info._has_parent_ = true;
 					});
-					visit_dep_pass(sub_image->GetProducerPassPtr());
+					visit_dep_pass(sub_image->GetProducerPass());
 				}
 			});
 		} else {
@@ -43,8 +39,8 @@ void RenderGraphBase::_visit_resource_dep_pass(const PassBase *pass, const Resou
 					m_compile_info._managed_image_set_.insert(resource);
 			} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
 				m_compile_info._managed_buffer_set_.insert(resource);
-			}
-			visit_dep_pass(resource->GetProducerPassPtr());
+			} else if constexpr (GetResourceState(kClass) == ResourceState::kAlias)
+				visit_dep_pass(resource->GetProducerPass());
 		}
 	});
 }
@@ -120,6 +116,7 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 				}
 			});
 		}
+		m_compile_info._managed_image_set_.clear();
 		// Generate CombinedImage Data
 		for (auto *image : m_compile_info.managed_images) {
 			image->Visit([](auto *image) -> void {
@@ -132,7 +129,6 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 				}
 			});
 		}
-		m_compile_info._managed_image_set_.clear();
 	}
 
 	for (auto pass : m_compile_info.pass_sequence) {
@@ -140,9 +136,18 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 		          << std::endl;
 	}
 	printf("managed image count: %ld\n", m_compile_info.managed_images.size());
-	// for (auto image : m_compile_info.managed_images) {
-	// 	std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID() << std::endl;
-	// }
+	for (auto image : m_compile_info.managed_images) {
+		std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID()
+		          << " mip_levels = " << image->Visit([](auto *image) -> uint32_t {
+			             if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
+				             return image->m_internal_info.size.GetMipLevels();
+			             else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
+			                                ResourceClass::kManagedImage)
+				             return image->GetSize().GetMipLevels();
+			             return 0;
+		             })
+		          << std::endl;
+	}
 	printf("managed buffer count: %ld\n", m_compile_info.managed_buffers.size());
 }
 

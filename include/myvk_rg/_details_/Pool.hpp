@@ -3,7 +3,7 @@
 
 #include "Macro.hpp"
 #include "ObjectBase.hpp"
-#include "ResourceBase.hpp"
+// #include "ResourceBase.hpp"
 
 #include <cinttypes>
 #include <cstdio>
@@ -349,11 +349,11 @@ private:
 			else
 				base_ptr->set_render_graph_ptr(((ObjectBase *)static_cast<const Derived *>(this))->GetRenderGraphPtr());
 			// Initialize ResourceBase
-			if constexpr (std::is_base_of_v<ResourceBase, TypeToCons>) {
-				auto resource_ptr = static_cast<ResourceBase *>(ptr);
-				if constexpr (std::is_base_of_v<PassBase, Derived>)
-					resource_ptr->set_producer_pass_ptr((PassBase *)static_cast<const Derived *>(this));
-			}
+			/* if constexpr (std::is_base_of_v<ResourceBase, TypeToCons>) {
+			    auto resource_ptr = static_cast<ResourceBase *>(ptr);
+			    if constexpr (std::is_base_of_v<PassBase, Derived>)
+			        resource_ptr->set_producer_pass_ptr((PassBase *)static_cast<const Derived *>(this));
+			} */
 			ptr->MYVK_RG_INITIALIZER_FUNC(std::forward<Args>(args)...);
 			return ptr;
 		} else {

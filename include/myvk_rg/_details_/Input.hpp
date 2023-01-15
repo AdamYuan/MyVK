@@ -13,23 +13,24 @@ namespace myvk_rg::_details_ {
 
 // Alias Output Pool (for Sub-pass)
 template <typename Derived>
-class AliasOutputPool : public Pool<Derived, BufferAlias>,
-                        public Pool<Derived, ImageAlias>,
-                        public Pool<Derived, CombinedImage> {
+class AliasOutputPool : public Pool<Derived, BufferAlias>, public Pool<Derived, ImageAlias> {
 private:
 	template <typename Type, typename AliasType>
 	inline Type *make_alias_output(const PoolKey &output_key, Type *resource) {
 		using Pool = Pool<Derived, AliasType>;
 		AliasType *alias = Pool ::template Get<0, AliasType>(output_key);
+		const PassBase *producer_pass = resource->Visit([](auto *resource) -> const PassBase * {
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kState == ResourceState::kAlias)
+				return resource->GetProducerPass();
+			else {
+				assert(false);
+				return nullptr;
+			}
+		});
 		if (alias == nullptr) {
-			alias = Pool ::template CreateAndInitialize<0, AliasType>(output_key, resource);
-		} else {
-			if (alias->GetPointedResource() == resource)
-				return alias;
-			alias = Pool ::template Initialize<0, AliasType>(output_key, resource);
-		}
-		// Redirect ProducerPassPtr
-		static_cast<ResourceBase *>(alias)->set_producer_pass_ptr(resource->GetProducerPassPtr());
+			alias = Pool ::template CreateAndInitializeForce<0, AliasType>(output_key, producer_pass, resource);
+		} else if (alias->GetPointedResource() != resource || alias->GetProducerPass() != producer_pass)
+			alias = Pool ::template Initialize<0, AliasType>(output_key, producer_pass, resource);
 		return alias;
 	}
 
@@ -45,12 +46,6 @@ protected:
 	inline ImageBase *MakeImageAliasOutput(const PoolKey &image_alias_output_key, ImageBase *image_output) {
 		return make_alias_output<ImageBase, ImageAlias>(image_alias_output_key, image_output);
 	}
-	template <typename... Args>
-	inline ImageBase *MakeCombinedImageOutput(const PoolKey &combined_image_output_key, Args &&...args) {
-		using Pool = Pool<Derived, CombinedImage>;
-		return Pool::template CreateAndInitializeForce<0, CombinedImage>(combined_image_output_key,
-		                                                                 std::forward<Args>(args)...);
-	}
 	inline void RemoveBufferAliasOutput(const PoolKey &buffer_alias_output_key) {
 		Pool<Derived, BufferAlias>::Delete(buffer_alias_output_key);
 	}
@@ -59,6 +54,21 @@ protected:
 	}
 	inline void ClearBufferAliasOutputs() { Pool<Derived, BufferAlias>::Clear(); }
 	inline void ClearImageAliasOutputs() { Pool<Derived, ImageAlias>::Clear(); }
+};
+
+// Combined Image Pool
+template <typename Derived> class CombinedImagePool : public Pool<Derived, CombinedImage> {
+public:
+	template <typename... Args>
+	inline CombinedImage *AddCombinedImage(const PoolKey &combined_image_key, Args &&...args) {
+		using Pool = Pool<Derived, CombinedImage>;
+		return Pool::template CreateAndInitializeForce<0, CombinedImage>(combined_image_key,
+		                                                                 std::forward<Args>(args)...);
+	}
+	inline void RemoveCombinedImage(const PoolKey &combined_image_key) {
+		Pool<Derived, CombinedImage>::Delete(combined_image_key);
+	}
+	inline void ClearCombinedImages() { Pool<Derived, CombinedImage>::Clear(); }
 };
 
 // Resource Input
@@ -93,12 +103,12 @@ public:
 
 // Input Pool
 namespace _details_rg_pool_ {
-using InputPoolData = PoolData<Input, PoolVariant<BufferAlias, ImageAlias, CombinedImage>>;
+using InputPoolData = PoolData<Input, PoolVariant<BufferAlias, ImageAlias>>;
 }
-template <typename Derived>
-class InputPool : public Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias, CombinedImage>> {
+template <typename Derived> class InputPool : public Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias>> {
 private:
-	using _InputPool = Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias, CombinedImage>>;
+	using _InputPool = Pool<Derived, Input, PoolVariant<BufferAlias, ImageAlias>>;
+	using _CombinedImagePool = Pool<Derived, CombinedImage>;
 
 	inline RenderGraphBase *get_render_graph_ptr() {
 		static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
@@ -106,6 +116,14 @@ private:
 			return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
 		else
 			return static_cast<RenderGraphBase *>(static_cast<Derived *>(this));
+	}
+
+	template <typename... Args>
+	inline CombinedImage *add_combined_image(const PoolKey &input_key, Args &&...combined_image_args) {
+		auto ret = _CombinedImagePool::template CreateAndInitializeForce<0, CombinedImage>(
+		    input_key, std::forward<Args>(combined_image_args)...);
+		assert(ret);
+		return ret;
 	}
 
 	template <typename... Args> inline Input *add_input(const PoolKey &input_key, Args &&...input_args) {
@@ -116,21 +134,21 @@ private:
 		return ret;
 	}
 
-	template <typename Type, typename AliasType> inline Type *make_output(const PoolKey &input_key) {
+	template <typename Type, typename AliasType> inline AliasType *make_output(const PoolKey &input_key) {
 		const Input *p_input = _InputPool::template Get<0, Input>(input_key);
 		assert(p_input && !UsageIsReadOnly(p_input->GetUsage()));
 		if (!p_input || UsageIsReadOnly(p_input->GetUsage())) // Read-Only input should not produce an output
 			return nullptr;
 		Type *resource = p_input->GetResource<Type>();
+		static_assert(std::is_base_of_v<PassBase, Derived>);
+		auto *const producer_pass = static_cast<const PassBase *>(static_cast<Derived *>(this));
 		assert(resource);
 		if (!resource)
 			return nullptr;
-		else if (resource->GetProducerPassPtr() == (PassBase *)static_cast<Derived *>(this))
-			return resource;
 		else {
-			AliasType *ret = _InputPool::template InitializeOrGet<1, AliasType>(input_key, resource);
+			AliasType *ret = _InputPool::template InitializeOrGet<1, AliasType>(input_key, producer_pass, resource);
 			if (ret->GetPointedResource() != resource)
-				ret = _InputPool::template Initialize<1, AliasType>(input_key, resource);
+				ret = _InputPool::template Initialize<1, AliasType>(input_key, producer_pass, resource);
 			return ret;
 		}
 	}

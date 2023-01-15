@@ -10,10 +10,8 @@ namespace myvk_rg {
 using Key = _details_::PoolKey;
 
 using PassFlag = _details_::PassFlag;
-template <typename Derived, uint8_t Flags, bool EnableResource = false>
-using Pass = _details_::Pass<Derived, Flags, EnableResource>;
-template <typename Derived, bool EnableResource = false>
-using PassGroup = _details_::PassGroup<Derived, EnableResource>;
+template <typename Derived, uint8_t Flags> using Pass = _details_::Pass<Derived, Flags>;
+template <typename Derived> using PassGroup = _details_::PassGroup<Derived>;
 
 using Image = _details_::ImageBase;
 using ManagedImage = _details_::ManagedImage;

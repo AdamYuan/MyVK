@@ -13,7 +13,7 @@ constexpr uint32_t kFrameCount = 3;
 class DepthHierarchyPass final : public myvk_rg::PassGroup<DepthHierarchyPass> {
 private:
 	class TopSubPass final
-	    : public myvk_rg::Pass<TopSubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
+	    : public myvk_rg::Pass<TopSubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_img) {
@@ -30,7 +30,7 @@ private:
 	};
 
 	class BodySubPass final
-	    : public myvk_rg::Pass<BodySubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
+	    : public myvk_rg::Pass<BodySubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *prev_level_img, uint32_t level) {
@@ -70,7 +70,7 @@ public:
 		images[0] = GetPass<TopSubPass>({"level", 0})->GetTopOutput();
 		for (uint32_t i = 1; i < m_levels; ++i)
 			images[i] = GetPass<BodySubPass>({"level", i})->GetLevelOutput();
-		return MakeCombinedImageOutput({"depth_hierarchy"}, VK_IMAGE_VIEW_TYPE_2D, std::move(images));
+		return MakeCombinedImage({"depth_hierarchy"}, VK_IMAGE_VIEW_TYPE_2D, std::move(images));
 	}
 };
 
@@ -82,7 +82,7 @@ public:
 }; */
 
 class GBufferPass final
-    : public myvk_rg::Pass<GBufferPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
+    : public myvk_rg::Pass<GBufferPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
@@ -105,7 +105,7 @@ public:
 };
 
 class WBOITGenPass final
-    : public myvk_rg::Pass<WBOITGenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
+    : public myvk_rg::Pass<WBOITGenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_test_img) {
@@ -128,7 +128,7 @@ public:
 };
 
 class BlurSubpass final
-    : public myvk_rg::Pass<BlurSubpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
+    : public myvk_rg::Pass<BlurSubpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
@@ -210,8 +210,7 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 };
 
-class TestPass0 final
-    : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
+class TestPass0 final : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
@@ -248,8 +247,7 @@ private:
 			auto output_image = MakeImageOutput({"noise_tex", i});
 			printf("output_image = %p, id = %d\n", output_image, output_image->GetKey().GetID());
 			output_image = MakeImageOutput({"noise_tex", i});
-			printf("output_image = %p, id = %d, producer_pass = %p, this = %p\n", output_image,
-			       output_image->GetKey().GetID(), output_image->GetProducerPassPtr(),
+			printf("output_image = %p, id = %d, this = %p\n", output_image, output_image->GetKey().GetID(),
 			       dynamic_cast<myvk_rg::_details_::PassBase *>(this));
 		}
 
@@ -264,8 +262,7 @@ public:
 	myvk_rg::Image *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
 
-class TestPass1 final
-    : public myvk_rg::Pass<TestPass1, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics, true> {
+class TestPass1 final : public myvk_rg::Pass<TestPass1, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Buffer *draw_list, myvk_rg::Image *noise_tex) {

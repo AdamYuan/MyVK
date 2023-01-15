@@ -13,6 +13,7 @@ using ResultPoolData = PoolData<ResourceBase *>;
 }
 class ImageBase;
 class ManagedBuffer;
+class CombinedImage;
 class RenderGraphBase : public myvk::DeviceObjectBase {
 private:
 	myvk::Ptr<myvk::Device> m_device_ptr;
