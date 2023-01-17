@@ -73,9 +73,9 @@ void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur
 	for (const auto pass : *p_cur_seq) {
 		if (pass->m_internal_info.visited) {
 			pass->m_internal_info.visited = false; // Restore
-			pass->m_internal_info.id = m_compile_info.pass_sequence.size();
+			pass->m_internal_info.id = m_compile_info.passes.size();
 			pass_info.pass = pass;
-			m_compile_info.pass_sequence.push_back(pass_info);
+			m_compile_info.passes.push_back(pass_info);
 		} else if (pass->m_p_pass_pool_sequence)
 			_extract_visited_pass(pass->m_p_pass_pool_sequence);
 	}
@@ -83,7 +83,7 @@ void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur
 
 void RenderGraphBase::assign_pass_resource_indices() const {
 	{ // Generate Pass Sequence
-		m_compile_info.pass_sequence.clear();
+		m_compile_info.passes.clear();
 		for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it)
 			_visit_resource_dep_pass(*m_p_result_pool_data->ValueGet<0, ResourceBase *>(it));
 		_extract_visited_pass(m_p_pass_pool_sequence);
@@ -124,14 +124,16 @@ void RenderGraphBase::merge_subpass() const {
 	// _merge_length_ == 1: The pass is a graphics pass, but can't be merged
 	// _merge_length_ >  1: The pass is a graphics pass, and it can be merged to a group of _merge_length_ with the
 	// passes before
-	m_compile_info.pass_sequence[0]._merge_length_ =
-	    m_compile_info.pass_sequence[0].pass->m_p_attachment_data ? 1u : 0u;
-	for (uint32_t i = 1; i < m_compile_info.pass_sequence.size(); ++i) {
-		auto &cur_pass_info = m_compile_info.pass_sequence[i];
-		const auto &prev_pass_info = m_compile_info.pass_sequence[i - 1];
-		cur_pass_info._merge_length_ = cur_pass_info.pass->m_p_attachment_data ? prev_pass_info._merge_length_ + 1 : 0;
+	{
+		m_compile_info.passes[0]._merge_length_ = m_compile_info.passes[0].pass->m_p_attachment_data ? 1u : 0u;
+		for (uint32_t i = 1; i < m_compile_info.passes.size(); ++i) {
+			auto &cur_pass_info = m_compile_info.passes[i];
+			const auto &prev_pass_info = m_compile_info.passes[i - 1];
+			cur_pass_info._merge_length_ =
+			    cur_pass_info.pass->m_p_attachment_data ? prev_pass_info._merge_length_ + 1 : 0;
+		}
 	}
-	for (auto &pass_info : m_compile_info.pass_sequence) {
+	for (auto &pass_info : m_compile_info.passes) {
 		auto &length = pass_info._merge_length_;
 		if (length <= 1)
 			continue;
@@ -175,10 +177,40 @@ void RenderGraphBase::merge_subpass() const {
 			}
 		});
 	}
-	for (const auto &pass_info : m_compile_info.pass_sequence) {
+	{ // Assign Render Pass Indices
+		m_compile_info.render_passes.clear();
+
+		for (uint32_t i = 0u, prev_length = 0u; i < m_compile_info.passes.size(); ++i) {
+			auto &pass_info = m_compile_info.passes[i];
+			auto &length = pass_info._merge_length_;
+			if (length > prev_length)
+				length = prev_length + 1;
+
+			if (length == 0)
+				pass_info.render_pass_id = -1;
+			else if (length == 1) {
+				pass_info.render_pass_id = m_compile_info.render_passes.size();
+				m_compile_info.render_passes.emplace_back();
+				auto &render_pass = m_compile_info.render_passes.back();
+				render_pass.first_pass = render_pass.last_pass = i;
+			} else if (length > 1) {
+				pass_info.render_pass_id = m_compile_info.render_passes.size() - 1;
+				auto &render_pass = m_compile_info.render_passes.back();
+				render_pass.last_pass = i;
+			}
+
+			prev_length = length;
+		}
+	}
+	for (const auto &pass_info : m_compile_info.passes) {
 		auto pass = pass_info.pass;
 		std::cout << pass->GetKey().GetName() << ":" << pass->GetKey().GetID() << ".id = " << pass->m_internal_info.id
-		          << " .merge_len = " << pass_info._merge_length_ << std::endl;
+		          << " .merge_len = " << pass_info._merge_length_ << " .render_pass_id = " << pass_info.render_pass_id
+		          << std::endl;
+	}
+	for (const auto &render_pass_info : m_compile_info.render_passes) {
+		std::cout << "first_pass = " << render_pass_info.first_pass << " last_pass = " << render_pass_info.last_pass
+		          << std::endl;
 	}
 }
 void RenderGraphBase::generate_vk_resource() const {

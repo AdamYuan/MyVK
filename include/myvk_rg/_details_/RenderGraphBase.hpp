@@ -48,6 +48,7 @@ private:
 		std::vector<myvk::Ptr<myvk::DescriptorSet>> myvk_descriptor_sets;
 	};
 	struct RenderPassInfo {
+		uint32_t first_pass, last_pass;
 		VkFramebuffer vk_framebuffer{VK_NULL_HANDLE};
 		VkRenderPass vk_render_pass{VK_NULL_HANDLE};
 	};
@@ -55,9 +56,10 @@ private:
 		// Phrase: assign_pass_resource_indices
 		std::unordered_set<const ImageBase *> _managed_image_set_;      // Temporally used
 		std::unordered_set<const ManagedBuffer *> _managed_buffer_set_; // Temporally used
-		std::vector<PassInfo> pass_sequence;                            // Major Pass Sequence
+		std::vector<PassInfo> passes;                                   // Major Pass Sequence
 		std::vector<const ImageBase *> managed_images;                  // Contains CombinedImage and ManagedImage
 		std::vector<const ManagedBuffer *> managed_buffers;             // Contains ManagedBuffer
+		std::vector<RenderPassInfo> render_passes;
 	} m_compile_info{};
 	void _visit_resource_dep_pass(const ResourceBase *resource) const;
 	void _extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const;
