@@ -1,6 +1,7 @@
 #ifndef MYVK_RG_RENDER_GRAPH_BASE_HPP
 #define MYVK_RG_RENDER_GRAPH_BASE_HPP
 
+#include <myvk/DescriptorSet.hpp>
 #include <myvk/DeviceObjectBase.hpp>
 
 #include <unordered_set>
@@ -25,23 +26,47 @@ private:
 	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 	// const _details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
 
+	// The Compiler
+#pragma region The Compiler
+	struct CompilePhrase {
+		enum : uint8_t {
+			kAssignPassResourceIndices = 1u,
+			kMergeSubpass = 2u,
+			kGenerateVkResource = 4u,
+			kGenerateVkImageView = 8u,
+			kGenerateVkRenderPass = 16u,
+			kGenerateVkDescriptor = 32u
+		};
+	};
+	uint8_t m_compile_phrase{};
+	inline void set_compile_phrase(uint8_t phrase) { m_compile_phrase |= phrase; }
+
+	struct PassInfo {
+		const PassBase *pass{};
+		uint32_t _merge_length_{};
+		uint32_t render_pass_id{};
+		std::vector<myvk::Ptr<myvk::DescriptorSet>> myvk_descriptor_sets;
+	};
+	struct RenderPassInfo {
+		VkFramebuffer vk_framebuffer{VK_NULL_HANDLE};
+		VkRenderPass vk_render_pass{VK_NULL_HANDLE};
+	};
 	mutable struct {
 		// Phrase: assign_pass_resource_indices
 		std::unordered_set<const ImageBase *> _managed_image_set_;      // Temporally used
 		std::unordered_set<const ManagedBuffer *> _managed_buffer_set_; // Temporally used
-		std::vector<const PassBase *> pass_sequence;                    // Major Pass Sequence
+		std::vector<PassInfo> pass_sequence;                            // Major Pass Sequence
 		std::vector<const ImageBase *> managed_images;                  // Contains CombinedImage and ManagedImage
 		std::vector<const ManagedBuffer *> managed_buffers;             // Contains ManagedBuffer
 	} m_compile_info{};
 	void _visit_resource_dep_pass(const ResourceBase *resource) const;
 	void _extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const;
 	static void _traverse_combined_image(const CombinedImage *image);
-
-	struct {
-		bool assign_pass_resource_indices : 1, merge_subpass : 1, generate_vk_resource : 1, generate_vk_image_view : 1,
-		    generate_vk_render_pass : 1, generate_vk_descriptor : 1;
-	} m_compile_phrase{};
+	// Compile Phrase Functions
 	void assign_pass_resource_indices() const;
+	void merge_subpass() const;
+	void generate_vk_resource() const;
+#pragma endregion
 
 	template <typename> friend class RenderGraph;
 	template <typename> friend class ImageAttachmentInfo;
@@ -54,7 +79,7 @@ private:
 protected:
 	inline void SetFrameCount(uint32_t frame_count) {
 		if (m_frame_count != frame_count)
-			m_compile_phrase.assign_pass_resource_indices = true;
+			set_compile_phrase(CompilePhrase::kAssignPassResourceIndices);
 		m_frame_count = frame_count;
 	}
 	inline void SetCanvasSize(const VkExtent2D &canvas_size) {}
@@ -66,11 +91,15 @@ public:
 	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 	inline uint32_t GetFrameCount() const { return m_frame_count; }
 	inline void Compile() {
-		if (m_compile_phrase.assign_pass_resource_indices) {
+		switch (m_compile_phrase & -m_compile_phrase) { // Switch with Lowest Bit
+		case CompilePhrase::kAssignPassResourceIndices:
 			assign_pass_resource_indices();
-			m_compile_phrase.assign_pass_resource_indices = false;
-			m_compile_phrase.merge_subpass = true;
+		case CompilePhrase::kMergeSubpass:
+			merge_subpass();
+		case CompilePhrase::kGenerateVkResource:
+			generate_vk_resource();
 		}
+		m_compile_phrase = 0u;
 	}
 };
 

@@ -19,18 +19,20 @@ private:
 	inline Type *make_alias_output(const PoolKey &output_key, Type *resource) {
 		using Pool = Pool<Derived, AliasType>;
 		AliasType *alias = Pool ::template Get<0, AliasType>(output_key);
-		const PassBase *producer_pass = resource->Visit([](auto *resource) -> const PassBase * {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kState == ResourceState::kAlias)
-				return resource->GetProducerPass();
-			else {
-				assert(false);
-				return nullptr;
-			}
-		});
+		auto [producer_pass, producer_input] =
+		    resource->Visit([](auto *resource) -> std::tuple<const PassBase *, const Input *> {
+			    if constexpr (ResourceVisitorTrait<decltype(resource)>::kState == ResourceState::kAlias)
+				    return {resource->GetProducerPass(), resource->GetProducerInput()};
+			    else {
+				    assert(false);
+				    return {nullptr, nullptr};
+			    }
+		    });
 		if (alias == nullptr) {
-			alias = Pool ::template CreateAndInitializeForce<0, AliasType>(output_key, producer_pass, resource);
+			alias = Pool ::template CreateAndInitializeForce<0, AliasType>(output_key, producer_pass, producer_input,
+			                                                               resource);
 		} else if (alias->GetPointedResource() != resource || alias->GetProducerPass() != producer_pass)
-			alias = Pool ::template Initialize<0, AliasType>(output_key, producer_pass, resource);
+			alias = Pool ::template Initialize<0, AliasType>(output_key, producer_pass, producer_input, resource);
 		return alias;
 	}
 
@@ -115,7 +117,7 @@ private:
 		auto ret =
 		    _InputPool::template CreateAndInitializeForce<0, Input>(input_key, std::forward<Args>(input_args)...);
 		assert(ret);
-		get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
 		return ret;
 	}
 
@@ -131,9 +133,10 @@ private:
 		if (!resource)
 			return nullptr;
 		else {
-			AliasType *ret = _InputPool::template InitializeOrGet<1, AliasType>(input_key, producer_pass, resource);
+			AliasType *ret =
+			    _InputPool::template InitializeOrGet<1, AliasType>(input_key, producer_pass, p_input, resource);
 			if (ret->GetPointedResource() != resource)
-				ret = _InputPool::template Initialize<1, AliasType>(input_key, producer_pass, resource);
+				ret = _InputPool::template Initialize<1, AliasType>(input_key, producer_pass, p_input, resource);
 			return ret;
 		}
 	}
@@ -504,7 +507,7 @@ template <typename Derived> void InputPool<Derived>::RemoveInput(const PoolKey &
 			((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_remove_input(input);
 	}
 	InputPool::Delete(input_key);
-	get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
+	get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
 }
 
 template <typename Derived> void InputPool<Derived>::ClearInputs() {
@@ -513,7 +516,7 @@ template <typename Derived> void InputPool<Derived>::ClearInputs() {
 	if constexpr (std::is_base_of_v<AttachmentInputSlot<Derived>, Derived>)
 		((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_clear_inputs();
 	InputPool::Clear();
-	get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
+	get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
 }
 
 } // namespace myvk_rg::_details_

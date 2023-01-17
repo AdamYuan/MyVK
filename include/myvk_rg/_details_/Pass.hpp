@@ -30,6 +30,15 @@ private:
 	template <typename> friend class GraphicsPass;
 	friend class RenderGraphBase;
 
+	template <typename Func> inline void for_each_input(Func &&func) {
+		for (auto it = m_p_input_pool_data->pool.begin(); it != m_p_input_pool_data->pool.end(); ++it)
+			func(*(m_p_input_pool_data->ValueGet<0, Input>(it)));
+	}
+	template <typename Func> inline void for_each_input(Func &&func) const {
+		for (auto it = m_p_input_pool_data->pool.begin(); it != m_p_input_pool_data->pool.end(); ++it)
+			func(m_p_input_pool_data->ValueGet<0, Input>(it));
+	}
+
 public:
 	inline PassBase() = default;
 	inline PassBase(PassBase &&) noexcept = default;
@@ -65,7 +74,7 @@ protected:
 		    _PassPool::template CreateAndInitialize<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
 		assert(ret);
 		m_pass_sequence.push_back(ret);
-		get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
 		return ret;
 	}
 	// inline void DeletePass(const PoolKey &pass_key) { return PassPool::Delete(pass_key); }
@@ -80,7 +89,7 @@ protected:
 	inline void ClearPasses() {
 		m_pass_sequence.clear();
 		_PassPool::Clear();
-		get_render_graph_ptr()->m_compile_phrase.assign_pass_resource_indices = true;
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
 	}
 };
 

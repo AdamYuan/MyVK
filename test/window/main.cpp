@@ -127,39 +127,37 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 };
 
-class BlurSubpass final
-    : public myvk_rg::Pass<BlurSubpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
-private:
-	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
-		printf("image_src = %p\n", image_src);
-
-		auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"}, image_src->GetFormat());
-		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
-		    {"image_src"}, image_src, nullptr);
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"image_dst"}, image_dst);
-
-		auto descriptor_set_layout = GetDescriptorSetLayout();
-	}
-
-public:
-	inline ~BlurSubpass() final = default;
-
-	inline myvk_rg::Image *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
-
-	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
-};
-
 class BlurPass final : public myvk_rg::PassGroup<BlurPass> {
 private:
+	class Subpass final : public myvk_rg::Pass<Subpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+	private:
+		MYVK_RG_OBJECT_FRIENDS
+		MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
+			printf("image_src = %p\n", image_src);
+
+			auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"}, image_src->GetFormat());
+			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+			    {"image_src"}, image_src, nullptr);
+			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"image_dst"}, image_dst);
+
+			auto descriptor_set_layout = GetDescriptorSetLayout();
+		}
+
+	public:
+		inline ~Subpass() final = default;
+
+		inline myvk_rg::Image *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
+
+		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+	};
+
 	uint32_t m_subpass_count = 10;
 
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
 		for (uint32_t i = 0; i < m_subpass_count; ++i) {
-			PushPass<BlurSubpass>({"blur_subpass", i},
-			                      i == 0 ? image_src
-			                             : GetPass<BlurSubpass>({"blur_subpass", i - 1})->GetImageDstOutput());
+			PushPass<Subpass>({"blur_subpass", i},
+			                  i == 0 ? image_src : GetPass<Subpass>({"blur_subpass", i - 1})->GetImageDstOutput());
 		}
 	}
 
@@ -168,7 +166,7 @@ public:
 
 	inline myvk_rg::Image *GetImageDstOutput() {
 		return MakeImageAliasOutput({"image_dst"},
-		                            GetPass<BlurSubpass>({"blur_subpass", m_subpass_count - 1})->GetImageDstOutput());
+		                            GetPass<Subpass>({"blur_subpass", m_subpass_count - 1})->GetImageDstOutput());
 	}
 };
 

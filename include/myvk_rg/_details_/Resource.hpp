@@ -69,7 +69,7 @@ public:
 	inline void SetLoadOp(VkAttachmentLoadOp load_op) {
 		if (m_load_op != load_op) {
 			m_load_op = load_op;
-			get_render_graph_ptr()->m_compile_phrase.generate_vk_render_pass = true;
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkRenderPass);
 		}
 	}
 	inline void SetClearColorValue(const VkClearColorValue &clear_color_value) {
@@ -127,14 +127,17 @@ public:
 };
 #endif
 // Alias
+class Input;
 class ImageAlias final : public ImageBase {
 private:
+	const Input *m_producer_input{};
 	const PassBase *m_producer_pass{};
 	const ImageBase *m_pointed_image{};
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(const PassBase *producer_pass, const ImageBase *image) {
+	MYVK_RG_INLINE_INITIALIZER(const PassBase *producer_pass, const Input *producer_input, const ImageBase *image) {
 		m_producer_pass = producer_pass;
+		m_producer_input = producer_input;
 		m_pointed_image = image->Visit([](auto *image) -> const ImageBase * {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
 				return image->GetPointedResource();
@@ -152,18 +155,21 @@ public:
 
 	inline const ImageBase *GetPointedResource() const { return m_pointed_image; }
 	inline const PassBase *GetProducerPass() const { return m_producer_pass; }
+	inline const Input *GetProducerInput() const { return m_producer_input; }
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const { return m_pointed_image->GetVkImageView(); }
 	inline VkFormat GetFormat() const { return m_pointed_image->GetFormat(); }
 };
 class BufferAlias final : public BufferBase {
 private:
+	const Input *m_producer_input{};
 	const PassBase *m_producer_pass{};
 	const BufferBase *m_pointed_buffer{};
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(const PassBase *producer_pass, BufferBase *buffer) {
+	MYVK_RG_INLINE_INITIALIZER(const PassBase *producer_pass, const Input *producer_input, BufferBase *buffer) {
 		m_producer_pass = producer_pass;
+		m_producer_input = producer_input;
 		m_pointed_buffer = buffer->Visit([](auto *buffer) -> const BufferBase * {
 			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
 				return buffer->GetPointedResource();
@@ -181,6 +187,7 @@ public:
 
 	inline const BufferBase *GetPointedResource() const { return m_pointed_buffer; }
 	inline const PassBase *GetProducerPass() const { return m_producer_pass; }
+	inline const Input *GetProducerInput() const { return m_producer_input; }
 
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const { return m_pointed_buffer->GetVkBuffer(); }
 };
@@ -205,7 +212,7 @@ public:
 	inline void SetPersistence(bool persistence = true) {
 		if (m_persistence != persistence) {
 			m_persistence = persistence;
-			get_render_graph_ptr()->m_compile_phrase.generate_vk_resource = true; // TODO: or merge_subpass
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
 		}
 	}
 	inline const SizeType &GetSize() const { return m_size; }
@@ -213,7 +220,7 @@ public:
 		SizeType size{std::forward<Args>(args)...};
 		if (m_size != size) {
 			m_size = size;
-			get_render_graph_ptr()->m_compile_phrase.generate_vk_resource = true;
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
 		}
 	}
 	inline const SizeFunc &GetSizeFunc() const { return m_size_func; }
@@ -329,12 +336,6 @@ public:
 	inline ManagedImage(ManagedImage &&) noexcept = default;
 	~ManagedImage() override = default;
 
-	/* inline void SetViewType(VkImageViewType view_type) {
-	    if (m_view_type != view_type) {
-	        m_view_type = view_type;
-	        GetRenderGraphPtr()->m_compile_phrase.generate_vk_image_view = true;
-	    }
-	} */
 	inline VkImageViewType GetViewType() const { return m_view_type; }
 	inline VkFormat GetFormat() const { return m_format; }
 
