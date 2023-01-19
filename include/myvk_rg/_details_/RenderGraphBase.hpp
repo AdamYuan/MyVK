@@ -41,36 +41,38 @@ private:
 	uint8_t m_compile_phrase{};
 	inline void set_compile_phrase(uint8_t phrase) { m_compile_phrase |= phrase; }
 
-	void _destroy_vk_resource() const;
-
-	struct PassInfo {
-		const PassBase *pass{};
-		uint32_t _merge_length_{};
-		uint32_t render_pass_id{};
-		std::vector<myvk::Ptr<myvk::DescriptorSet>> myvk_descriptor_sets{};
-	};
-	struct InternalResourceInfo {
-		VkMemoryRequirements vk_memory_requirements{};
-		uint32_t first_pass{}, last_pass{}; // lifespan
-	};
-	struct InternalImageInfo : public InternalResourceInfo {
-		const ImageBase *image{};
-		VkImage vk_image{VK_NULL_HANDLE};
-		VkImageUsageFlags vk_image_usages{};
-		VkImageType vk_image_type{}; // Union of 1 << VK_IMAGE_TYPE_xD
-		bool is_transient{};
-	};
-	struct InternalBufferInfo : public InternalResourceInfo {
-		const ManagedBuffer *buffer{};
-		VkBuffer vk_buffer{VK_NULL_HANDLE};
-		VkBufferUsageFlags vk_buffer_usages{};
-	};
-	struct RenderPassInfo {
-		uint32_t first_pass{}, last_pass{};
-		VkFramebuffer vk_framebuffer{VK_NULL_HANDLE};
-		VkRenderPass vk_render_pass{VK_NULL_HANDLE};
-	};
 	mutable struct {
+		struct PassInfo {
+			const PassBase *pass{};
+			uint32_t _merge_length_{};
+			uint32_t render_pass_id{};
+			std::vector<myvk::Ptr<myvk::DescriptorSet>> myvk_descriptor_sets{};
+		};
+		struct InternalResourceInfo {
+			VkMemoryRequirements vk_memory_requirements{};
+			uint32_t first_pass{}, last_pass{};        // lifespan
+			uint32_t allocation_id{}, memory_offset{}; // Created by _calculate_memory_allocation
+		};
+		struct InternalImageInfo final : public InternalResourceInfo {
+			const ImageBase *image{};
+			myvk::Ptr<myvk::ImageBase> myvk_image{};
+			VkImageUsageFlags vk_image_usages{};
+			VkImageType vk_image_type{}; // Union of 1 << VK_IMAGE_TYPE_xD
+			bool is_transient{};
+		};
+		struct InternalBufferInfo final : public InternalResourceInfo {
+			const ManagedBuffer *buffer{};
+			myvk::Ptr<myvk::BufferBase> myvk_buffer{};
+			VkBufferUsageFlags vk_buffer_usages{};
+		};
+		struct RenderPassInfo {
+			uint32_t first_pass{}, last_pass{};
+			VkFramebuffer vk_framebuffer{VK_NULL_HANDLE};
+			VkRenderPass vk_render_pass{VK_NULL_HANDLE};
+		};
+		struct AllocationInfo {
+			VkMemoryRequirements vk_memory_requirements{};
+		};
 		// Phrase: assign_pass_resource_indices
 		std::unordered_set<const ImageBase *> _internal_image_set_;      // Temporally used
 		std::unordered_set<const ManagedBuffer *> _internal_buffer_set_; // Temporally used
@@ -93,7 +95,7 @@ private:
 	// 3: Generate Vulkan Resource
 	static void _maintain_combined_image_size(const CombinedImage *image);
 	void _create_vk_resource() const;
-	void _calculate_memory_alias() const;
+	void _create_memory_allocation() const;
 	void generate_vk_resource() const;
 #pragma endregion
 
@@ -116,7 +118,7 @@ protected:
 
 public:
 	inline RenderGraphBase() = default;
-	inline ~RenderGraphBase() override { _destroy_vk_resource(); }
+	inline ~RenderGraphBase() override = default;
 
 	void SetCanvasSize(const VkExtent2D &canvas_size);
 

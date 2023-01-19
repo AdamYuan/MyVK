@@ -8,32 +8,38 @@ namespace myvk_rg::_details_ {
 class RenderGraphImage final : public myvk::ImageBase {
 private:
 	const RenderGraphBase *m_render_graph_ptr;
-	uint32_t m_image_id;
 
 public:
-	inline RenderGraphImage(const RenderGraphBase *render_graph_ptr, uint32_t image_id)
-	    : m_render_graph_ptr{render_graph_ptr}, m_image_id{image_id} {
-		const auto &image_info = render_graph_ptr->m_compile_info.internal_images[image_id];
-		m_image = image_info.vk_image;
-		// TODO: Fill the data
-		// m_size = image_info.image->GetSize();
+	inline RenderGraphImage(const RenderGraphBase *render_graph_ptr, const VkImageCreateInfo &create_info)
+	    : m_render_graph_ptr{render_graph_ptr} {
+		vkCreateImage(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_image);
+		m_extent = create_info.extent;
+		m_mip_levels = create_info.mipLevels;
+		m_array_layers = create_info.arrayLayers;
+		m_format = create_info.format;
+		m_type = create_info.imageType;
+		m_usage = create_info.usage;
 	}
-	inline ~RenderGraphImage() final = default;
+	inline ~RenderGraphImage() final {
+		if (m_image != VK_NULL_HANDLE)
+			vkDestroyImage(GetDevicePtr()->GetHandle(), m_image, nullptr);
+	};
 	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
 };
 class RenderGraphBuffer final : public myvk::BufferBase {
 private:
 	const RenderGraphBase *m_render_graph_ptr;
-	uint32_t m_buffer_id;
 
 public:
-	inline RenderGraphBuffer(const RenderGraphBase *render_graph_ptr, uint32_t buffer_id)
-	    : m_render_graph_ptr{render_graph_ptr}, m_buffer_id{buffer_id} {
-		const auto &buffer_info = render_graph_ptr->m_compile_info.internal_buffers[buffer_id];
-		m_buffer = buffer_info.vk_buffer;
-		m_size = buffer_info.buffer->GetSize();
+	inline RenderGraphBuffer(const RenderGraphBase *render_graph_ptr, const VkBufferCreateInfo &create_info)
+	    : m_render_graph_ptr{render_graph_ptr} {
+		vkCreateBuffer(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_buffer);
+		m_size = create_info.size;
 	}
-	inline ~RenderGraphBuffer() final = default;
+	inline ~RenderGraphBuffer() final {
+		if (m_buffer != VK_NULL_HANDLE)
+			vkDestroyBuffer(GetDevicePtr()->GetHandle(), m_buffer, nullptr);
+	}
 	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
 };
 
@@ -105,7 +111,6 @@ void RenderGraphBase::_initialize_combined_image(const CombinedImage *image) {
 }
 
 void RenderGraphBase::assign_pass_resource_indices() const {
-	_destroy_vk_resource();
 	{ // Generate Pass Sequence
 		m_compile_info.passes.clear();
 		for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it)
@@ -389,17 +394,6 @@ void RenderGraphBase::_maintain_combined_image_size(const CombinedImage *image) 
 	});
 }
 
-void RenderGraphBase::_destroy_vk_resource() const {
-	for (const auto &buffer_info : m_compile_info.internal_buffers) {
-		if (buffer_info.vk_buffer != VK_NULL_HANDLE)
-			vkDestroyBuffer(GetDevicePtr()->GetHandle(), buffer_info.vk_buffer, nullptr);
-	}
-	for (const auto &image_info : m_compile_info.internal_images) {
-		if (image_info.vk_image != VK_NULL_HANDLE)
-			vkDestroyImage(GetDevicePtr()->GetHandle(), image_info.vk_image, nullptr);
-	}
-}
-
 void RenderGraphBase::_create_vk_resource() const {
 	// Query Resource Size
 	for (auto &buffer_info : m_compile_info.internal_buffers) {
@@ -407,8 +401,8 @@ void RenderGraphBase::_create_vk_resource() const {
 		create_info.usage = buffer_info.vk_buffer_usages;
 		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		create_info.size = buffer_info.buffer->GetSize();
-		vkCreateBuffer(GetDevicePtr()->GetHandle(), &create_info, nullptr, &buffer_info.vk_buffer);
-		vkGetBufferMemoryRequirements(GetDevicePtr()->GetHandle(), buffer_info.vk_buffer,
+		buffer_info.myvk_buffer = std::make_shared<RenderGraphBuffer>(this, create_info);
+		vkGetBufferMemoryRequirements(GetDevicePtr()->GetHandle(), buffer_info.myvk_buffer->GetHandle(),
 		                              &buffer_info.vk_memory_requirements);
 	}
 	for (auto &image_info : m_compile_info.internal_images) {
@@ -464,13 +458,12 @@ void RenderGraphBase::_create_vk_resource() const {
 				assert(false);
 			}
 		}
-		vkCreateImage(GetDevicePtr()->GetHandle(), &create_info, nullptr, &image_info.vk_image);
-		vkGetImageMemoryRequirements(GetDevicePtr()->GetHandle(), image_info.vk_image,
+		image_info.myvk_image = std::make_shared<RenderGraphImage>(this, create_info);
+		vkGetImageMemoryRequirements(GetDevicePtr()->GetHandle(), image_info.myvk_image->GetHandle(),
 		                             &image_info.vk_memory_requirements);
 	}
 }
 void RenderGraphBase::generate_vk_resource() const {
-	_destroy_vk_resource();
 	_create_vk_resource();
 	for (const auto &image_info : m_compile_info.internal_images) {
 		auto image = image_info.image;
