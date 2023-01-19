@@ -23,8 +23,8 @@ public:
 	inline explicit BufferBase(ResourceState state) : ResourceBase(MakeResourceClass(ResourceType::kBuffer, state)) {}
 	inline BufferBase(BufferBase &&) noexcept = default;
 
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> inline Visit(Visitor &&visitor);
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> inline Visit(Visitor &&visitor) const;
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor);
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor) const;
 
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
 		return Visit([](auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return buffer->GetVkBuffer(); });
@@ -39,8 +39,8 @@ public:
 	inline explicit ImageBase(ResourceState state) : ResourceBase(MakeResourceClass(ResourceType::kImage, state)) {}
 	inline ImageBase(ImageBase &&) noexcept = default;
 
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> inline Visit(Visitor &&visitor);
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> inline Visit(Visitor &&visitor) const;
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor);
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
 		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
@@ -202,9 +202,13 @@ private:
 		static_assert(std::is_base_of_v<ObjectBase, Derived>);
 		return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
 	}
+	inline RenderGraphBase *get_render_graph_ptr() const {
+		static_assert(std::is_base_of_v<ObjectBase, Derived>);
+		return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
+	}
 
 	bool m_persistence{false};
-	SizeType m_size{};
+	mutable SizeType m_size{};
 	SizeFunc m_size_func{};
 
 public:
@@ -215,18 +219,24 @@ public:
 			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
 		}
 	}
-	inline const SizeType &GetSize() const { return m_size; }
+	inline const SizeType &GetSize() const {
+		if (m_size_func)
+			m_size = m_size_func(get_render_graph_ptr()->m_canvas_size);
+		return m_size;
+	}
 	template <typename... Args> inline void SetSize(Args &&...args) {
 		SizeType size{std::forward<Args>(args)...};
+		m_size_func = nullptr;
 		if (m_size != size) {
 			m_size = size;
 			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
 		}
 	}
+	inline bool HaveSizeFunc() const { return m_size_func; }
 	inline const SizeFunc &GetSizeFunc() const { return m_size_func; }
 	template <typename Func> inline void SetSizeFunc(Func &&func) {
 		m_size_func = func;
-		SetSize(m_size_func(get_render_graph_ptr()->m_canvas_size));
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
 	}
 };
 
@@ -497,7 +507,7 @@ public:
 	~CombinedImage() override = default;
 };
 
-template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ResourceBase::Visit(Visitor &&visitor) {
+template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) {
 	switch (m_class) {
 	case ResourceClass::kManagedImage:
 		return visitor(static_cast<ManagedImage *>(this));
@@ -517,7 +527,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Resour
 	assert(false);
 	return visitor(static_cast<BufferAlias *>(nullptr));
 }
-template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ResourceBase::Visit(Visitor &&visitor) const {
+template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) const {
 	switch (m_class) {
 	case ResourceClass::kManagedImage:
 		return visitor(static_cast<const ManagedImage *>(this));
@@ -538,7 +548,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Resour
 	return visitor(static_cast<const BufferAlias *>(nullptr));
 }
 
-template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageBase::Visit(Visitor &&visitor) {
+template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageBase::Visit(Visitor &&visitor) {
 	switch (GetState()) {
 	case ResourceState::kManaged:
 		return visitor(static_cast<ManagedImage *>(this));
@@ -552,7 +562,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageB
 	assert(false);
 	return visitor(static_cast<ImageAlias *>(nullptr));
 }
-template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageBase::Visit(Visitor &&visitor) const {
+template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
 	case ResourceState::kManaged:
 		return visitor(static_cast<const ManagedImage *>(this));
@@ -567,7 +577,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> ImageB
 	return visitor(static_cast<const ImageAlias *>(nullptr));
 }
 
-template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> BufferBase::Visit(Visitor &&visitor) {
+template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> BufferBase::Visit(Visitor &&visitor) {
 	switch (GetState()) {
 	case ResourceState::kManaged:
 		return visitor(static_cast<ManagedBuffer *>(this));
@@ -580,7 +590,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Buffer
 	}
 	return visitor(static_cast<BufferAlias *>(nullptr));
 }
-template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> BufferBase::Visit(Visitor &&visitor) const {
+template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> BufferBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
 	case ResourceState::kManaged:
 		return visitor(static_cast<const ManagedBuffer *>(this));

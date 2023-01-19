@@ -86,6 +86,7 @@ public:
 	                                              kClass == ResourceClass::kManagedImage ||
 	                                              kClass == ResourceClass::kImageAlias;
 	static constexpr bool kIsAlias = kState == ResourceState::kAlias;
+	static constexpr bool kIsInternal = kState == ResourceState::kManaged || kState == ResourceState::kCombinedImage;
 };
 
 class ResourceBase : public ObjectBase {
@@ -109,8 +110,8 @@ public:
 	inline ResourceClass GetClass() const { return m_class; }
 
 	// TODO: Is that actually needed ? (currently implemented in Resource.hpp)
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Visit(Visitor &&visitor);
-	template <typename Visitor> std::invoke_result_t<Visitor, ResourceBase *> Visit(Visitor &&visitor) const;
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Visit(Visitor &&visitor);
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Visit(Visitor &&visitor) const;
 	// virtual bool IsPerFrame() const = 0;
 	// virtual void Resize(uint32_t width, uint32_t height) {}
 

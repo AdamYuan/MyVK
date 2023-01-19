@@ -5,14 +5,46 @@
 
 namespace myvk_rg::_details_ {
 
-void RenderGraphBase::_visit_resource_dep_pass(const ResourceBase *resource) const {
+class RenderGraphImage final : public myvk::ImageBase {
+private:
+	const RenderGraphBase *m_render_graph_ptr;
+	uint32_t m_image_id;
+
+public:
+	inline RenderGraphImage(const RenderGraphBase *render_graph_ptr, uint32_t image_id)
+	    : m_render_graph_ptr{render_graph_ptr}, m_image_id{image_id} {
+		const auto &image_info = render_graph_ptr->m_compile_info.internal_images[image_id];
+		m_image = image_info.vk_image;
+		// TODO: Fill the data
+		// m_size = image_info.image->GetSize();
+	}
+	inline ~RenderGraphImage() final = default;
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
+};
+class RenderGraphBuffer final : public myvk::BufferBase {
+private:
+	const RenderGraphBase *m_render_graph_ptr;
+	uint32_t m_buffer_id;
+
+public:
+	inline RenderGraphBuffer(const RenderGraphBase *render_graph_ptr, uint32_t buffer_id)
+	    : m_render_graph_ptr{render_graph_ptr}, m_buffer_id{buffer_id} {
+		const auto &buffer_info = render_graph_ptr->m_compile_info.internal_buffers[buffer_id];
+		m_buffer = buffer_info.vk_buffer;
+		m_size = buffer_info.buffer->GetSize();
+	}
+	inline ~RenderGraphBuffer() final = default;
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
+};
+
+void RenderGraphBase::_visit_resource_dep_passes(const ResourceBase *resource) const {
 	// Mark Visited Pass, Generate Temporal Managed Resource Sets
 	const auto visit_dep_pass = [this](const PassBase *dep_pass) -> void {
 		if (dep_pass && !dep_pass->m_internal_info.visited) {
 			dep_pass->m_internal_info.visited = true;
 			// Further Traverse dep_pass's dependent Resources
 			dep_pass->for_each_input(
-			    [this](const Input *p_input) { _visit_resource_dep_pass(p_input->GetResource()); });
+			    [this](const Input *p_input) { _visit_resource_dep_passes(p_input->GetResource()); });
 		}
 	};
 	resource->Visit([this, &visit_dep_pass](auto *resource) -> void {
@@ -20,7 +52,7 @@ void RenderGraphBase::_visit_resource_dep_pass(const ResourceBase *resource) con
 		// For CombinedImage, further For Each its Child Images
 		if constexpr (kClass == ResourceClass::kCombinedImage) {
 			if (resource->m_internal_info._has_parent_ == false)
-				m_compile_info._managed_image_set_.insert(resource);
+				m_compile_info._internal_image_set_.insert(resource);
 			// Visit Each SubImage
 			resource->ForEachImage([&visit_dep_pass](auto *sub_image) -> void {
 				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
@@ -37,88 +69,91 @@ void RenderGraphBase::_visit_resource_dep_pass(const ResourceBase *resource) con
 		} else {
 			if constexpr (kClass == ResourceClass::kManagedImage) {
 				if (resource->m_internal_info._has_parent_ == false)
-					m_compile_info._managed_image_set_.insert(resource);
+					m_compile_info._internal_image_set_.insert(resource);
 			} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
-				m_compile_info._managed_buffer_set_.insert(resource);
+				m_compile_info._internal_buffer_set_.insert(resource);
 			} else if constexpr (GetResourceState(kClass) == ResourceState::kAlias)
 				visit_dep_pass(resource->GetProducerPass());
 		}
 	});
 }
-void RenderGraphBase::_traverse_combined_image(const CombinedImage *image) {
+void RenderGraphBase::_extract_visited_passes(const std::vector<PassBase *> *p_cur_seq) const {
+	for (const auto pass : *p_cur_seq) {
+		if (pass->m_internal_info.visited) {
+			pass->m_internal_info.visited = false; // Restore
+			pass->m_internal_info.id = m_compile_info.passes.size();
+			m_compile_info.passes.push_back({pass});
+		} else if (pass->m_p_pass_pool_sequence)
+			_extract_visited_passes(pass->m_p_pass_pool_sequence);
+	}
+}
+
+void RenderGraphBase::_initialize_combined_image(const CombinedImage *image) {
 	// Visit Each Child Image, Update Size and Base Layer
-	image->m_internal_info.size = {};
 	auto *parent = image->m_internal_info.parent ? image->m_internal_info.parent : image;
 	image->ForEachExpandedImage([image, parent](auto *sub_image) -> void {
 		if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
 			sub_image->m_internal_info.image_id = image->m_internal_info.image_id;
 			sub_image->m_internal_info.parent = parent;
-			sub_image->m_internal_info.base_layer =
-			    image->m_internal_info.base_layer + image->m_internal_info.size.GetArrayLayers();
 			sub_image->m_internal_info._has_parent_ = false; // Restore _has_parent_
 
 			// Merge the Size of the Current Child Image
-			if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
-				image->m_internal_info.size.Merge(sub_image->GetSize());
-			} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kCombinedImage) {
-				_traverse_combined_image(sub_image); // Further Query SubImage Size
-				image->m_internal_info.size.Merge(sub_image->m_internal_info.size);
-			}
+			if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kCombinedImage)
+				_initialize_combined_image(sub_image); // Further Query SubImage Size
 		}
 	});
 }
 
-void RenderGraphBase::_extract_visited_pass(const std::vector<PassBase *> *p_cur_seq) const {
-	PassInfo pass_info = {};
-	for (const auto pass : *p_cur_seq) {
-		if (pass->m_internal_info.visited) {
-			pass->m_internal_info.visited = false; // Restore
-			pass->m_internal_info.id = m_compile_info.passes.size();
-			pass_info.pass = pass;
-			m_compile_info.passes.push_back(pass_info);
-		} else if (pass->m_p_pass_pool_sequence)
-			_extract_visited_pass(pass->m_p_pass_pool_sequence);
-	}
-}
-
 void RenderGraphBase::assign_pass_resource_indices() const {
+	_destroy_vk_resource();
 	{ // Generate Pass Sequence
 		m_compile_info.passes.clear();
 		for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it)
-			_visit_resource_dep_pass(*m_p_result_pool_data->ValueGet<0, ResourceBase *>(it));
-		_extract_visited_pass(m_p_pass_pool_sequence);
+			_visit_resource_dep_passes(*m_p_result_pool_data->ValueGet<0, ResourceBase *>(it));
+		_extract_visited_passes(m_p_pass_pool_sequence);
 	}
 
-	{ // Generate ManagedBuffer List
-		m_compile_info.managed_buffers.clear();
-		m_compile_info.managed_buffers.reserve(m_compile_info._managed_buffer_set_.size());
-		for (auto *buffer : m_compile_info._managed_buffer_set_) {
-			buffer->m_internal_info.buffer_id = m_compile_info.managed_buffers.size();
-			m_compile_info.managed_buffers.push_back(buffer);
+	{ // Clean and Generate Internal Buffer List
+		m_compile_info.internal_buffers.clear();
+		m_compile_info.internal_buffers.reserve(m_compile_info._internal_buffer_set_.size());
+		for (auto *buffer : m_compile_info._internal_buffer_set_) {
+			buffer->m_internal_info.buffer_id = m_compile_info.internal_buffers.size();
+			m_compile_info.internal_buffers.emplace_back();
+			m_compile_info.internal_buffers.back().buffer = buffer;
 		}
-		m_compile_info._managed_buffer_set_.clear();
+		m_compile_info._internal_buffer_set_.clear();
 	}
 
-	{ // Generate ManagedImage List
-		m_compile_info.managed_images.clear();
+	{ // Clean and Generate Internal Image List
+		m_compile_info.internal_images.clear();
 		// Add all top-level ManagedImages to the ManagedImage List
-		for (auto *image : m_compile_info._managed_image_set_) {
+		for (auto *image : m_compile_info._internal_image_set_) {
 			image->Visit([this](auto *image) -> void {
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
 					if (!image->m_internal_info._has_parent_) {
-						image->m_internal_info.image_id = m_compile_info.managed_images.size();
-						m_compile_info.managed_images.push_back(image);
+						image->m_internal_info.image_id = m_compile_info.internal_images.size();
+						m_compile_info.internal_images.emplace_back();
+						m_compile_info.internal_images.back().image = image;
 					}
 				}
 			});
 		}
-		m_compile_info._managed_image_set_.clear();
+		m_compile_info._internal_image_set_.clear();
+		// Initialize Combined Image
+		for (auto &image_info : m_compile_info.internal_images) {
+			image_info.image->Visit([](auto *image) -> void {
+				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage) {
+					_initialize_combined_image(image);
+				}
+			});
+		}
 	}
 
-	printf("managed image count: %ld\n", m_compile_info.managed_images.size());
-	printf("managed buffer count: %ld\n", m_compile_info.managed_buffers.size());
+	printf("managed image count: %ld\n", m_compile_info.internal_images.size());
+	printf("managed buffer count: %ld\n", m_compile_info.internal_buffers.size());
 }
-void RenderGraphBase::merge_subpass() const {
+
+void RenderGraphBase::_compute_merge_length() const {
 	// Calculate _merge_length_, Complexity: O(N + M)
 	// _merge_length_ == 0: The pass is not a graphics pass
 	// _merge_length_ == 1: The pass is a graphics pass, but can't be merged
@@ -177,6 +212,125 @@ void RenderGraphBase::merge_subpass() const {
 			}
 		});
 	}
+}
+inline void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
+	// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
+	switch (view_type) {
+	case VK_IMAGE_VIEW_TYPE_1D:
+	case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
+		*p_image_type = VK_IMAGE_TYPE_1D;
+		return;
+	case VK_IMAGE_VIEW_TYPE_CUBE:
+	case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:
+		*p_image_type = VK_IMAGE_TYPE_2D;
+		return;
+	case VK_IMAGE_VIEW_TYPE_2D:
+	case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
+		if (*p_image_type == VK_IMAGE_TYPE_1D)
+			*p_image_type = VK_IMAGE_TYPE_2D;
+		return;
+	case VK_IMAGE_VIEW_TYPE_3D:
+		*p_image_type = VK_IMAGE_TYPE_3D;
+		return;
+	default:
+		return;
+	}
+}
+void RenderGraphBase::_compute_resource_property_and_lifespan() const {
+	// Initialize First & Last Pass Indices, Generate CombinedImage Data
+	for (auto &buffer_info : m_compile_info.internal_buffers) {
+		buffer_info.first_pass = buffer_info.last_pass = -1;
+		buffer_info.vk_buffer_usages = 0;
+	}
+	for (auto &image_info : m_compile_info.internal_images) {
+		image_info.first_pass = image_info.last_pass = -1;
+		image_info.vk_image_usages = 0;
+		image_info.vk_image_type = VK_IMAGE_TYPE_2D;
+	}
+	// Calculate Internal Resource Pass Range: first_pass, last_pass, Resolve Resource Usage
+	// (VkImageUsageFlags and VkBufferUsageFlags)
+	for (uint32_t i = 0; i < m_compile_info.passes.size(); ++i) {
+		const auto &pass_info = m_compile_info.passes[i];
+		uint32_t cur_first_pass = i, cur_last_pass = i;
+		if (~pass_info.render_pass_id) {
+			cur_first_pass = m_compile_info.render_passes[pass_info.render_pass_id].first_pass;
+			cur_last_pass = m_compile_info.render_passes[pass_info.render_pass_id].last_pass;
+		}
+		const auto update_pass_range = [this, cur_first_pass, cur_last_pass](const auto *internal_resource) -> void {
+			if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kIsInternal) {
+				if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kType == ResourceType::kImage) {
+					auto &image_info = m_compile_info.internal_images[internal_resource->m_internal_info.image_id];
+					uint32_t &image_first_pass = image_info.first_pass, &image_last_pass = image_info.last_pass;
+					if (~image_first_pass) {
+						image_first_pass = std::min(image_first_pass, cur_first_pass);
+						image_last_pass = std::max(image_last_pass, cur_last_pass);
+					} else
+						std::tie(image_first_pass, image_last_pass) = std::tie(cur_first_pass, cur_last_pass);
+				} else {
+					auto &buffer_info = m_compile_info.internal_buffers[internal_resource->m_internal_info.buffer_id];
+					uint32_t &buffer_first_pass = buffer_info.first_pass, &buffer_last_pass = buffer_info.last_pass;
+					if (~buffer_first_pass) {
+						buffer_first_pass = std::min(buffer_first_pass, cur_first_pass);
+						buffer_last_pass = std::max(buffer_last_pass, cur_last_pass);
+					} else
+						std::tie(buffer_first_pass, buffer_last_pass) = std::tie(cur_first_pass, cur_last_pass);
+				}
+			}
+		};
+		const auto update_creation_info = [this](const auto *internal_resource, const Input *p_input) -> void {
+			if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kIsInternal) {
+				if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kType == ResourceType::kImage) {
+					auto &image_info = m_compile_info.internal_images[internal_resource->m_internal_info.image_id];
+					image_info.vk_image_usages |= UsageGetCreationUsages(p_input->GetUsage());
+					UpdateVkImageTypeFromVkImageViewType(&image_info.vk_image_type, internal_resource->GetViewType());
+				} else {
+					auto &buffer_info = m_compile_info.internal_buffers[internal_resource->m_internal_info.buffer_id];
+					buffer_info.vk_buffer_usages |= UsageGetCreationUsages(p_input->GetUsage());
+				}
+			}
+		};
+		const auto set_persistent_pass_range = [this](const auto *internal_resource) -> void {
+			if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kIsInternal) {
+				if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kType == ResourceType::kImage) {
+					uint32_t index = internal_resource->m_internal_info.image_id;
+					m_compile_info.internal_images[index].first_pass = 0;
+					m_compile_info.internal_images[index].last_pass = m_compile_info.passes.size() - 1;
+				} else {
+					uint32_t index = internal_resource->m_internal_info.buffer_id;
+					m_compile_info.internal_buffers[index].first_pass = 0;
+					m_compile_info.internal_buffers[index].last_pass = m_compile_info.passes.size() - 1;
+				}
+			}
+		};
+		pass_info.pass->for_each_input(
+		    [&update_pass_range, &update_creation_info, &set_persistent_pass_range](const Input *p_input) -> void {
+			    p_input->GetResource()->Visit([&update_pass_range, &update_creation_info, &set_persistent_pass_range,
+			                                   p_input](const auto *resource) -> void {
+				    if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias) {
+					    if (resource->GetProducerPass())
+						    resource->GetPointedResource()->Visit(update_pass_range);
+					    else // An Alias with NULL ProducerPass indicates an Input from previous frame
+						    resource->GetPointedResource()->Visit(set_persistent_pass_range);
+					    resource->GetPointedResource()->Visit([&update_creation_info, p_input](const auto *resource) {
+						    return update_creation_info(resource, p_input);
+					    });
+				    } else if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
+					    update_pass_range(resource);
+					    update_creation_info(resource, p_input);
+				    }
+			    });
+		    });
+	}
+	// Test Transient Image
+	for (auto &image_info : m_compile_info.internal_images) {
+		uint32_t first_render_pass = m_compile_info.passes[image_info.first_pass].render_pass_id;
+		uint32_t last_render_pass = m_compile_info.passes[image_info.last_pass].render_pass_id;
+		// If the image is used inside a single RenderPass, then it can be transient
+		image_info.is_transient = (~first_render_pass) && first_render_pass == last_render_pass;
+	}
+}
+void RenderGraphBase::merge_subpass() const {
+	_compute_merge_length();
 	{ // Assign Render Pass Indices
 		m_compile_info.render_passes.clear();
 
@@ -202,6 +356,8 @@ void RenderGraphBase::merge_subpass() const {
 			prev_length = length;
 		}
 	}
+	_compute_resource_property_and_lifespan();
+
 	for (const auto &pass_info : m_compile_info.passes) {
 		auto pass = pass_info.pass;
 		std::cout << pass->GetKey().GetName() << ":" << pass->GetKey().GetID() << ".id = " << pass->m_internal_info.id
@@ -213,34 +369,137 @@ void RenderGraphBase::merge_subpass() const {
 		          << std::endl;
 	}
 }
-void RenderGraphBase::generate_vk_resource() const {
-	// Generate CombinedImage Data
-	for (auto *image : m_compile_info.managed_images) {
-		image->Visit([](auto *image) -> void {
-			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
+
+void RenderGraphBase::_maintain_combined_image_size(const CombinedImage *image) {
+	// Visit Each Child Image, Update Size and Base Layer
+	image->m_internal_info.size = {};
+	image->ForEachExpandedImage([image](auto *sub_image) -> void {
+		if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
+			sub_image->m_internal_info.base_layer =
+			    image->m_internal_info.base_layer + image->m_internal_info.size.GetArrayLayers();
+
+			// Merge the Size of the Current Child Image
+			if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
+				image->m_internal_info.size.Merge(sub_image->GetSize());
+			} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kCombinedImage) {
+				_maintain_combined_image_size(sub_image); // Further Query SubImage Size
+				image->m_internal_info.size.Merge(sub_image->m_internal_info.size);
+			}
+		}
+	});
+}
+
+void RenderGraphBase::_destroy_vk_resource() const {
+	for (const auto &buffer_info : m_compile_info.internal_buffers) {
+		if (buffer_info.vk_buffer != VK_NULL_HANDLE)
+			vkDestroyBuffer(GetDevicePtr()->GetHandle(), buffer_info.vk_buffer, nullptr);
+	}
+	for (const auto &image_info : m_compile_info.internal_images) {
+		if (image_info.vk_image != VK_NULL_HANDLE)
+			vkDestroyImage(GetDevicePtr()->GetHandle(), image_info.vk_image, nullptr);
+	}
+}
+
+void RenderGraphBase::_create_vk_resource() const {
+	// Query Resource Size
+	for (auto &buffer_info : m_compile_info.internal_buffers) {
+		VkBufferCreateInfo create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+		create_info.usage = buffer_info.vk_buffer_usages;
+		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		create_info.size = buffer_info.buffer->GetSize();
+		vkCreateBuffer(GetDevicePtr()->GetHandle(), &create_info, nullptr, &buffer_info.vk_buffer);
+		vkGetBufferMemoryRequirements(GetDevicePtr()->GetHandle(), buffer_info.vk_buffer,
+		                              &buffer_info.vk_memory_requirements);
+	}
+	for (auto &image_info : m_compile_info.internal_images) {
+		const SubImageSize &image_size = image_info.image->Visit([](auto *image) -> const SubImageSize & {
+			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal) {
 				image->m_internal_info.parent = nullptr;
 				image->m_internal_info.base_layer = 0;
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage) {
-					_traverse_combined_image(image);
-				}
+					_maintain_combined_image_size(image);
+					return image->m_internal_info.size;
+				} else
+					return image->GetSize();
+			} else {
+				assert(false);
+				return {};
 			}
 		});
+		assert(image_size.GetBaseMipLevel() == 0);
+		VkImageCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+		create_info.usage = image_info.vk_image_usages;
+		if (image_info.is_transient)
+			create_info.usage |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		create_info.format = image_info.image->GetFormat();
+		create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+		create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+		create_info.imageType = image_info.vk_image_type;
+		{ // Set Size Info
+			VkExtent3D &extent = create_info.extent;
+			extent = {1, 1, 1};
+			switch (create_info.imageType) {
+			case VK_IMAGE_TYPE_1D: {
+				extent.width = image_size.GetExtent().width;
+				create_info.mipLevels = image_size.GetMipLevels();
+				create_info.arrayLayers = image_size.GetArrayLayers();
+			} break;
+			case VK_IMAGE_TYPE_2D: {
+				extent.width = image_size.GetExtent().width;
+				extent.height = image_size.GetExtent().height;
+				create_info.mipLevels = image_size.GetMipLevels();
+				create_info.arrayLayers = image_size.GetArrayLayers();
+			} break;
+			case VK_IMAGE_TYPE_3D: {
+				assert(image_size.GetExtent().depth == 1 || image_size.GetArrayLayers() == 1);
+				extent.width = image_size.GetExtent().width;
+				extent.height = image_size.GetExtent().height;
+				extent.depth = std::max(image_size.GetExtent().depth, image_size.GetArrayLayers());
+				create_info.mipLevels = image_size.GetMipLevels();
+				create_info.arrayLayers = 1;
+			} break;
+			default:
+				assert(false);
+			}
+		}
+		vkCreateImage(GetDevicePtr()->GetHandle(), &create_info, nullptr, &image_info.vk_image);
+		vkGetImageMemoryRequirements(GetDevicePtr()->GetHandle(), image_info.vk_image,
+		                             &image_info.vk_memory_requirements);
 	}
-	/* for (auto image : m_compile_info.managed_images) {
-	    std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID()
-	              << " mip_levels = " << image->Visit([](auto *image) -> uint32_t {
-	                     if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
-	                         return image->m_internal_info.size.GetMipLevels();
-	                     else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
-	                                        ResourceClass::kManagedImage)
-	                         return image->GetSize().GetMipLevels();
-	                     return 0;
-	                 })
-	              << std::endl;
-	} */
+}
+void RenderGraphBase::generate_vk_resource() const {
+	_destroy_vk_resource();
+	_create_vk_resource();
+	for (const auto &image_info : m_compile_info.internal_images) {
+		auto image = image_info.image;
+		std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID()
+		          << " mip_levels = " << image->Visit([](auto *image) -> uint32_t {
+			             if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
+				             return image->m_internal_info.size.GetMipLevels();
+			             else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
+			                                ResourceClass::kManagedImage)
+				             return image->GetSize().GetMipLevels();
+			             return 0;
+		             })
+		          << " [" << image_info.first_pass << ", " << image_info.last_pass << "]"
+		          << " usage = " << image_info.vk_image_usages << " {size, alignment, flag} = {"
+		          << image_info.vk_memory_requirements.size << ", " << image_info.vk_memory_requirements.alignment
+		          << ", " << image_info.vk_memory_requirements.memoryTypeBits << "}" << std::endl;
+	}
+
+	for (const auto &buffer_info : m_compile_info.internal_buffers) {
+		auto buffer = buffer_info.buffer;
+		std::cout << buffer->GetKey().GetName() << ":" << buffer->GetKey().GetID() << " [" << buffer_info.first_pass
+		          << ", " << buffer_info.last_pass << "]"
+		          << " {size, alignment, flag} = {" << buffer_info.vk_memory_requirements.size << ", "
+		          << buffer_info.vk_memory_requirements.alignment << ", "
+		          << buffer_info.vk_memory_requirements.memoryTypeBits << "}" << std::endl;
+	}
 }
 
-inline constexpr VkShaderStageFlags ShaderStagesFromPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
+inline constexpr VkShaderStageFlags VkShaderStagesFromVkPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
 	VkShaderStageFlags ret = 0;
 	if (pipeline_stages & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)
 		ret |= VK_SHADER_STAGE_VERTEX_BIT;
@@ -275,7 +534,7 @@ DescriptorSetData::GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &devic
 				info.descriptorType = UsageGetDescriptorType(binding_data.second.GetInputPtr()->GetUsage());
 				info.descriptorCount = 1;
 				info.stageFlags =
-				    ShaderStagesFromPipelineStages(binding_data.second.GetInputPtr()->GetUsagePipelineStages());
+				    VkShaderStagesFromVkPipelineStages(binding_data.second.GetInputPtr()->GetUsagePipelineStages());
 				if (info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
 				    binding_data.second.GetVkSampler()) {
 					immutable_samplers.push_back(binding_data.second.GetVkSampler()->GetHandle());
@@ -287,6 +546,13 @@ DescriptorSetData::GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &devic
 		m_modified = false;
 	}
 	return m_descriptor_set_layout;
+}
+
+void RenderGraphBase::SetCanvasSize(const VkExtent2D &canvas_size) {
+	if (canvas_size.width != m_canvas_size.width || canvas_size.height != m_canvas_size.height) {
+		m_canvas_size = canvas_size;
+		set_compile_phrase(CompilePhrase::kGenerateVkResource);
+	}
 }
 
 } // namespace myvk_rg::_details_

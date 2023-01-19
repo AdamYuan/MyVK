@@ -208,12 +208,13 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 };
 
-class TestPass0 final : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+class TestPass0 final : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kCompute> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
 		for (int i = 0; i < 3; ++i) {
 			auto managed_buffer = CreateResource<myvk_rg::ManagedBuffer>({"draw_list", i});
+			managed_buffer->SetSize(sizeof(uint32_t) * 100);
 			std::cout << managed_buffer->GetKey().GetName() << " " << managed_buffer->GetKey().GetID() << std::endl;
 			printf("GetBuffer: %p, GetImage: %p\n", GetBufferResource({"draw_list", i}),
 			       GetImageResource({"draw_list", i}));
@@ -228,7 +229,7 @@ private:
 				RemoveInput({"noise_tex", i - 1});
 			}
 
-			AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferW, VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT>(
+			AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
 			    {"draw_list_gen", i}, managed_buffer);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 			//    dynamic_cast<myvk_rg::ManagedBuffer *>(input->GetResource()));
@@ -237,7 +238,8 @@ private:
 			output_buffer = MakeBufferOutput({"draw_list_gen", i});
 			printf("output_buffer2 = %p\n", output_buffer);
 
-			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"noise_tex", i}, managed_image);
+			AddDescriptorInput<1, myvk_rg::Usage::kStorageImageW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
+			    {"noise_tex", i}, managed_image);
 			// printf("input.usage = %d\ninput.resource = %p\n", input->GetUsage(),
 			//    dynamic_cast<myvk_rg::ManagedBuffer *>(input->GetResource()));
 			// auto output_image_invalid = GetBufferOutput({"noise_tex", i});
@@ -347,12 +349,18 @@ int main() {
 	}
 
 	myvk::Ptr<TestRenderGraph> render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device);
+	render_graph->SetCanvasSize({100, 100});
 	render_graph->Compile();
 	render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");
+	render_graph->SetCanvasSize({1920, 1080});
 	render_graph->Compile();
 	render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");
+	render_graph->SetCanvasSize({1280, 720});
+	render_graph->Compile();
+	printf("RESIZE\n");
+	render_graph->SetCanvasSize({1920, 1080});
 	render_graph->Compile();
 
 	// object_pool.DeleteBuffer("draw_list");
