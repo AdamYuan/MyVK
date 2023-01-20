@@ -427,21 +427,21 @@ void RenderGraphBase::_create_vk_resource() const {
 		                              &buffer_info.vk_memory_requirements);
 	}
 	for (auto &image_info : m_compile_info.internal_images) {
-		const SubImageSize &image_size = image_info.image->Visit([](auto *image) -> const SubImageSize & {
+		const SubImageSize *p_image_size = image_info.image->Visit([](auto *image) -> const SubImageSize * {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal) {
 				image->m_internal_info.parent = nullptr;
 				image->m_internal_info.base_layer = 0;
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage) {
 					_maintain_combined_image_size(image);
-					return image->m_internal_info.size;
+					return &image->m_internal_info.size;
 				} else
-					return image->GetSize();
+					return &image->GetSize();
 			} else {
 				assert(false);
-				return {};
+				return nullptr;
 			}
 		});
-		assert(image_size.GetBaseMipLevel() == 0);
+		assert(p_image_size && p_image_size->GetBaseMipLevel() == 0);
 		VkImageCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
 		create_info.usage = image_info.vk_image_usages;
 		if (image_info.is_transient)
@@ -457,22 +457,22 @@ void RenderGraphBase::_create_vk_resource() const {
 			extent = {1, 1, 1};
 			switch (create_info.imageType) {
 			case VK_IMAGE_TYPE_1D: {
-				extent.width = image_size.GetExtent().width;
-				create_info.mipLevels = image_size.GetMipLevels();
-				create_info.arrayLayers = image_size.GetArrayLayers();
+				extent.width = p_image_size->GetExtent().width;
+				create_info.mipLevels = p_image_size->GetMipLevels();
+				create_info.arrayLayers = p_image_size->GetArrayLayers();
 			} break;
 			case VK_IMAGE_TYPE_2D: {
-				extent.width = image_size.GetExtent().width;
-				extent.height = image_size.GetExtent().height;
-				create_info.mipLevels = image_size.GetMipLevels();
-				create_info.arrayLayers = image_size.GetArrayLayers();
+				extent.width = p_image_size->GetExtent().width;
+				extent.height = p_image_size->GetExtent().height;
+				create_info.mipLevels = p_image_size->GetMipLevels();
+				create_info.arrayLayers = p_image_size->GetArrayLayers();
 			} break;
 			case VK_IMAGE_TYPE_3D: {
-				assert(image_size.GetExtent().depth == 1 || image_size.GetArrayLayers() == 1);
-				extent.width = image_size.GetExtent().width;
-				extent.height = image_size.GetExtent().height;
-				extent.depth = std::max(image_size.GetExtent().depth, image_size.GetArrayLayers());
-				create_info.mipLevels = image_size.GetMipLevels();
+				assert(p_image_size->GetExtent().depth == 1 || p_image_size->GetArrayLayers() == 1);
+				extent.width = p_image_size->GetExtent().width;
+				extent.height = p_image_size->GetExtent().height;
+				extent.depth = std::max(p_image_size->GetExtent().depth, p_image_size->GetArrayLayers());
+				create_info.mipLevels = p_image_size->GetMipLevels();
 				create_info.arrayLayers = 1;
 			} break;
 			default:
@@ -487,72 +487,181 @@ void RenderGraphBase::_create_vk_resource() const {
 
 inline static constexpr VkDeviceSize DivRoundUp(VkDeviceSize l, VkDeviceSize r) { return (l / r) + (l % r ? 1 : 0); }
 
-void RenderGraphBase::_make_naive_allocation(const std::vector<InternalResourceInfo *> &resources,
-                                             VkDeviceSize alignment,
-                                             VkMemoryPropertyFlags memory_property_flags) const {
+void RenderGraphBase::_make_naive_allocation(MemoryInfo &&memory_info,
+                                             const VmaAllocationCreateInfo &allocation_create_info) const {
+	if (memory_info.empty())
+		return;
+
 	uint32_t allocation_id = m_compile_info.allocations.size();
 	m_compile_info.allocations.emplace_back();
 	auto &allocation_info = m_compile_info.allocations.back();
 
-	allocation_info.vk_memory_requirements.alignment = alignment;
-	allocation_info.vk_memory_requirements.memoryTypeBits = -1;
+	VkMemoryRequirements memory_requirements = {};
+	memory_requirements.alignment = memory_info.alignment;
+	memory_requirements.memoryTypeBits = memory_info.memory_type_bits;
 
-	VkDeviceSize blocks = 0;
-	for (auto *p_resource_info : resources) {
+	uint32_t allocation_blocks = 0;
+	for (auto *p_resource_info : memory_info.resources) {
 		p_resource_info->allocation_id = allocation_id;
-		p_resource_info->memory_offset = blocks * alignment;
-		allocation_info.vk_memory_requirements.memoryTypeBits &= p_resource_info->vk_memory_requirements.memoryTypeBits;
-		blocks += DivRoundUp(p_resource_info->vk_memory_requirements.size, alignment);
+		p_resource_info->memory_offset = allocation_blocks * memory_info.alignment;
+		allocation_blocks += DivRoundUp(p_resource_info->vk_memory_requirements.size, memory_info.alignment);
 	}
-	allocation_info.vk_memory_requirements.size = blocks * alignment;
-
-	VmaAllocationCreateInfo alloc_create_info{};
-	alloc_create_info.preferredFlags = memory_property_flags;
+	memory_requirements.size = allocation_blocks * memory_info.alignment;
 
 	allocation_info.myvk_allocation =
-	    std::make_shared<RenderGraphAllocation>(this, allocation_info.vk_memory_requirements, alloc_create_info);
+	    std::make_shared<RenderGraphAllocation>(this, memory_requirements, allocation_create_info);
+}
 
-	printf("allocation #%u: size = %lu MB, alignment = %lu, preferredFlags = %u\n", allocation_id,
-	       allocation_info.vk_memory_requirements.size >> 20u, allocation_info.vk_memory_requirements.alignment,
-	       memory_property_flags);
+void RenderGraphBase::_make_optimal_allocation(MemoryInfo &&memory_info,
+                                               const VmaAllocationCreateInfo &allocation_create_info) const {
+	if (memory_info.empty())
+		return;
+
+	uint32_t allocation_id = m_compile_info.allocations.size();
+	m_compile_info.allocations.emplace_back();
+	auto &allocation_info = m_compile_info.allocations.back();
+
+	// Sort Resources by required sizes, place large resources first
+	std::sort(memory_info.resources.begin(), memory_info.resources.end(),
+	          [](const InternalResourceInfo *l, const InternalResourceInfo *r) -> bool {
+		          return l->vk_memory_requirements.size > r->vk_memory_requirements.size ||
+		                 (l->vk_memory_requirements.size == r->vk_memory_requirements.size &&
+		                  l->first_pass < r->first_pass) ||
+		                 (l->vk_memory_requirements.size == r->vk_memory_requirements.size &&
+		                  l->first_pass == r->first_pass && l->last_pass > r->last_pass);
+	          });
+
+	uint32_t allocation_blocks = 0;
+	{
+		struct Vec2 {
+			uint32_t mem, pass;
+		};
+		// An AABB indicates a placed resource
+		struct AABB {
+			Vec2 low, high;
+			inline bool intersect(uint32_t first_pass, uint32_t last_pass) const {
+				return high.pass >= first_pass && low.pass <= last_pass;
+			}
+		};
+		struct Event {
+			uint32_t mem, cnt;
+			inline bool operator<(const Event &r) const { return mem < r.mem; }
+		};
+
+		std::vector<AABB> placed_blocks;
+		std::vector<Event> events;
+		placed_blocks.reserve(memory_info.resources.size());
+		events.reserve(memory_info.resources.size() << 1u);
+
+		for (auto *p_resource_info : memory_info.resources) {
+			// Find an empty position to place
+			events.clear();
+			for (const auto &placed : placed_blocks) {
+				if (placed.intersect(p_resource_info->first_pass, p_resource_info->last_pass)) {
+					events.push_back({placed.low.mem, 1});
+					events.push_back({placed.high.mem, (uint32_t)-1});
+				}
+			}
+			std::sort(events.begin(), events.end());
+
+			uint32_t required_mem_size =
+			    DivRoundUp(p_resource_info->vk_memory_requirements.size, memory_info.alignment);
+
+			uint32_t optimal_mem_pos = 0, optimal_mem_size = -1;
+			if (!events.empty()) {
+				assert(events.front().cnt == 1 && events.back().cnt == -1);
+				if (events.front().mem >= required_mem_size)
+					optimal_mem_size = events.front().mem;
+				else
+					optimal_mem_pos = events.back().mem;
+
+				for (uint32_t i = 1; i < events.size(); ++i) {
+					events[i].cnt += events[i - 1].cnt;
+					if (events[i - 1].cnt == 0 && events[i].cnt == 1) {
+						uint32_t cur_mem_pos = events[i - 1].mem, cur_mem_size = events[i].mem - events[i - 1].mem;
+						if (required_mem_size <= cur_mem_size && cur_mem_size < optimal_mem_size) {
+							optimal_mem_size = cur_mem_size;
+							optimal_mem_pos = cur_mem_pos;
+						}
+					}
+				}
+			}
+
+			p_resource_info->allocation_id = allocation_id;
+			p_resource_info->memory_offset = optimal_mem_pos * memory_info.alignment;
+			allocation_blocks = std::max(allocation_blocks, optimal_mem_pos + required_mem_size);
+
+			placed_blocks.push_back({{optimal_mem_pos, p_resource_info->first_pass},
+			                         {optimal_mem_pos + required_mem_size, p_resource_info->last_pass}});
+		}
+	}
+
+	VkMemoryRequirements memory_requirements = {};
+	memory_requirements.alignment = memory_info.alignment;
+	memory_requirements.memoryTypeBits = memory_info.memory_type_bits;
+	memory_requirements.size = allocation_blocks * memory_info.alignment;
+
+	allocation_info.myvk_allocation =
+	    std::make_shared<RenderGraphAllocation>(this, memory_requirements, allocation_create_info);
 }
 
 void RenderGraphBase::_create_and_bind_memory_allocation() const {
 	m_compile_info.allocations.clear();
-	struct {
-		std::vector<InternalResourceInfo *> resources;
-		VkDeviceSize alignment{1};
-		void push(InternalResourceInfo *resource) {
-			resources.push_back(resource);
-			alignment = std::max(alignment, resource->vk_memory_requirements.alignment);
+	{ // Create Allocations
+		MemoryInfo device_memory{}, lazy_memory{}, mapped_memory{};
+
+		device_memory.resources.reserve(m_compile_info.internal_images.size() + m_compile_info.internal_buffers.size());
+		device_memory.alignment =
+		    GetDevicePtr()->GetPhysicalDevicePtr()->GetProperties().vk10.limits.bufferImageGranularity;
+
+		bool lazy_allocation_supported = false;
+		for (uint32_t i = 0; i < GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypeCount; i++) {
+			if (GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypes[i].propertyFlags &
+			    VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
+				lazy_allocation_supported = true;
+				break;
+			}
 		}
-	} device_memory{}, lazy_memory{}, mapped_memory{};
+		printf("lazy_allocation_supported = %d\n", lazy_allocation_supported);
 
-	device_memory.resources.reserve(m_compile_info.internal_images.size() + m_compile_info.internal_buffers.size());
-	device_memory.alignment =
-	    GetDevicePtr()->GetPhysicalDevicePtr()->GetProperties().vk10.limits.bufferImageGranularity;
-
-	for (auto &image_info : m_compile_info.internal_images) {
-		if (image_info.is_transient &&
-		    (image_info.vk_memory_requirements.memoryTypeBits & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT))
-			lazy_memory.push(&image_info); // If the image is Transient and LAZY_ALLOCATION is supported
-		else
-			device_memory.push(&image_info);
+		for (auto &image_info : m_compile_info.internal_images) {
+			if (lazy_allocation_supported && image_info.is_transient)
+				lazy_memory.push(&image_info); // If the image is Transient and LAZY_ALLOCATION is supported
+			else
+				device_memory.push(&image_info);
+		}
+		for (auto &buffer_info : m_compile_info.internal_buffers) {
+			if (false) // TODO: Mapped Buffer Condition
+				mapped_memory.push(&buffer_info);
+			else
+				device_memory.push(&buffer_info);
+		}
+		{
+			VmaAllocationCreateInfo create_info = {};
+			create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT | VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT;
+			create_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+			_make_optimal_allocation(std::move(device_memory), create_info);
+		}
+		{
+			VmaAllocationCreateInfo create_info = {};
+			create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			create_info.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
+			_make_naive_allocation(std::move(lazy_memory), create_info);
+		}
 	}
-	for (auto &buffer_info : m_compile_info.internal_buffers) {
-		if (false) // TODO: Mapped Buffer Condition
-			mapped_memory.push(&buffer_info);
-		else
-			device_memory.push(&buffer_info);
-	}
-
-	_make_naive_allocation(device_memory.resources, device_memory.alignment, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	_make_naive_allocation(lazy_memory.resources, lazy_memory.alignment, VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT);
 	// Bind Memory
 	for (auto &image_info : m_compile_info.internal_images)
 		vmaBindImageMemory(GetDevicePtr()->GetAllocatorHandle(),
 		                   m_compile_info.allocations[image_info.allocation_id].myvk_allocation->GetHandle(),
 		                   image_info.myvk_image->GetHandle());
+	for (const auto &allocation_info : m_compile_info.allocations) {
+		VmaAllocationInfo info;
+		vmaGetAllocationInfo(GetDevicePtr()->GetAllocatorHandle(), allocation_info.myvk_allocation->GetHandle(), &info);
+		VkMemoryPropertyFlags flags;
+		vmaGetAllocationMemoryProperties(GetDevicePtr()->GetAllocatorHandle(),
+		                                 allocation_info.myvk_allocation->GetHandle(), &flags);
+		printf("allocation: size = %lu MB, memory_type = %u\n", info.size >> 20u, flags);
+	}
 }
 
 void RenderGraphBase::generate_vk_resource() const {

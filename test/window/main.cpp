@@ -342,14 +342,14 @@ int main() {
 	{
 		auto instance = myvk::Instance::CreateWithGlfwExtensions();
 		auto surface = myvk::Surface::Create(instance, window);
-		auto physical_device = myvk::PhysicalDevice::Fetch(instance)[1];
+		auto physical_device = myvk::PhysicalDevice::Fetch(instance)[0];
 		device = myvk::Device::Create(
 		    physical_device, myvk::GenericPresentQueueSelector{&generic_queue, surface, &present_queue},
 		    physical_device->GetDefaultFeatures(), {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 	}
 
 	myvk::Ptr<TestRenderGraph> render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device);
-	render_graph->SetCanvasSize({100, 100});
+	render_graph->SetCanvasSize({1000, 1000});
 	render_graph->Compile();
 	render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");

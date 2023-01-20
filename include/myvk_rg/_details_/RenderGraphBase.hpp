@@ -69,8 +69,18 @@ private:
 		VkRenderPass vk_render_pass{VK_NULL_HANDLE};
 	};
 	struct AllocationInfo {
-		VkMemoryRequirements vk_memory_requirements{};
 		myvk::Ptr<RenderGraphAllocation> myvk_allocation{};
+	};
+	struct MemoryInfo {
+		std::vector<InternalResourceInfo *> resources;
+		VkDeviceSize alignment = 1;
+		uint32_t memory_type_bits = -1;
+		inline void push(InternalResourceInfo *resource) {
+			resources.push_back(resource);
+			alignment = std::max(alignment, resource->vk_memory_requirements.alignment);
+			memory_type_bits &= resource->vk_memory_requirements.memoryTypeBits;
+		}
+		inline bool empty() const { return resources.empty(); }
 	};
 	mutable struct {
 		// Phrase: assign_pass_resource_indices
@@ -97,10 +107,9 @@ private:
 	// 3: Generate Vulkan Resource
 	static void _maintain_combined_image_size(const CombinedImage *image);
 	void _create_vk_resource() const;
-	void _make_naive_allocation(const std::vector<InternalResourceInfo *> &resources, VkDeviceSize alignment,
-	                            VkMemoryPropertyFlags memory_property_flags) const;
-	void _make_optimal_allocation(const std::vector<InternalResourceInfo *> &resources, VkDeviceSize alignment,
-	                              VkMemoryPropertyFlags memory_property_flags) const;
+	void _make_naive_allocation(MemoryInfo &&memory_info, const VmaAllocationCreateInfo &allocation_create_info) const;
+	void _make_optimal_allocation(MemoryInfo &&memory_info,
+	                              const VmaAllocationCreateInfo &allocation_create_info) const;
 	void _create_and_bind_memory_allocation() const;
 	void generate_vk_resource() const;
 #pragma endregion
