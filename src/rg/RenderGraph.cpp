@@ -1,6 +1,7 @@
 #include "myvk_rg/RenderGraph.hpp"
 #include "myvk_rg/_details_/RenderGraphBase.hpp"
 
+#include <algorithm>
 #include <iostream>
 
 namespace myvk_rg::_details_ {
