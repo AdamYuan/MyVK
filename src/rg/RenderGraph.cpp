@@ -284,6 +284,7 @@ void RenderGraphBase::_compute_resource_property_and_lifespan() const {
 			cur_last_pass = m_compile_info.render_passes[pass_info.render_pass_id].last_pass;
 		}
 		const auto update_pass_range = [this, cur_first_pass, cur_last_pass](const auto *internal_resource) -> void {
+			// TODO: [Sus] Only Attachments need to be "alive" during the whole process ?
 			if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kIsInternal) {
 				if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kType == ResourceType::kImage) {
 					auto &image_info = m_compile_info.internal_images[internal_resource->m_internal_info.image_id];
@@ -501,7 +502,7 @@ void RenderGraphBase::_make_naive_allocation(MemoryInfo &&memory_info,
 	memory_requirements.alignment = memory_info.alignment;
 	memory_requirements.memoryTypeBits = memory_info.memory_type_bits;
 
-	uint32_t allocation_blocks = 0;
+	VkDeviceSize allocation_blocks = 0;
 	for (auto *p_resource_info : memory_info.resources) {
 		p_resource_info->allocation_id = allocation_id;
 		p_resource_info->memory_offset = allocation_blocks * memory_info.alignment;
@@ -516,7 +517,8 @@ void RenderGraphBase::_make_naive_allocation(MemoryInfo &&memory_info,
 // An AABB indicates a placed resource
 struct MemAABB {
 	struct Vec2 {
-		uint32_t mem, pass;
+		VkDeviceSize mem;
+		uint32_t pass;
 	};
 	Vec2 low, high;
 	inline bool intersect(uint32_t first_pass, uint32_t last_pass) const {
@@ -524,7 +526,8 @@ struct MemAABB {
 	}
 };
 struct MemEvent {
-	uint32_t mem, cnt;
+	VkDeviceSize mem;
+	uint32_t cnt;
 	inline bool operator<(const MemEvent &r) const { return mem < r.mem; }
 };
 void RenderGraphBase::_make_optimal_allocation(MemoryInfo &&memory_info,
@@ -546,7 +549,7 @@ void RenderGraphBase::_make_optimal_allocation(MemoryInfo &&memory_info,
 		                  l->first_pass == r->first_pass && l->last_pass > r->last_pass);
 	          });
 
-	uint32_t allocation_blocks = 0;
+	VkDeviceSize allocation_blocks = 0;
 	{
 		std::vector<MemAABB> placed_blocks;
 		std::vector<MemEvent> events;
@@ -564,10 +567,10 @@ void RenderGraphBase::_make_optimal_allocation(MemoryInfo &&memory_info,
 			}
 			std::sort(events.begin(), events.end());
 
-			uint32_t required_mem_size =
+			VkDeviceSize required_mem_size =
 			    DivRoundUp(p_resource_info->vk_memory_requirements.size, memory_info.alignment);
 
-			uint32_t optimal_mem_pos = 0, optimal_mem_size = -1;
+			VkDeviceSize optimal_mem_pos = 0, optimal_mem_size = std::numeric_limits<VkDeviceSize>::max();
 			if (!events.empty()) {
 				assert(events.front().cnt == 1 && events.back().cnt == -1);
 				if (events.front().mem >= required_mem_size)
@@ -578,7 +581,7 @@ void RenderGraphBase::_make_optimal_allocation(MemoryInfo &&memory_info,
 				for (uint32_t i = 1; i < events.size(); ++i) {
 					events[i].cnt += events[i - 1].cnt;
 					if (events[i - 1].cnt == 0 && events[i].cnt == 1) {
-						uint32_t cur_mem_pos = events[i - 1].mem, cur_mem_size = events[i].mem - events[i - 1].mem;
+						VkDeviceSize cur_mem_pos = events[i - 1].mem, cur_mem_size = events[i].mem - events[i - 1].mem;
 						if (required_mem_size <= cur_mem_size && cur_mem_size < optimal_mem_size) {
 							optimal_mem_size = cur_mem_size;
 							optimal_mem_pos = cur_mem_pos;
@@ -650,10 +653,16 @@ void RenderGraphBase::_create_and_bind_memory_allocation() const {
 		}
 	}
 	// Bind Memory
-	for (auto &image_info : m_compile_info.internal_images)
-		vmaBindImageMemory(GetDevicePtr()->GetAllocatorHandle(),
-		                   m_compile_info.allocations[image_info.allocation_id].myvk_allocation->GetHandle(),
-		                   image_info.myvk_image->GetHandle());
+	for (auto &image_info : m_compile_info.internal_images) {
+		vmaBindImageMemory2(GetDevicePtr()->GetAllocatorHandle(),
+		                    m_compile_info.allocations[image_info.allocation_id].myvk_allocation->GetHandle(),
+		                    image_info.memory_offset, image_info.myvk_image->GetHandle(), nullptr);
+	}
+	for (auto &buffer_info : m_compile_info.internal_buffers) {
+		vmaBindBufferMemory2(GetDevicePtr()->GetAllocatorHandle(),
+		                     m_compile_info.allocations[buffer_info.allocation_id].myvk_allocation->GetHandle(),
+		                     buffer_info.memory_offset, buffer_info.myvk_buffer->GetHandle(), nullptr);
+	}
 	for (const auto &allocation_info : m_compile_info.allocations) {
 		VmaAllocationInfo info;
 		vmaGetAllocationInfo(GetDevicePtr()->GetAllocatorHandle(), allocation_info.myvk_allocation->GetHandle(), &info);
@@ -742,13 +751,6 @@ DescriptorSetData::GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &devic
 		m_modified = false;
 	}
 	return m_descriptor_set_layout;
-}
-
-void RenderGraphBase::SetCanvasSize(const VkExtent2D &canvas_size) {
-	if (canvas_size.width != m_canvas_size.width || canvas_size.height != m_canvas_size.height) {
-		m_canvas_size = canvas_size;
-		set_compile_phrase(CompilePhrase::kGenerateVkResource);
-	}
 }
 
 } // namespace myvk_rg::_details_

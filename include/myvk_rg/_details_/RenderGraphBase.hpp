@@ -48,8 +48,9 @@ private:
 	};
 	struct InternalResourceInfo {
 		VkMemoryRequirements vk_memory_requirements{};
-		uint32_t first_pass{}, last_pass{};        // lifespan
-		uint32_t allocation_id{}, memory_offset{}; // Created by _calculate_memory_allocation
+		uint32_t first_pass{}, last_pass{}; // lifespan
+		uint32_t allocation_id{};
+		VkDeviceSize memory_offset{}; // Created by _calculate_memory_allocation
 	};
 	struct InternalImageInfo final : public InternalResourceInfo {
 		const ImageBase *image{};
@@ -128,7 +129,12 @@ public:
 	inline RenderGraphBase() = default;
 	inline ~RenderGraphBase() override = default;
 
-	void SetCanvasSize(const VkExtent2D &canvas_size);
+	inline void SetCanvasSize(const VkExtent2D &canvas_size) {
+		if (canvas_size.width != m_canvas_size.width || canvas_size.height != m_canvas_size.height) {
+			m_canvas_size = canvas_size;
+			set_compile_phrase(CompilePhrase::kGenerateVkResource);
+		}
+	}
 
 	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 	inline void Compile() {
