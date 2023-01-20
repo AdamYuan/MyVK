@@ -15,16 +15,15 @@ using ResultPoolData = PoolData<ResourceBase *>;
 class ImageBase;
 class ManagedBuffer;
 class CombinedImage;
+
+class RenderGraphAllocation;
 class RenderGraphBase : public myvk::DeviceObjectBase {
 private:
 	myvk::Ptr<myvk::Device> m_device_ptr;
-	// uint32_t m_frame_count{};
 	VkExtent2D m_canvas_size{};
 
 	const std::vector<PassBase *> *m_p_pass_pool_sequence{};
 	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
-	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
-	// const _details_rg_pool_::PassPoolData *m_p_pass_pool_data{};
 
 	// The Compiler
 #pragma region The Compiler
@@ -41,38 +40,39 @@ private:
 	uint8_t m_compile_phrase{};
 	inline void set_compile_phrase(uint8_t phrase) { m_compile_phrase |= phrase; }
 
+	struct PassInfo {
+		const PassBase *pass{};
+		uint32_t _merge_length_{};
+		uint32_t render_pass_id{};
+		myvk::Ptr<myvk::DescriptorSet> myvk_descriptor_set{};
+	};
+	struct InternalResourceInfo {
+		VkMemoryRequirements vk_memory_requirements{};
+		uint32_t first_pass{}, last_pass{};        // lifespan
+		uint32_t allocation_id{}, memory_offset{}; // Created by _calculate_memory_allocation
+	};
+	struct InternalImageInfo final : public InternalResourceInfo {
+		const ImageBase *image{};
+		myvk::Ptr<myvk::ImageBase> myvk_image{};
+		VkImageUsageFlags vk_image_usages{};
+		VkImageType vk_image_type{}; // Union of 1 << VK_IMAGE_TYPE_xD
+		bool is_transient{};
+	};
+	struct InternalBufferInfo final : public InternalResourceInfo {
+		const ManagedBuffer *buffer{};
+		myvk::Ptr<myvk::BufferBase> myvk_buffer{};
+		VkBufferUsageFlags vk_buffer_usages{};
+	};
+	struct RenderPassInfo {
+		uint32_t first_pass{}, last_pass{};
+		VkFramebuffer vk_framebuffer{VK_NULL_HANDLE};
+		VkRenderPass vk_render_pass{VK_NULL_HANDLE};
+	};
+	struct AllocationInfo {
+		VkMemoryRequirements vk_memory_requirements{};
+		myvk::Ptr<RenderGraphAllocation> myvk_allocation{};
+	};
 	mutable struct {
-		struct PassInfo {
-			const PassBase *pass{};
-			uint32_t _merge_length_{};
-			uint32_t render_pass_id{};
-			std::vector<myvk::Ptr<myvk::DescriptorSet>> myvk_descriptor_sets{};
-		};
-		struct InternalResourceInfo {
-			VkMemoryRequirements vk_memory_requirements{};
-			uint32_t first_pass{}, last_pass{};        // lifespan
-			uint32_t allocation_id{}, memory_offset{}; // Created by _calculate_memory_allocation
-		};
-		struct InternalImageInfo final : public InternalResourceInfo {
-			const ImageBase *image{};
-			myvk::Ptr<myvk::ImageBase> myvk_image{};
-			VkImageUsageFlags vk_image_usages{};
-			VkImageType vk_image_type{}; // Union of 1 << VK_IMAGE_TYPE_xD
-			bool is_transient{};
-		};
-		struct InternalBufferInfo final : public InternalResourceInfo {
-			const ManagedBuffer *buffer{};
-			myvk::Ptr<myvk::BufferBase> myvk_buffer{};
-			VkBufferUsageFlags vk_buffer_usages{};
-		};
-		struct RenderPassInfo {
-			uint32_t first_pass{}, last_pass{};
-			VkFramebuffer vk_framebuffer{VK_NULL_HANDLE};
-			VkRenderPass vk_render_pass{VK_NULL_HANDLE};
-		};
-		struct AllocationInfo {
-			VkMemoryRequirements vk_memory_requirements{};
-		};
 		// Phrase: assign_pass_resource_indices
 		std::unordered_set<const ImageBase *> _internal_image_set_;      // Temporally used
 		std::unordered_set<const ManagedBuffer *> _internal_buffer_set_; // Temporally used
@@ -81,6 +81,8 @@ private:
 		std::vector<InternalBufferInfo> internal_buffers;                // Contains ManagedBuffer
 		// Phrase: merge_subpass
 		std::vector<RenderPassInfo> render_passes;
+		// Phrase: generate_vk_resource
+		std::vector<AllocationInfo> allocations;
 	} m_compile_info{};
 	// Compile Phrase Functions
 	// 1: Assign Pass & Resource Indices
@@ -95,7 +97,11 @@ private:
 	// 3: Generate Vulkan Resource
 	static void _maintain_combined_image_size(const CombinedImage *image);
 	void _create_vk_resource() const;
-	void _create_memory_allocation() const;
+	void _make_naive_allocation(const std::vector<InternalResourceInfo *> &resources, VkDeviceSize alignment,
+	                            VkMemoryPropertyFlags memory_property_flags) const;
+	void _make_optimal_allocation(const std::vector<InternalResourceInfo *> &resources, VkDeviceSize alignment,
+	                              VkMemoryPropertyFlags memory_property_flags) const;
+	void _create_and_bind_memory_allocation() const;
 	void generate_vk_resource() const;
 #pragma endregion
 
@@ -109,13 +115,6 @@ private:
 	friend class RenderGraphBuffer;
 	friend class RenderGraphImage;
 
-protected:
-	/* inline void SetFrameCount(uint32_t frame_count) {
-	    if (m_frame_count != frame_count)
-	        set_compile_phrase(CompilePhrase::kAssignPassResourceIndices);
-	    m_frame_count = frame_count;
-	} */
-
 public:
 	inline RenderGraphBase() = default;
 	inline ~RenderGraphBase() override = default;
@@ -123,7 +122,6 @@ public:
 	void SetCanvasSize(const VkExtent2D &canvas_size);
 
 	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
-	// inline uint32_t GetFrameCount() const { return m_frame_count; }
 	inline void Compile() {
 		if (m_compile_phrase == 0u)
 			return;

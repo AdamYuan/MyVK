@@ -342,7 +342,7 @@ int main() {
 	{
 		auto instance = myvk::Instance::CreateWithGlfwExtensions();
 		auto surface = myvk::Surface::Create(instance, window);
-		auto physical_device = myvk::PhysicalDevice::Fetch(instance)[0];
+		auto physical_device = myvk::PhysicalDevice::Fetch(instance)[1];
 		device = myvk::Device::Create(
 		    physical_device, myvk::GenericPresentQueueSelector{&generic_queue, surface, &present_queue},
 		    physical_device->GetDefaultFeatures(), {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME});

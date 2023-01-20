@@ -43,11 +43,32 @@ public:
 	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
 };
 
+class RenderGraphAllocation final : public myvk::DeviceObjectBase {
+private:
+	const RenderGraphBase *m_render_graph_ptr;
+	VmaAllocation m_allocation{VK_NULL_HANDLE};
+
+public:
+	inline RenderGraphAllocation(const RenderGraphBase *render_graph_ptr,
+	                             const VkMemoryRequirements &memory_requirements,
+	                             const VmaAllocationCreateInfo &create_info)
+	    : m_render_graph_ptr{render_graph_ptr} {
+		vmaAllocateMemory(GetDevicePtr()->GetAllocatorHandle(), &memory_requirements, &create_info, &m_allocation,
+		                  nullptr);
+	}
+	inline ~RenderGraphAllocation() final {
+		if (m_allocation != VK_NULL_HANDLE)
+			vmaFreeMemory(GetDevicePtr()->GetAllocatorHandle(), m_allocation);
+	}
+	inline VmaAllocation GetHandle() const { return m_allocation; }
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
+};
+
 void RenderGraphBase::_visit_resource_dep_passes(const ResourceBase *resource) const {
 	// Mark Visited Pass, Generate Temporal Managed Resource Sets
 	const auto visit_dep_pass = [this](const PassBase *dep_pass) -> void {
-		if (dep_pass && !dep_pass->m_internal_info.visited) {
-			dep_pass->m_internal_info.visited = true;
+		if (dep_pass && !dep_pass->m_internal_info._visited_) {
+			dep_pass->m_internal_info._visited_ = true;
 			// Further Traverse dep_pass's dependent Resources
 			dep_pass->for_each_input(
 			    [this](const Input *p_input) { _visit_resource_dep_passes(p_input->GetResource()); });
@@ -85,8 +106,8 @@ void RenderGraphBase::_visit_resource_dep_passes(const ResourceBase *resource) c
 }
 void RenderGraphBase::_extract_visited_passes(const std::vector<PassBase *> *p_cur_seq) const {
 	for (const auto pass : *p_cur_seq) {
-		if (pass->m_internal_info.visited) {
-			pass->m_internal_info.visited = false; // Restore
+		if (pass->m_internal_info._visited_) {
+			pass->m_internal_info._visited_ = false; // Restore _visit_
 			pass->m_internal_info.id = m_compile_info.passes.size();
 			m_compile_info.passes.push_back({pass});
 		} else if (pass->m_p_pass_pool_sequence)
@@ -218,7 +239,7 @@ void RenderGraphBase::_compute_merge_length() const {
 		});
 	}
 }
-inline void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
+inline static void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
 	// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 	switch (view_type) {
 	case VK_IMAGE_VIEW_TYPE_1D:
@@ -463,8 +484,80 @@ void RenderGraphBase::_create_vk_resource() const {
 		                             &image_info.vk_memory_requirements);
 	}
 }
+
+inline static constexpr VkDeviceSize DivRoundUp(VkDeviceSize l, VkDeviceSize r) { return (l / r) + (l % r ? 1 : 0); }
+
+void RenderGraphBase::_make_naive_allocation(const std::vector<InternalResourceInfo *> &resources,
+                                             VkDeviceSize alignment,
+                                             VkMemoryPropertyFlags memory_property_flags) const {
+	uint32_t allocation_id = m_compile_info.allocations.size();
+	m_compile_info.allocations.emplace_back();
+	auto &allocation_info = m_compile_info.allocations.back();
+
+	allocation_info.vk_memory_requirements.alignment = alignment;
+	allocation_info.vk_memory_requirements.memoryTypeBits = -1;
+
+	VkDeviceSize blocks = 0;
+	for (auto *p_resource_info : resources) {
+		p_resource_info->allocation_id = allocation_id;
+		p_resource_info->memory_offset = blocks * alignment;
+		allocation_info.vk_memory_requirements.memoryTypeBits &= p_resource_info->vk_memory_requirements.memoryTypeBits;
+		blocks += DivRoundUp(p_resource_info->vk_memory_requirements.size, alignment);
+	}
+	allocation_info.vk_memory_requirements.size = blocks * alignment;
+
+	VmaAllocationCreateInfo alloc_create_info{};
+	alloc_create_info.preferredFlags = memory_property_flags;
+
+	allocation_info.myvk_allocation =
+	    std::make_shared<RenderGraphAllocation>(this, allocation_info.vk_memory_requirements, alloc_create_info);
+
+	printf("allocation #%u: size = %lu MB, alignment = %lu, preferredFlags = %u\n", allocation_id,
+	       allocation_info.vk_memory_requirements.size >> 20u, allocation_info.vk_memory_requirements.alignment,
+	       memory_property_flags);
+}
+
+void RenderGraphBase::_create_and_bind_memory_allocation() const {
+	m_compile_info.allocations.clear();
+	struct {
+		std::vector<InternalResourceInfo *> resources;
+		VkDeviceSize alignment{1};
+		void push(InternalResourceInfo *resource) {
+			resources.push_back(resource);
+			alignment = std::max(alignment, resource->vk_memory_requirements.alignment);
+		}
+	} device_memory{}, lazy_memory{}, mapped_memory{};
+
+	device_memory.resources.reserve(m_compile_info.internal_images.size() + m_compile_info.internal_buffers.size());
+	device_memory.alignment =
+	    GetDevicePtr()->GetPhysicalDevicePtr()->GetProperties().vk10.limits.bufferImageGranularity;
+
+	for (auto &image_info : m_compile_info.internal_images) {
+		if (image_info.is_transient &&
+		    (image_info.vk_memory_requirements.memoryTypeBits & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT))
+			lazy_memory.push(&image_info); // If the image is Transient and LAZY_ALLOCATION is supported
+		else
+			device_memory.push(&image_info);
+	}
+	for (auto &buffer_info : m_compile_info.internal_buffers) {
+		if (false) // TODO: Mapped Buffer Condition
+			mapped_memory.push(&buffer_info);
+		else
+			device_memory.push(&buffer_info);
+	}
+
+	_make_naive_allocation(device_memory.resources, device_memory.alignment, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	_make_naive_allocation(lazy_memory.resources, lazy_memory.alignment, VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT);
+	// Bind Memory
+	for (auto &image_info : m_compile_info.internal_images)
+		vmaBindImageMemory(GetDevicePtr()->GetAllocatorHandle(),
+		                   m_compile_info.allocations[image_info.allocation_id].myvk_allocation->GetHandle(),
+		                   image_info.myvk_image->GetHandle());
+}
+
 void RenderGraphBase::generate_vk_resource() const {
 	_create_vk_resource();
+	_create_and_bind_memory_allocation();
 	for (const auto &image_info : m_compile_info.internal_images) {
 		auto image = image_info.image;
 		std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID()
@@ -479,7 +572,8 @@ void RenderGraphBase::generate_vk_resource() const {
 		          << " [" << image_info.first_pass << ", " << image_info.last_pass << "]"
 		          << " usage = " << image_info.vk_image_usages << " {size, alignment, flag} = {"
 		          << image_info.vk_memory_requirements.size << ", " << image_info.vk_memory_requirements.alignment
-		          << ", " << image_info.vk_memory_requirements.memoryTypeBits << "}" << std::endl;
+		          << ", " << image_info.vk_memory_requirements.memoryTypeBits << "}"
+		          << " transient = " << image_info.is_transient << std::endl;
 	}
 
 	for (const auto &buffer_info : m_compile_info.internal_buffers) {
@@ -492,7 +586,7 @@ void RenderGraphBase::generate_vk_resource() const {
 	}
 }
 
-inline constexpr VkShaderStageFlags VkShaderStagesFromVkPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
+inline static constexpr VkShaderStageFlags VkShaderStagesFromVkPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
 	VkShaderStageFlags ret = 0;
 	if (pipeline_stages & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)
 		ret |= VK_SHADER_STAGE_VERTEX_BIT;
