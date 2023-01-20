@@ -512,6 +512,20 @@ void RenderGraphBase::_make_naive_allocation(MemoryInfo &&memory_info,
 	    std::make_shared<RenderGraphAllocation>(this, memory_requirements, allocation_create_info);
 }
 
+// An AABB indicates a placed resource
+struct MemAABB {
+	struct Vec2 {
+		uint32_t mem, pass;
+	};
+	Vec2 low, high;
+	inline bool intersect(uint32_t first_pass, uint32_t last_pass) const {
+		return high.pass >= first_pass && low.pass <= last_pass;
+	}
+};
+struct MemEvent {
+	uint32_t mem, cnt;
+	inline bool operator<(const MemEvent &r) const { return mem < r.mem; }
+};
 void RenderGraphBase::_make_optimal_allocation(MemoryInfo &&memory_info,
                                                const VmaAllocationCreateInfo &allocation_create_info) const {
 	if (memory_info.empty())
@@ -533,23 +547,8 @@ void RenderGraphBase::_make_optimal_allocation(MemoryInfo &&memory_info,
 
 	uint32_t allocation_blocks = 0;
 	{
-		struct Vec2 {
-			uint32_t mem, pass;
-		};
-		// An AABB indicates a placed resource
-		struct AABB {
-			Vec2 low, high;
-			inline bool intersect(uint32_t first_pass, uint32_t last_pass) const {
-				return high.pass >= first_pass && low.pass <= last_pass;
-			}
-		};
-		struct Event {
-			uint32_t mem, cnt;
-			inline bool operator<(const Event &r) const { return mem < r.mem; }
-		};
-
-		std::vector<AABB> placed_blocks;
-		std::vector<Event> events;
+		std::vector<MemAABB> placed_blocks;
+		std::vector<MemEvent> events;
 		placed_blocks.reserve(memory_info.resources.size());
 		events.reserve(memory_info.resources.size() << 1u);
 
