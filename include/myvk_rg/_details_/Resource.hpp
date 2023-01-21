@@ -207,18 +207,18 @@ private:
 		return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
 	}
 
-	bool m_persistence{false};
+	// bool m_persistence{false};
 	mutable SizeType m_size{};
 	SizeFunc m_size_func{};
 
 public:
-	inline bool GetPersistence() const { return m_persistence; }
+	/* inline bool GetPersistence() const { return m_persistence; }
 	inline void SetPersistence(bool persistence = true) {
-		if (m_persistence != persistence) {
-			m_persistence = persistence;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
-		}
-	}
+	    if (m_persistence != persistence) {
+	        m_persistence = persistence;
+	        get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
+	    }
+	} */
 	inline const SizeType &GetSize() const {
 		if (m_size_func)
 			m_size = m_size_func(get_render_graph_ptr()->m_canvas_size);
@@ -322,7 +322,7 @@ class ManagedImage final : public ImageBase,
 private:
 	mutable struct {
 		const CombinedImage *parent{};
-		uint32_t image_id{};
+		uint32_t image_id{}, image_view_id{};
 		uint32_t base_layer{};
 		bool _has_parent_{};
 	} m_internal_info{};
@@ -376,7 +376,7 @@ private:
 	mutable struct {
 		SubImageSize size{};
 		const CombinedImage *parent{};
-		uint32_t image_id{};
+		uint32_t image_id{}, image_view_id{};
 		uint32_t base_layer{};
 		bool _has_parent_{};
 	} m_internal_info{};

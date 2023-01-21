@@ -64,6 +64,10 @@ private:
 		myvk::Ptr<myvk::BufferBase> myvk_buffer{};
 		VkBufferUsageFlags vk_buffer_usages{};
 	};
+	struct InternalImageViewInfo {
+		const ImageBase *image{};
+		myvk::Ptr<myvk::ImageView> myvk_image_view{};
+	};
 	struct RenderPassInfo {
 		uint32_t first_pass{}, last_pass{};
 		VkFramebuffer vk_framebuffer{VK_NULL_HANDLE};
@@ -90,6 +94,7 @@ private:
 		std::vector<PassInfo> passes;                                    // Major Pass Sequence
 		std::vector<InternalImageInfo> internal_images;                  // Contains CombinedImage and ManagedImage
 		std::vector<InternalBufferInfo> internal_buffers;                // Contains ManagedBuffer
+		std::vector<InternalImageViewInfo> internal_image_views;
 		// Phrase: merge_subpass
 		std::vector<RenderPassInfo> render_passes;
 		// Phrase: generate_vk_resource
@@ -107,12 +112,15 @@ private:
 	void merge_subpass() const;
 	// 3: Generate Vulkan Resource
 	static void _maintain_combined_image_size(const CombinedImage *image);
+	static void _accumulate_combined_image_base_layer(const CombinedImage *image);
 	void _create_vk_resource() const;
 	void _make_naive_allocation(MemoryInfo &&memory_info, const VmaAllocationCreateInfo &allocation_create_info) const;
 	void _make_optimal_allocation(MemoryInfo &&memory_info,
 	                              const VmaAllocationCreateInfo &allocation_create_info) const;
 	void _create_and_bind_memory_allocation() const;
 	void generate_vk_resource() const;
+	// 4: Generate Vulkan ImageView
+	void generate_vk_image_view() const;
 #pragma endregion
 
 	template <typename> friend class RenderGraph;
@@ -147,6 +155,8 @@ public:
 			merge_subpass();
 		case CompilePhrase::kGenerateVkResource:
 			generate_vk_resource();
+		case CompilePhrase::kGenerateVkImageView:
+			generate_vk_image_view();
 		}
 		m_compile_phrase = 0u;
 	}

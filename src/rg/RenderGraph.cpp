@@ -79,8 +79,7 @@ void RenderGraphBase::_visit_resource_dep_passes(const ResourceBase *resource) c
 		constexpr auto kClass = ResourceVisitorTrait<decltype(resource)>::kClass;
 		// For CombinedImage, further For Each its Child Images
 		if constexpr (kClass == ResourceClass::kCombinedImage) {
-			if (resource->m_internal_info._has_parent_ == false)
-				m_compile_info._internal_image_set_.insert(resource);
+			m_compile_info._internal_image_set_.insert(resource);
 			// Visit Each SubImage
 			resource->ForEachImage([&visit_dep_pass](auto *sub_image) -> void {
 				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
@@ -96,8 +95,7 @@ void RenderGraphBase::_visit_resource_dep_passes(const ResourceBase *resource) c
 			});
 		} else {
 			if constexpr (kClass == ResourceClass::kManagedImage) {
-				if (resource->m_internal_info._has_parent_ == false)
-					m_compile_info._internal_image_set_.insert(resource);
+				m_compile_info._internal_image_set_.insert(resource);
 			} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
 				m_compile_info._internal_buffer_set_.insert(resource);
 			} else if constexpr (GetResourceState(kClass) == ResourceState::kAlias)
@@ -148,15 +146,23 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 			m_compile_info.internal_buffers.emplace_back();
 			m_compile_info.internal_buffers.back().buffer = buffer;
 		}
+
 		m_compile_info._internal_buffer_set_.clear();
 	}
 
-	{ // Clean and Generate Internal Image List
+	{ // Clean and Generate Internal Image & ImageView List
 		m_compile_info.internal_images.clear();
-		// Add all top-level ManagedImages to the ManagedImage List
+		m_compile_info.internal_image_views.clear();
+		// Initialize Internal Image View
+		m_compile_info.internal_image_views.reserve(m_compile_info._internal_image_set_.size());
+		// Also Add all top-level ManagedImages to the ManagedImage List
 		for (auto *image : m_compile_info._internal_image_set_) {
 			image->Visit([this](auto *image) -> void {
-				if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
+				if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal) {
+					image->m_internal_info.image_view_id = m_compile_info.internal_image_views.size();
+					m_compile_info.internal_image_views.emplace_back();
+					m_compile_info.internal_image_views.back().image = image;
+
 					if (!image->m_internal_info._has_parent_) {
 						image->m_internal_info.image_id = m_compile_info.internal_images.size();
 						m_compile_info.internal_images.emplace_back();
@@ -165,7 +171,6 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 				}
 			});
 		}
-		m_compile_info._internal_image_set_.clear();
 		// Initialize Combined Image
 		for (auto &image_info : m_compile_info.internal_images) {
 			image_info.image->Visit([](auto *image) -> void {
@@ -174,6 +179,7 @@ void RenderGraphBase::assign_pass_resource_indices() const {
 				}
 			});
 		}
+		m_compile_info._internal_image_set_.clear();
 	}
 
 	printf("managed image count: %ld\n", m_compile_info.internal_images.size());
@@ -399,20 +405,33 @@ void RenderGraphBase::merge_subpass() const {
 }
 
 void RenderGraphBase::_maintain_combined_image_size(const CombinedImage *image) {
-	// Visit Each Child Image, Update Size and Base Layer
+	// Visit Each Child Image, Update Size and Base Layer (Relative, need to be accumulated after)
 	image->m_internal_info.size = {};
 	image->ForEachExpandedImage([image](auto *sub_image) -> void {
 		if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
-			sub_image->m_internal_info.base_layer =
-			    image->m_internal_info.base_layer + image->m_internal_info.size.GetArrayLayers();
-
 			// Merge the Size of the Current Child Image
 			if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
-				image->m_internal_info.size.Merge(sub_image->GetSize());
+				const auto &size = sub_image->GetSize();
+				image->m_internal_info.size.Merge(size);
+				sub_image->m_internal_info.base_layer =
+				    image->m_internal_info.size.GetArrayLayers() - size.GetArrayLayers();
 			} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kCombinedImage) {
 				_maintain_combined_image_size(sub_image); // Further Query SubImage Size
 				image->m_internal_info.size.Merge(sub_image->m_internal_info.size);
+				sub_image->m_internal_info.base_layer =
+				    image->m_internal_info.size.GetArrayLayers() - sub_image->m_internal_info.size.GetArrayLayers();
 			}
+		}
+	});
+}
+
+void RenderGraphBase::_accumulate_combined_image_base_layer(const CombinedImage *image) {
+	uint32_t base_layer = image->m_internal_info.base_layer;
+	image->ForEachExpandedImage([base_layer](auto *sub_image) -> void {
+		if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
+			sub_image->m_internal_info.base_layer += base_layer;
+			if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kCombinedImage)
+				_accumulate_combined_image_base_layer(sub_image);
 		}
 	});
 }
@@ -435,6 +454,7 @@ void RenderGraphBase::_create_vk_resource() const {
 				image->m_internal_info.base_layer = 0;
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage) {
 					_maintain_combined_image_size(image);
+					_accumulate_combined_image_base_layer(image);
 					return &image->m_internal_info.size;
 				} else
 					return &image->GetSize();
@@ -691,7 +711,8 @@ void RenderGraphBase::generate_vk_resource() const {
 		          << " usage = " << image_info.vk_image_usages << " {size, alignment, flag} = {"
 		          << image_info.vk_memory_requirements.size << ", " << image_info.vk_memory_requirements.alignment
 		          << ", " << image_info.vk_memory_requirements.memoryTypeBits << "}"
-		          << " transient = " << image_info.is_transient << std::endl;
+		          << " transient = " << image_info.is_transient << " offset = " << image_info.memory_offset
+		          << std::endl;
 	}
 
 	for (const auto &buffer_info : m_compile_info.internal_buffers) {
@@ -700,7 +721,59 @@ void RenderGraphBase::generate_vk_resource() const {
 		          << ", " << buffer_info.last_pass << "]"
 		          << " {size, alignment, flag} = {" << buffer_info.vk_memory_requirements.size << ", "
 		          << buffer_info.vk_memory_requirements.alignment << ", "
-		          << buffer_info.vk_memory_requirements.memoryTypeBits << "}" << std::endl;
+		          << buffer_info.vk_memory_requirements.memoryTypeBits << "}"
+		          << " offset = " << buffer_info.memory_offset << std::endl;
+	}
+}
+
+inline static constexpr VkImageAspectFlags VkImageAspectFlagsFromVkFormat(VkFormat format) {
+	switch (format) {
+	case VK_FORMAT_D32_SFLOAT:
+	case VK_FORMAT_D16_UNORM:
+	case VK_FORMAT_X8_D24_UNORM_PACK32:
+		return VK_IMAGE_ASPECT_DEPTH_BIT;
+	case VK_FORMAT_D16_UNORM_S8_UINT:
+	case VK_FORMAT_D24_UNORM_S8_UINT:
+	case VK_FORMAT_D32_SFLOAT_S8_UINT:
+		return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+	case VK_FORMAT_S8_UINT:
+		return VK_IMAGE_ASPECT_STENCIL_BIT;
+	default:
+		return VK_IMAGE_ASPECT_COLOR_BIT;
+	}
+}
+
+void RenderGraphBase::generate_vk_image_view() const {
+	for (auto &image_view_info : m_compile_info.internal_image_views) {
+		auto [image_id, image_view_create_info] =
+		    image_view_info.image->Visit([](const auto *image) -> std::tuple<uint32_t, VkImageViewCreateInfo> {
+			    if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal) {
+				    const SubImageSize *p_image_size = {};
+				    if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
+					    p_image_size = &image->m_internal_info.size;
+				    else
+					    p_image_size = &image->GetSize();
+
+				    VkImageViewCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
+				    create_info.format = image->GetFormat();
+				    create_info.viewType = image->GetViewType();
+				    create_info.subresourceRange.baseArrayLayer = image->m_internal_info.base_layer;
+				    create_info.subresourceRange.layerCount = p_image_size->GetArrayLayers();
+				    create_info.subresourceRange.baseMipLevel = p_image_size->GetBaseMipLevel();
+				    create_info.subresourceRange.levelCount = p_image_size->GetMipLevels();
+				    create_info.subresourceRange.aspectMask = VkImageAspectFlagsFromVkFormat(image->GetFormat());
+				    printf("ImageView: {image_id = %u, base_layer = %u, layers = %u, base_level = %u, levels = %u}\n",
+				           image->m_internal_info.image_id, create_info.subresourceRange.baseArrayLayer,
+				           create_info.subresourceRange.layerCount, create_info.subresourceRange.baseMipLevel,
+				           create_info.subresourceRange.levelCount);
+				    return {image->m_internal_info.image_id, create_info};
+			    } else {
+				    assert(false);
+				    return {};
+			    }
+		    });
+		image_view_info.myvk_image_view =
+		    myvk::ImageView::Create(m_compile_info.internal_images[image_id].myvk_image, image_view_create_info);
 	}
 }
 
