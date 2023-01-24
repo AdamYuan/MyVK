@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_RESOURCE_USAGE_HPP
 #define MYVK_RG_RESOURCE_USAGE_HPP
 
-#include "Resource.hpp"
+#include "ResourceBase.hpp"
 
 namespace myvk_rg {
 enum class Usage {

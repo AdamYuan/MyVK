@@ -4,7 +4,10 @@
 #include <myvk/DescriptorSet.hpp>
 #include <myvk/DeviceObjectBase.hpp>
 
+#include <list>
 #include <unordered_set>
+
+#include "Usage.hpp"
 
 namespace myvk_rg::_details_ {
 
@@ -30,7 +33,7 @@ private:
 	struct CompilePhrase {
 		enum : uint8_t {
 			kAssignPassResourceIndices = 1u,
-			kMergeSubpass = 2u,
+			kMergeSubpass = 4u,
 			kGenerateVkResource = 8u,
 			kGenerateVkImageView = 16u,
 			kGenerateVkRenderPass = 32u,
@@ -39,6 +42,17 @@ private:
 	};
 	uint8_t m_compile_phrase{};
 	inline void set_compile_phrase(uint8_t phrase) { m_compile_phrase |= phrase; }
+
+	// Internal Graph Structures
+	struct PassGraphEdge {
+		const PassBase *from{}, *to{};
+		const ResourceBase *resource{};
+		Usage usage{};
+	};
+	struct PassGraphNode {
+		std::vector<const PassGraphEdge *> input_edges, output_edges;
+		uint32_t in_degree{};
+	};
 
 	struct PassInfo {
 		const PassBase *pass{};
@@ -89,11 +103,13 @@ private:
 	};
 	mutable struct {
 		// Phrase: assign_pass_resource_indices
-		std::unordered_set<const ImageBase *> _internal_image_set_;      // Temporally used
-		std::unordered_set<const ManagedBuffer *> _internal_buffer_set_; // Temporally used
-		std::vector<PassInfo> passes;                                    // Major Pass Sequence
-		std::vector<InternalImageInfo> internal_images;                  // Contains CombinedImage and ManagedImage
-		std::vector<InternalBufferInfo> internal_buffers;                // Contains ManagedBuffer
+		std::unordered_set<const ImageBase *> _internal_image_set_;       // Temporally used
+		std::unordered_set<const ManagedBuffer *> _internal_buffer_set_;  // Temporally used
+		std::unordered_map<const PassBase *, PassGraphNode> _pass_graph_; // Temporally used
+		std::list<PassGraphEdge> _pass_graph_edges_;
+		std::vector<PassInfo> passes;                     // Major Pass Sequence
+		std::vector<InternalImageInfo> internal_images;   // Contains CombinedImage and ManagedImage
+		std::vector<InternalBufferInfo> internal_buffers; // Contains ManagedBuffer
 		std::vector<InternalImageViewInfo> internal_image_views;
 		// Phrase: merge_subpass
 		std::vector<RenderPassInfo> render_passes;
@@ -102,8 +118,19 @@ private:
 	} m_compile_info{};
 	// Compile Phrase Functions
 	// 1: Assign Pass & Resource Indices
-	void _visit_resource_dep_passes(const ResourceBase *resource) const;
-	void _extract_visited_passes(const std::vector<PassBase *> *p_cur_seq) const;
+	inline void _pass_graph_add_edge(const PassBase *from, const PassBase *to, const ResourceBase *resource,
+	                                 Usage usage) const {
+		// assert(to != nullptr && resource != nullptr);
+		m_compile_info._pass_graph_edges_.push_back({from, to, resource, usage});
+		const auto *edge = &m_compile_info._pass_graph_edges_.back();
+		m_compile_info._pass_graph_[from].output_edges.push_back(edge);
+		m_compile_info._pass_graph_[to].input_edges.push_back(edge);
+		++m_compile_info._pass_graph_[to].in_degree;
+	}
+	void _visit_resource_dep_passes(const ResourceBase *resource, const PassBase *pass = nullptr,
+	                                Usage usage = Usage::___USAGE_NUM) const;
+	void _insert_write_after_read_edges() const;
+	void _extract_passes() const;
 	static void _initialize_combined_image(const CombinedImage *image);
 	void assign_pass_resource_indices() const;
 	// 2: Merge Subpass

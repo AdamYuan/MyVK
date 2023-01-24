@@ -22,7 +22,6 @@ private:
 
 	mutable struct {
 		uint32_t id{};
-		bool _visited_{};
 	} m_internal_info{};
 
 	template <typename, uint8_t> friend class Pass;

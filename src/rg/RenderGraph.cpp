@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <queue>
 
 namespace myvk_rg::_details_ {
 
@@ -65,52 +66,110 @@ public:
 	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
 };
 
-void RenderGraphBase::_visit_resource_dep_passes(const ResourceBase *resource) const {
+void RenderGraphBase::_visit_resource_dep_passes(const ResourceBase *resource, const PassBase *pass,
+                                                 Usage usage) const {
 	// Mark Visited Pass, Generate Temporal Managed Resource Sets
-	const auto visit_dep_pass = [this](const PassBase *dep_pass) -> void {
-		if (dep_pass && !dep_pass->m_internal_info._visited_) {
-			dep_pass->m_internal_info._visited_ = true;
+	const auto add_edge = [this, pass, usage](const ResourceBase *resource, const PassBase *dep_pass) -> void {
+		if (pass)
+			_pass_graph_add_edge(dep_pass, pass, resource, usage);
+	};
+	const auto add_edge_and_visit_dep_pass = [this, &add_edge](const ResourceBase *resource,
+	                                                           const PassBase *dep_pass) -> void {
+		bool not_visited = m_compile_info._pass_graph_.find(dep_pass) == m_compile_info._pass_graph_.end();
+		add_edge(resource, dep_pass);
+		if (dep_pass && not_visited) {
 			// Further Traverse dep_pass's dependent Resources
-			dep_pass->for_each_input(
-			    [this](const Input *p_input) { _visit_resource_dep_passes(p_input->GetResource()); });
+			dep_pass->for_each_input([this, dep_pass](const Input *p_input) {
+				_visit_resource_dep_passes(p_input->GetResource(), dep_pass, p_input->GetUsage());
+			});
 		}
 	};
-	resource->Visit([this, &visit_dep_pass](auto *resource) -> void {
+	resource->Visit([this, &add_edge_and_visit_dep_pass, &add_edge](auto *resource) -> void {
 		constexpr auto kClass = ResourceVisitorTrait<decltype(resource)>::kClass;
 		// For CombinedImage, further For Each its Child Images
 		if constexpr (kClass == ResourceClass::kCombinedImage) {
 			m_compile_info._internal_image_set_.insert(resource);
 			// Visit Each SubImage
-			resource->ForEachImage([&visit_dep_pass](auto *sub_image) -> void {
-				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage) {
+			resource->ForEachImage([&add_edge_and_visit_dep_pass, &add_edge](auto *sub_image) -> void {
+				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
 					sub_image->m_internal_info._has_parent_ = true;
-				} else {
+					add_edge(sub_image, nullptr);
+				} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsAlias) {
 					// Is ImageAlias
 					sub_image->GetPointedResource()->Visit([](auto *sub_image) -> void {
 						if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsCombinedOrManagedImage)
 							sub_image->m_internal_info._has_parent_ = true;
 					});
-					visit_dep_pass(sub_image->GetProducerPass());
-				}
+					add_edge_and_visit_dep_pass(sub_image->GetPointedResource(), sub_image->GetProducerPass());
+				} else
+					assert(false);
 			});
 		} else {
 			if constexpr (kClass == ResourceClass::kManagedImage) {
 				m_compile_info._internal_image_set_.insert(resource);
+				add_edge(resource, nullptr);
 			} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
 				m_compile_info._internal_buffer_set_.insert(resource);
+				add_edge(resource, nullptr);
 			} else if constexpr (GetResourceState(kClass) == ResourceState::kAlias)
-				visit_dep_pass(resource->GetProducerPass());
+				add_edge_and_visit_dep_pass(resource->GetPointedResource(), resource->GetProducerPass());
 		}
 	});
 }
-void RenderGraphBase::_extract_visited_passes(const std::vector<PassBase *> *p_cur_seq) const {
-	for (const auto pass : *p_cur_seq) {
-		if (pass->m_internal_info._visited_) {
-			pass->m_internal_info._visited_ = false; // Restore _visit_
-			pass->m_internal_info.id = m_compile_info.passes.size();
-			m_compile_info.passes.push_back({pass});
-		} else if (pass->m_p_pass_pool_sequence)
-			_extract_visited_passes(pass->m_p_pass_pool_sequence);
+
+void RenderGraphBase::_insert_write_after_read_edges() const {
+	std::unordered_map<const ResourceBase *, const PassBase *> write_outputs;
+	for (auto &pair : m_compile_info._pass_graph_) {
+		auto &node = pair.second;
+		for (const auto *p_edge : node.output_edges) {
+			if (p_edge->usage != Usage::___USAGE_NUM && !UsageIsReadOnly(p_edge->usage)) {
+				assert(write_outputs.find(p_edge->resource) ==
+				       write_outputs.end()); // An output can only be written once
+				write_outputs[p_edge->resource] = p_edge->to;
+			}
+		}
+		for (const auto *p_edge : node.output_edges) {
+			if (p_edge->usage != Usage::___USAGE_NUM && UsageIsReadOnly(p_edge->usage)) {
+				auto it = write_outputs.find(p_edge->resource);
+				if (it != write_outputs.end())
+					_pass_graph_add_edge(p_edge->to, it->second, p_edge->resource, Usage::___USAGE_NUM);
+			}
+		}
+		write_outputs.clear();
+	}
+}
+
+void RenderGraphBase::_extract_passes() const {
+	m_compile_info.passes.clear();
+
+	std::queue<const PassBase *> candidate_queue;
+
+	assert(m_compile_info._pass_graph_.find(nullptr) != m_compile_info._pass_graph_.end());
+	assert(m_compile_info._pass_graph_[nullptr].in_degree == 0);
+	for (auto *p_edge : m_compile_info._pass_graph_[nullptr].output_edges) {
+		--m_compile_info._pass_graph_[p_edge->to].in_degree;
+	}
+	m_compile_info._pass_graph_.erase(nullptr);
+	for (const auto &it : m_compile_info._pass_graph_) {
+		if (it.second.in_degree == 0) {
+			candidate_queue.push(it.first);
+		}
+	}
+
+	PassInfo pass_info = {};
+	while (!candidate_queue.empty()) {
+		const PassBase *pass = candidate_queue.front();
+		candidate_queue.pop();
+
+		pass->m_internal_info.id = m_compile_info.passes.size();
+		pass_info.pass = pass;
+		m_compile_info.passes.push_back(pass_info);
+
+		for (auto *p_edge : m_compile_info._pass_graph_[pass].output_edges) {
+			uint32_t degree = --m_compile_info._pass_graph_[p_edge->to].in_degree;
+			if (degree == 0)
+				candidate_queue.push(p_edge->to);
+		}
 	}
 }
 
@@ -131,11 +190,17 @@ void RenderGraphBase::_initialize_combined_image(const CombinedImage *image) {
 }
 
 void RenderGraphBase::assign_pass_resource_indices() const {
-	{ // Generate Pass Sequence
-		m_compile_info.passes.clear();
+	{ // Generate Pass Graph
+		m_compile_info._pass_graph_.clear();
+		m_compile_info._pass_graph_edges_.clear();
+
 		for (auto it = m_p_result_pool_data->pool.begin(); it != m_p_result_pool_data->pool.end(); ++it)
 			_visit_resource_dep_passes(*m_p_result_pool_data->ValueGet<0, ResourceBase *>(it));
-		_extract_visited_passes(m_p_pass_pool_sequence);
+		_insert_write_after_read_edges();
+		_extract_passes();
+
+		m_compile_info._pass_graph_.clear();
+		m_compile_info._pass_graph_edges_.clear();
 	}
 
 	{ // Clean and Generate Internal Buffer List
@@ -373,6 +438,8 @@ void RenderGraphBase::merge_subpass() const {
 			auto &length = pass_info._merge_length_;
 			if (length > prev_length)
 				length = prev_length + 1;
+			else
+				length = m_compile_info.passes[i].pass->m_p_attachment_data ? 1 : 0;
 
 			if (length == 0)
 				pass_info.render_pass_id = -1;
