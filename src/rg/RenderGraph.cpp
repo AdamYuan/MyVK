@@ -1,5 +1,6 @@
 #include "myvk_rg/RenderGraph.hpp"
 #include "myvk_rg/_details_/RenderGraphBase.hpp"
+#include "myvk_rg/_details_/RenderGraphResolver.hpp"
 
 #include <algorithm>
 #include <iostream>
@@ -161,7 +162,7 @@ void RenderGraphBase::_extract_passes() const {
 		const PassBase *pass = candidate_queue.front();
 		candidate_queue.pop();
 
-		pass->m_internal_info.id = m_compile_info.passes.size();
+		pass->m_internal_info.ordered_pass_id = m_compile_info.passes.size();
 		pass_info.pass = pass;
 		m_compile_info.passes.push_back(pass_info);
 
@@ -190,6 +191,8 @@ void RenderGraphBase::_initialize_combined_image(const CombinedImage *image) {
 }
 
 void RenderGraphBase::assign_pass_resource_indices() const {
+	RenderGraphResolver resolver;
+	resolver.Resolve(this);
 	{ // Generate Pass Graph
 		m_compile_info._pass_graph_.clear();
 		m_compile_info._pass_graph_edges_.clear();
@@ -270,7 +273,7 @@ void RenderGraphBase::_compute_merge_length() const {
 		auto &length = pass_info._merge_length_;
 		if (length <= 1)
 			continue;
-		uint32_t pass_id = pass_info.pass->m_internal_info.id;
+		uint32_t pass_id = pass_info.pass->m_internal_info.ordered_pass_id;
 		pass_info.pass->for_each_input([pass_id, &length](const Input *p_input) {
 			if (!UsageIsAttachment(p_input->GetUsage())) {
 				// If an input is not attachment, then all its producers can't be merged
@@ -280,13 +283,15 @@ void RenderGraphBase::_compute_merge_length() const {
 						resource->ForEachImage([pass_id, &length](auto *sub_image) -> void {
 							if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsAlias) {
 								if (sub_image->GetProducerPass())
-									length =
-									    std::min(length, pass_id - sub_image->GetProducerPass()->m_internal_info.id);
+									length = std::min(
+									    length,
+									    pass_id - sub_image->GetProducerPass()->m_internal_info.ordered_pass_id);
 							}
 						});
 					} else if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias) {
 						if (resource->GetProducerPass())
-							length = std::min(length, pass_id - resource->GetProducerPass()->m_internal_info.id);
+							length = std::min(length,
+							                  pass_id - resource->GetProducerPass()->m_internal_info.ordered_pass_id);
 					}
 				});
 			} else {
@@ -298,13 +303,15 @@ void RenderGraphBase::_compute_merge_length() const {
 							if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsAlias) {
 								if (sub_image->GetProducerPass() &&
 								    !UsageIsAttachment(sub_image->GetProducerInput()->GetUsage()))
-									length =
-									    std::min(length, pass_id - sub_image->GetProducerPass()->m_internal_info.id);
+									length = std::min(
+									    length,
+									    pass_id - sub_image->GetProducerPass()->m_internal_info.ordered_pass_id);
 							}
 						});
 					} else if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias) {
 						if (resource->GetProducerPass() && !UsageIsAttachment(resource->GetProducerInput()->GetUsage()))
-							length = std::min(length, pass_id - resource->GetProducerPass()->m_internal_info.id);
+							length = std::min(length,
+							                  pass_id - resource->GetProducerPass()->m_internal_info.ordered_pass_id);
 					}
 				});
 			}
@@ -350,10 +357,10 @@ void RenderGraphBase::_compute_resource_property_and_lifespan() const {
 	for (uint32_t i = 0; i < m_compile_info.passes.size(); ++i) {
 		const auto &pass_info = m_compile_info.passes[i];
 		uint32_t cur_first_pass = i, cur_last_pass = i;
-		if (~pass_info.render_pass_id) {
-			cur_first_pass = m_compile_info.render_passes[pass_info.render_pass_id].first_pass;
-			cur_last_pass = m_compile_info.render_passes[pass_info.render_pass_id].last_pass;
-		}
+		/* if (~pass_info.render_pass_id) {
+		    cur_first_pass = m_compile_info.render_passes[pass_info.render_pass_id].first_pass;
+		    cur_last_pass = m_compile_info.render_passes[pass_info.render_pass_id].last_pass;
+		} */
 		const auto update_pass_range = [this, cur_first_pass, cur_last_pass](const auto *internal_resource) -> void {
 			// TODO: [Sus] Only Attachments need to be "alive" during the whole process ?
 			if constexpr (ResourceVisitorTrait<decltype(internal_resource)>::kIsInternal) {
@@ -461,9 +468,9 @@ void RenderGraphBase::merge_subpass() const {
 
 	for (const auto &pass_info : m_compile_info.passes) {
 		auto pass = pass_info.pass;
-		std::cout << pass->GetKey().GetName() << ":" << pass->GetKey().GetID() << ".id = " << pass->m_internal_info.id
-		          << " .merge_len = " << pass_info._merge_length_ << " .render_pass_id = " << pass_info.render_pass_id
-		          << std::endl;
+		std::cout << pass->GetKey().GetName() << ":" << pass->GetKey().GetID()
+		          << ".id = " << pass->m_internal_info.ordered_pass_id << " .merge_len = " << pass_info._merge_length_
+		          << " .render_pass_id = " << pass_info.render_pass_id << std::endl;
 	}
 	for (const auto &render_pass_info : m_compile_info.render_passes) {
 		std::cout << "first_pass = " << render_pass_info.first_pass << " last_pass = " << render_pass_info.last_pass

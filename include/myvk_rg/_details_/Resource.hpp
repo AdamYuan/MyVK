@@ -207,18 +207,18 @@ private:
 		return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
 	}
 
-	// bool m_persistence{false};
+	bool m_persistence{false};
 	mutable SizeType m_size{};
 	SizeFunc m_size_func{};
 
 public:
-	/* inline bool GetPersistence() const { return m_persistence; }
+	inline bool GetPersistence() const { return m_persistence; }
 	inline void SetPersistence(bool persistence = true) {
-	    if (m_persistence != persistence) {
-	        m_persistence = persistence;
-	        get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
-	    }
-	} */
+		if (m_persistence != persistence) {
+			m_persistence = persistence;
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
+		}
+	}
 	inline const SizeType &GetSize() const {
 		if (m_size_func)
 			m_size = m_size_func(get_render_graph_ptr()->m_canvas_size);
@@ -247,6 +247,7 @@ private:
 	} m_internal_info{};
 
 	friend class RenderGraphBase;
+	friend class RenderGraphResolver;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {}
 
@@ -331,6 +332,7 @@ private:
 	VkFormat m_format{};
 
 	friend class RenderGraphBase;
+	friend class RenderGraphResolver;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(VkFormat format, VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_2D) {
 		m_format = format;
@@ -385,6 +387,7 @@ private:
 	std::vector<const ImageBase *> m_images;
 
 	friend class RenderGraphBase;
+	friend class RenderGraphResolver;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(VkImageViewType view_type, std::vector<const ImageBase *> &&images) {
 		m_view_type = view_type;
@@ -456,12 +459,12 @@ public:
 	}
 	// For All Child ManagedImages, ImageAliases and CombinedImages
 	template <typename Visitor> inline void ForAllImages(Visitor &&visitor) {
-		VisitImages([&visitor](auto *image) -> void {
+		ForEachImage([&visitor](auto *image) -> void {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedImageChild) {
 				visitor(image);
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
 				              ResourceClass::kCombinedImage) // Expand CombinedImage
-					image->VisitAllImages(visitor);
+					image->ForAllImages(visitor);
 				else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
 				                   ResourceClass::kImageAlias) // Expand ImageAlias
 					image->GetPointedResource()->Visit([&visitor](auto *image) -> void {
@@ -469,7 +472,7 @@ public:
 							visitor(image);
 							if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
 							              ResourceClass::kCombinedImage)
-								image->VisitAllImages(visitor);
+								image->ForAllImages(visitor);
 						} else
 							assert(false);
 					});
@@ -478,18 +481,18 @@ public:
 		});
 	}
 	template <typename Visitor> inline void ForAllImages(Visitor &&visitor) const {
-		VisitImages([visitor](auto *image) -> void {
+		ForEachImage([visitor](auto *image) -> void {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedImageChild) {
 				visitor(image);
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
-					image->VisitAllImages(visitor);
+					image->ForAllImages(visitor);
 				else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kImageAlias)
 					image->GetPointedResource()->Visit([visitor](auto *image) -> void {
 						if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
 							visitor(image);
 							if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
 							              ResourceClass::kCombinedImage)
-								image->VisitAllImages(visitor);
+								image->ForAllImages(visitor);
 						} else
 							assert(false);
 					});

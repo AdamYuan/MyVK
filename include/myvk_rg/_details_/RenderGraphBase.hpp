@@ -159,6 +159,7 @@ private:
 	template <typename> friend class InputPool;
 	friend class RenderGraphBuffer;
 	friend class RenderGraphImage;
+	friend class RenderGraphResolver;
 
 public:
 	inline RenderGraphBase() = default;

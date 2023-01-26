@@ -21,13 +21,14 @@ private:
 	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 
 	mutable struct {
-		uint32_t id{};
+		uint32_t ordered_pass_id{};
 	} m_internal_info{};
 
 	template <typename, uint8_t> friend class Pass;
 	template <typename> friend class PassGroup;
 	template <typename> friend class GraphicsPass;
 	friend class RenderGraphBase;
+	friend class RenderGraphResolver;
 
 	template <typename Func> inline void for_each_input(Func &&func) {
 		for (auto it = m_p_input_pool_data->pool.begin(); it != m_p_input_pool_data->pool.end(); ++it)
