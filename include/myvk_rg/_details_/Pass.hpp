@@ -18,7 +18,6 @@ private:
 	const _details_rg_pool_::InputPoolData *m_p_input_pool_data{};
 	const DescriptorSetData *m_p_descriptor_set_data{};
 	const AttachmentData *m_p_attachment_data{};
-	// const _details_rg_pool_::ResourcePoolData *m_p_resource_pool_data{};
 
 	mutable struct {
 		uint32_t ordered_pass_id{};
@@ -53,7 +52,6 @@ public:
 template <typename Derived> class PassPool : public Pool<Derived, PassBase> {
 private:
 	using _PassPool = Pool<Derived, PassBase>;
-	std::vector<PassBase *> m_pass_sequence;
 
 	inline RenderGraphBase *get_render_graph_ptr() {
 		static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
@@ -70,17 +68,14 @@ public:
 
 protected:
 	template <typename PassType, typename... Args, typename = std::enable_if_t<std::is_base_of_v<PassBase, PassType>>>
-	inline PassType *PushPass(const PoolKey &pass_key, Args &&...args) {
+	inline PassType *CreatePass(const PoolKey &pass_key, Args &&...args) {
 		PassType *ret =
 		    _PassPool::template CreateAndInitialize<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
 		assert(ret);
-		m_pass_sequence.push_back(ret);
 		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolveGraph);
 		return ret;
 	}
-	// inline void DeletePass(const PoolKey &pass_key) { return PassPool::Delete(pass_key); }
-
-	const std::vector<PassBase *> &GetPassSequence() const { return m_pass_sequence; }
+	inline void DeletePass(const PoolKey &pass_key) { return PassPool::Delete(pass_key); }
 
 	template <typename PassType = PassBase,
 	          typename = std::enable_if_t<std::is_base_of_v<PassBase, PassType> || std::is_same_v<PassBase, PassType>>>
@@ -88,7 +83,6 @@ protected:
 		return _PassPool::template Get<0, PassType>(pass_key);
 	}
 	inline void ClearPasses() {
-		m_pass_sequence.clear();
 		_PassPool::Clear();
 		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolveGraph);
 	}
@@ -138,7 +132,7 @@ class PassGroup : public PassBase,
 public:
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &) final {}
 
-	inline PassGroup() { m_p_pass_pool_sequence = &PassPool<Derived>::GetPassSequence(); }
+	inline PassGroup() = default;
 	inline PassGroup(PassGroup &&) noexcept = default;
 	inline ~PassGroup() override = default;
 };

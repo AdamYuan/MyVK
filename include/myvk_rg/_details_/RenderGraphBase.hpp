@@ -27,7 +27,6 @@ private:
 	bool m_lazy_allocation_supported{};
 	VkExtent2D m_canvas_size{};
 
-	const std::vector<PassBase *> *m_p_pass_pool_sequence{};
 	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
 
 	struct CompilePhrase {

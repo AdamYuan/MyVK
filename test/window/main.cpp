@@ -53,9 +53,9 @@ private:
 		ClearPasses();
 		if (levels == 0)
 			return;
-		auto top_pass = PushPass<TopSubPass>({"level", 0}, depth_img);
+		auto top_pass = CreatePass<TopSubPass>({"level", 0}, depth_img);
 		for (uint32_t i = 1; i < levels; ++i) {
-			PushPass<BodySubPass>(
+			CreatePass<BodySubPass>(
 			    {"level", i},
 			    i == 1 ? top_pass->GetTopOutput() : GetPass<BodySubPass>({"level", i - 1})->GetLevelOutput(), i);
 		}
@@ -156,8 +156,8 @@ private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
 		for (uint32_t i = 0; i < m_subpass_count; ++i) {
-			PushPass<Subpass>({"blur_subpass", i},
-			                  i == 0 ? image_src : GetPass<Subpass>({"blur_subpass", i - 1})->GetImageDstOutput());
+			CreatePass<Subpass>({"blur_subpass", i},
+			                    i == 0 ? image_src : GetPass<Subpass>({"blur_subpass", i - 1})->GetImageDstOutput());
 		}
 	}
 
@@ -292,31 +292,31 @@ private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
 		{
-			auto test_pass_0 = PushPass<TestPass0>({"test_pass_0"});
-			auto test_blur_pass = PushPass<BlurPass>({"test_blur_pass"}, test_pass_0->GetNoiseTexOutput());
+			auto test_pass_0 = CreatePass<TestPass0>({"test_pass_0"});
+			auto test_blur_pass = CreatePass<BlurPass>({"test_blur_pass"}, test_pass_0->GetNoiseTexOutput());
 
 			printf("blur_output = %p\n", test_blur_pass->GetImageDstOutput());
 			printf("blur_output = %p\n", test_blur_pass->GetImageDstOutput());
 			printf("blur_output = %p\n", test_blur_pass->GetImageDstOutput());
 
-			auto test_pass_1 = PushPass<TestPass1>({"test_pass_1"}, test_pass_0->GetDrawListOutput(),
-			                                       test_blur_pass->GetImageDstOutput());
+			auto test_pass_1 = CreatePass<TestPass1>({"test_pass_1"}, test_pass_0->GetDrawListOutput(),
+			                                         test_blur_pass->GetImageDstOutput());
 			printf("color_output = %p\n", test_pass_1->GetColorOutput());
 			// AddResult({"output"}, test_pass_1->GetColorOutput());
 		}
 		{
-			auto gbuffer_pass = PushPass<GBufferPass>({"gbuffer_pass"});
-			auto blur_bright_pass = PushPass<BlurPass>({"blur_bright_pass"}, gbuffer_pass->GetBrightOutput());
-			auto wboit_gen_pass = PushPass<WBOITGenPass>({"wboit_gen_pass"}, gbuffer_pass->GetDepthOutput());
-			auto screen_pass = PushPass<ScreenPass>(
+			auto gbuffer_pass = CreatePass<GBufferPass>({"gbuffer_pass"});
+			auto blur_bright_pass = CreatePass<BlurPass>({"blur_bright_pass"}, gbuffer_pass->GetBrightOutput());
+			auto wboit_gen_pass = CreatePass<WBOITGenPass>({"wboit_gen_pass"}, gbuffer_pass->GetDepthOutput());
+			auto screen_pass = CreatePass<ScreenPass>(
 			    {"screen_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen1"}, VK_FORMAT_R8G8B8A8_UNORM),
 			    gbuffer_pass->GetAlbedoOutput(), gbuffer_pass->GetNormalOutput(), wboit_gen_pass->GetRevealOutput(),
 			    wboit_gen_pass->GetAccumOutput());
-			auto bright_pass = PushPass<BrightPass>(
+			auto bright_pass = CreatePass<BrightPass>(
 			    {"bright_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen2"}, VK_FORMAT_R8G8B8A8_UNORM),
 			    screen_pass->GetScreenOutput(), blur_bright_pass->GetImageDstOutput());
 			auto depth_hierarchy_pass =
-			    PushPass<DepthHierarchyPass>({"depth_hierarchy_pass"}, gbuffer_pass->GetDepthOutput());
+			    CreatePass<DepthHierarchyPass>({"depth_hierarchy_pass"}, gbuffer_pass->GetDepthOutput());
 			AddResult({"final"}, bright_pass->GetScreenOutput());
 			AddResult({"depth_hierarchy"}, depth_hierarchy_pass->GetDepthHierarchyOutput());
 		}

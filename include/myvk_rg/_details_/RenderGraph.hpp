@@ -45,8 +45,6 @@ public:
 	}
 	inline RenderGraph() {
 		m_p_result_pool_data = &_ResultPool::GetPoolData();
-		m_p_pass_pool_sequence = &PassPool<Derived>::GetPassSequence();
-		// m_p_resource_pool_data = &ResourcePool<Derived>::GetPoolData();
 	}
 };
 
