@@ -96,8 +96,6 @@ private:
 
 	// inline void set_producer_pass_ptr(PassBase *producer_pass_ptr) { m_producer_pass_ptr = producer_pass_ptr; }
 
-	mutable bool m_written{false}; // Used by InputPool to avoid Read-After-Write and Write-After-Write Hazards
-
 	template <typename, typename...> friend class Pool;
 	template <typename> friend class AliasOutputPool;
 	template <typename> friend class InputPool;

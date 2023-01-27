@@ -4,6 +4,7 @@
 #include <cinttypes>
 #include <vector>
 
+#include "Bitset.hpp"
 #include "Pass.hpp"
 #include "ResourceBase.hpp"
 
@@ -18,38 +19,7 @@ class ManagedBuffer;
 class Input;
 
 class RenderGraphResolver {
-private:
-	class RelationMatrix {
-	private:
-		uint32_t m_size_r{};
-		std::vector<uint64_t> m_bit_matrix;
-
-	public:
-		inline void Reset(uint32_t count_l, uint32_t count_r) {
-			m_size_r = (count_r >> 6u) + ((count_r & 0x3f) ? 1u : 0);
-			m_bit_matrix.clear();
-			m_bit_matrix.resize(count_l * m_size_r);
-		}
-		inline void SetRelation(uint32_t l, uint32_t r) {
-			m_bit_matrix[l * m_size_r + (r >> 6u)] |= (1ull << (r & 0x3fu));
-		}
-		inline void ApplyRelations(uint32_t l_from, uint32_t l_to) {
-			for (uint32_t i = 0; i < m_size_r; ++i)
-				m_bit_matrix[l_to * m_size_r + i] |= m_bit_matrix[l_from * m_size_r + i];
-		}
-		inline void ApplyRelations(const RelationMatrix &src_matrix, uint32_t l_from, uint32_t l_to) {
-			assert(m_size_r == src_matrix.m_size_r);
-			for (uint32_t i = 0; i < m_size_r; ++i)
-				m_bit_matrix[l_to * m_size_r + i] |= src_matrix.m_bit_matrix[l_from * m_size_r + i];
-		}
-		inline bool GetRelation(uint32_t l, uint32_t r) const {
-			return m_bit_matrix[l * m_size_r + (r >> 6u)] & (1ull << (r & 0x3fu));
-		}
-	};
-	struct Graph; // The Graph Containing Passes and Internal Resources
-	struct OrderedPassGraph;
-	struct GroupedPassGraph {};
-
+public:
 	struct InternalResourceInfo {};
 	struct InternalBufferInfo : public InternalResourceInfo {
 		const ManagedBuffer *buffer{};
@@ -64,17 +34,38 @@ private:
 		// uint32_t image_id;
 		bool has_parent{};
 	};
-	struct PassInfo {
-		const PassBase *pass{};
-		uint32_t render_pass_id{};
+
+	struct Dependency {
+		const ResourceBase *resource{};
+		const Input *p_input_from{}, *p_input_to{};
 	};
-	struct RenderPassInfo {};
+	struct SubpassDependency : public Dependency {
+		uint32_t subpass_from{}, subpass_to{};
+	};
+	struct SubpassInfo {
+		const PassBase *pass{};
+		std::vector<SubpassDependency> subpass_input_dependencies;
+	};
+	struct PassDependency : public Dependency {
+		uint32_t pass_from{}, pass_to{};
+	};
+	struct PassInfo {
+		std::vector<SubpassInfo> subpasses;
+		std::vector<PassDependency> input_dependencies;
+		bool is_graphics_pass{};
+	};
+
+private:
+	struct Graph; // The Graph Containing Passes and Internal Resources
+	struct OrderedPassGraph;
 
 	std::vector<InternalImageInfo> m_internal_images;
 	std::vector<InternalImageViewInfo> m_internal_image_views;
 	std::vector<InternalBufferInfo> m_internal_buffers;
 
 	RelationMatrix m_image_view_parent_relation, m_resource_conflicted_relation;
+
+	std::vector<PassInfo> m_passes;
 
 	static void _visit_resource_dep_passes(Graph *p_graph, const ResourceBase *resource, const PassBase *pass = nullptr,
 	                                       const Input *p_input = nullptr);
@@ -84,7 +75,10 @@ private:
 	void extract_resources(const Graph &graph);
 	static OrderedPassGraph make_ordered_pass_graph(Graph &&graph);
 	// static RelationMatrix _extract_transitive_closure(const OrderedPassGraph &ordered_pass_graph);
-	void initialize_naive_resource_relation(const OrderedPassGraph &ordered_pass_graph);
+	void initialize_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph);
+	std::vector<uint32_t> _compute_ordered_pass_merge_length(const OrderedPassGraph &ordered_pass_graph);
+	void extract_passes(OrderedPassGraph &&ordered_pass_graph);
+	void add_extra_resource_relation();
 
 public:
 	void Resolve(const RenderGraphBase *p_render_graph);
@@ -126,13 +120,13 @@ public:
 	inline static uint32_t GetInternalImageID(const CombinedImage *image) { return image->m_internal_info.image_id; }
 	inline static uint32_t GetInternalImageID(const ManagedImage *image) { return image->m_internal_info.image_id; }
 
-	inline uint32_t GetInternalResourceID(const ManagedBuffer *buffer) {
+	inline uint32_t GetInternalResourceID(const ManagedBuffer *buffer) const {
 		return GetInternalBufferID(buffer) + GetInternalImageCount();
 	}
 	inline static uint32_t GetInternalResourceID(const CombinedImage *image) { return GetInternalImageID(image); }
 	inline static uint32_t GetInternalResourceID(const ManagedImage *image) { return GetInternalImageID(image); }
 	inline static uint32_t GetInternalResourceID(const ImageBase *image) { return GetInternalImageID(image); }
-	inline uint32_t GetInternalResourceID(const ResourceBase *resource) {
+	inline uint32_t GetInternalResourceID(const ResourceBase *resource) const {
 		return resource->Visit([this](const auto *resource) -> uint32_t {
 			if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal)
 				return GetInternalResourceID(resource);
@@ -143,7 +137,7 @@ public:
 		});
 	}
 
-	inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.ordered_pass_id; }
+	// inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.ordered_pass_id; }
 
 	inline bool IsParentInternalImageView(uint32_t parent_image_view, uint32_t cur_image_view) const {
 		return m_image_view_parent_relation.GetRelation(parent_image_view, cur_image_view);

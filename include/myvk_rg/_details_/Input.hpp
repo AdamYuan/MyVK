@@ -104,35 +104,8 @@ private:
 			return static_cast<RenderGraphBase *>(static_cast<Derived *>(this));
 	}
 
-	inline static bool resource_is_written(const ResourceBase *resource) {
-		if (resource->m_written)
-			return true;
-		return resource->Visit([](const auto *resource) -> bool {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kClass == ResourceClass::kCombinedImage) {
-				bool is_written = false;
-				resource->ForEachImage([&is_written](const auto *image) -> void { is_written |= image->m_written; });
-				return is_written;
-			} else
-				return false;
-		});
-	}
-	template <bool Written> inline static void resource_set_written(const ResourceBase *resource) {
-		resource->m_written = Written;
-		resource->Visit([](auto *resource) -> void {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kClass == ResourceClass::kCombinedImage)
-				resource->ForEachImage([](auto *image) -> void { image->m_written = Written; });
-		});
-	}
-
 	template <typename Type, typename... Args>
 	inline Input *add_input(const PoolKey &input_key, Type *resource, Usage usage, Args &&...input_args) {
-		// If the resource is already written, then it shouldn't be used anymore
-		if (resource_is_written(resource)) {
-			assert(false);
-			return nullptr;
-		}
-		if (!UsageIsReadOnly(usage))
-			resource_set_written<true>(resource);
 		auto ret = _InputPool::template CreateAndInitializeForce<0, Input>(input_key, resource, usage,
 		                                                                   std::forward<Args>(input_args)...);
 		assert(ret);
@@ -160,22 +133,13 @@ private:
 		}
 	}
 
-	inline void reset_all_written() {
-		for (auto it = _InputPool::GetPoolData().pool.begin(); it != _InputPool::GetPoolData().pool.end(); ++it) {
-			auto *input = _InputPool::GetPoolData().template ValueGet<0, Input>(it);
-			if (!UsageIsReadOnly(input->GetUsage())) {
-				resource_set_written<false>(input->GetResource());
-			}
-		}
-	}
-
 	template <typename> friend class DescriptorInputSlot;
 	template <typename> friend class AttachmentInputSlot;
 
 public:
 	inline InputPool() { static_assert(std::is_base_of_v<PassBase, Derived>); }
 	inline InputPool(InputPool &&) noexcept = default;
-	inline ~InputPool() override { reset_all_written(); }
+	inline ~InputPool() override = default;
 
 protected:
 	template <Usage Usage,
@@ -529,8 +493,6 @@ template <typename Derived> void InputPool<Derived>::RemoveInput(const PoolKey &
 	if constexpr (std::is_base_of_v<DescriptorInputSlot<Derived>, Derived> ||
 	              std::is_base_of_v<AttachmentInputSlot<Derived>, Derived>) {
 		const Input *input = GetInput(input_key);
-		if (!UsageIsReadOnly(input->GetUsage()))
-			resource_set_written<false>(input->GetResource());
 		if constexpr (std::is_base_of_v<DescriptorInputSlot<Derived>, Derived>)
 			((DescriptorInputSlot<Derived> *)static_cast<Derived *>(this))->pre_remove_input(input);
 		if constexpr (std::is_base_of_v<AttachmentInputSlot<Derived>, Derived>)
@@ -545,7 +507,6 @@ template <typename Derived> void InputPool<Derived>::ClearInputs() {
 		((DescriptorInputSlot<Derived> *)static_cast<Derived *>(this))->pre_clear_inputs();
 	if constexpr (std::is_base_of_v<AttachmentInputSlot<Derived>, Derived>)
 		((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_clear_inputs();
-	reset_all_written();
 	InputPool::Clear();
 	get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
 }

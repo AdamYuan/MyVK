@@ -11,26 +11,27 @@
 namespace myvk_rg::_details_ {
 
 struct RenderGraphResolver::Graph {
-	struct Edge {
-		const PassBase *from{}, *to{};
-		const ResourceBase *resource{};
-		const Input *p_input{};
+	struct Edge : public Dependency {
+		const PassBase *pass_from{}, *pass_to{};
+		bool is_read_to_write_edge{};
+		mutable bool deleted{};
 	};
 	struct Node {
 		std::vector<const Edge *> input_edges, output_edges;
-		uint32_t in_degree{};
+		uint32_t in_degree{}, ordered_pass_id = -1;
 	};
 	std::unordered_map<const ImageBase *, bool> internal_image_set;
 	std::unordered_set<const ManagedBuffer *> internal_buffer_set;
 	std::unordered_map<const PassBase *, Node> nodes;
 	std::list<Edge> edges;
 
-	inline void add_edge(const PassBase *from, const PassBase *to, const ResourceBase *resource, const Input *p_input) {
-		edges.push_back({from, to, resource, p_input});
+	inline void add_edge(const PassBase *pass_from, const PassBase *pass_to, const ResourceBase *resource,
+	                     const Input *p_input_from, const Input *p_input_to, bool is_read_to_write_edge) {
+		edges.push_back({resource, p_input_from, p_input_to, pass_from, pass_to, is_read_to_write_edge});
 		const auto *edge = &edges.back();
-		nodes[from].output_edges.push_back(edge);
-		nodes[to].input_edges.push_back(edge);
-		++nodes[to].in_degree;
+		nodes[pass_from].output_edges.push_back(edge);
+		nodes[pass_to].input_edges.push_back(edge);
+		++nodes[pass_to].in_degree;
 	}
 	inline void add_internal_buffer(const ManagedBuffer *buffer) { internal_buffer_set.insert(buffer); }
 	inline void add_internal_image(const ImageBase *image, bool set_has_parent = false) {
@@ -43,10 +44,8 @@ struct RenderGraphResolver::Graph {
 };
 
 struct RenderGraphResolver::OrderedPassGraph {
-	struct Edge {
+	struct Edge : public Dependency {
 		uint32_t pass_from{}, pass_to{};
-		const ResourceBase *resource{};
-		const Input *p_input{};
 	};
 	struct Node {
 		const PassBase *pass;
@@ -55,8 +54,9 @@ struct RenderGraphResolver::OrderedPassGraph {
 	std::vector<Node> nodes;
 	std::list<Edge> edges;
 
-	inline void add_edge(uint32_t pass_from, uint32_t pass_to, const ResourceBase *resource, const Input *p_input) {
-		edges.push_back({pass_from, pass_to, resource, p_input});
+	inline void add_edge(uint32_t pass_from, uint32_t pass_to, const ResourceBase *resource, const Input *p_input_from,
+	                     const Input *p_input_to) {
+		edges.push_back({resource, p_input_from, p_input_to, pass_from, pass_to});
 		const auto *edge = &edges.back();
 		if (~pass_from)
 			nodes[pass_from].output_edges.push_back(edge);
@@ -74,7 +74,14 @@ void RenderGraphResolver::_visit_resource_dep_passes(RenderGraphResolver::Graph 
                                                      const PassBase *pass, const Input *p_input) {
 	const auto add_edge = [p_graph, pass, p_input](const ResourceBase *resource, const PassBase *dep_pass) -> void {
 		if (pass)
-			p_graph->add_edge(dep_pass, pass, resource, p_input);
+			p_graph->add_edge(dep_pass, pass, resource,
+			                  p_input->GetResource()->Visit([](const auto *resource) -> const Input * {
+				                  if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias)
+					                  return resource->GetProducerInput();
+				                  else
+					                  return nullptr;
+			                  }),
+			                  p_input, false);
 	};
 	const auto add_edge_and_visit_dep_pass = [p_graph, &add_edge](const ResourceBase *resource,
 	                                                              const PassBase *dep_pass) -> void {
@@ -117,21 +124,25 @@ void RenderGraphResolver::_visit_resource_dep_passes(RenderGraphResolver::Graph 
 }
 
 void RenderGraphResolver::_insert_write_after_read_edges(RenderGraphResolver::Graph *p_graph) {
-	std::unordered_map<const ResourceBase *, const PassBase *> write_outputs;
+	// TODO: Deal with Image Read as different layout (Or check that all READs' layout is the same)
+	std::unordered_map<const ResourceBase *, const RenderGraphResolver::Graph::Edge *> write_outputs;
 	for (auto &pair : p_graph->nodes) {
 		auto &node = pair.second;
 		for (const auto *p_edge : node.output_edges) {
-			if (p_edge->p_input && !UsageIsReadOnly(p_edge->p_input->GetUsage())) {
+			if (!p_edge->is_read_to_write_edge && !UsageIsReadOnly(p_edge->p_input_to->GetUsage())) {
 				assert(write_outputs.find(p_edge->resource) ==
 				       write_outputs.end()); // An output can only be written once
-				write_outputs[p_edge->resource] = p_edge->to;
+				write_outputs[p_edge->resource] = p_edge;
 			}
 		}
 		for (const auto *p_edge : node.output_edges) {
-			if (p_edge->p_input && UsageIsReadOnly(p_edge->p_input->GetUsage())) {
+			if (!p_edge->is_read_to_write_edge && UsageIsReadOnly(p_edge->p_input_to->GetUsage())) {
 				auto it = write_outputs.find(p_edge->resource);
-				if (it != write_outputs.end())
-					p_graph->add_edge(p_edge->to, it->second, p_edge->resource, nullptr);
+				if (it != write_outputs.end()) {
+					p_graph->add_edge(p_edge->pass_to, it->second->pass_to, p_edge->resource, p_edge->p_input_to,
+					                  it->second->p_input_to, true);
+					it->second->deleted = true; // Delete the direct write edge if a Write-After-Read edge exists
+				}
 			}
 		}
 		write_outputs.clear();
@@ -155,26 +166,30 @@ RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_gra
 	assert(graph.nodes.find(nullptr) != graph.nodes.end());
 	assert(graph.nodes[nullptr].in_degree == 0);
 	for (auto *p_edge : graph.nodes[nullptr].output_edges) {
-		uint32_t degree = --graph.nodes[p_edge->to].in_degree;
+		uint32_t degree = --graph.nodes[p_edge->pass_to].in_degree;
 		if (degree == 0)
-			candidate_queue.push(p_edge->to);
+			candidate_queue.push(p_edge->pass_to);
 	}
 	while (!candidate_queue.empty()) {
 		const PassBase *pass = candidate_queue.front();
 		candidate_queue.pop();
 
-		pass->m_internal_info.ordered_pass_id = ordered_pass_graph.nodes.size();
+		graph.nodes[pass].ordered_pass_id = ordered_pass_graph.nodes.size();
 		ordered_pass_graph.nodes.push_back({pass});
 
 		for (auto *p_edge : graph.nodes[pass].output_edges) {
-			uint32_t degree = --graph.nodes[p_edge->to].in_degree;
+			uint32_t degree = --graph.nodes[p_edge->pass_to].in_degree;
 			if (degree == 0)
-				candidate_queue.push(p_edge->to);
+				candidate_queue.push(p_edge->pass_to);
 		}
 	}
-	for (const auto &edge : graph.edges)
-		ordered_pass_graph.add_edge(edge.from ? edge.from->m_internal_info.ordered_pass_id : -1,
-		                            edge.to->m_internal_info.ordered_pass_id, edge.resource, edge.p_input);
+	for (const auto &edge : graph.edges) {
+		if (edge.deleted)
+			continue;
+		ordered_pass_graph.add_edge(graph.nodes[edge.pass_from].ordered_pass_id,
+		                            graph.nodes[edge.pass_to].ordered_pass_id, edge.resource, edge.p_input_from,
+		                            edge.p_input_to);
+	}
 
 	return ordered_pass_graph;
 }
@@ -217,6 +232,7 @@ void RenderGraphResolver::extract_resources(const Graph &graph) {
 		}
 	}
 	// Compute Image View Relation
+	// TODO: Optimize this with ApplyRelations
 	m_image_view_parent_relation.Reset(GetInternalImageViewCount(), GetInternalImageViewCount());
 	for (uint32_t image_view_id = 0; image_view_id < GetInternalImageViewCount(); ++image_view_id) {
 		m_internal_image_views[image_view_id].image->Visit([this, image_view_id](const auto *image) -> void {
@@ -258,30 +274,32 @@ RenderGraphResolver::_extract_transitive_closure(const OrderedPassGraph &ordered
     return relation;
 } */
 
-void RenderGraphResolver::initialize_naive_resource_relation(const OrderedPassGraph &ordered_pass_graph) {
-	const uint32_t pass_count = ordered_pass_graph.nodes.size();
+void RenderGraphResolver::initialize_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph) {
+	const uint32_t ordered_pass_count = ordered_pass_graph.nodes.size();
 
 	RelationMatrix pass_resource_not_prior_relation;
 	{
-		pass_resource_not_prior_relation.Reset(pass_count, GetInternalResourceCount());
-		for (uint32_t pass_id = 0; pass_id < pass_count; ++pass_id) {
-			for (const auto *p_edge : ordered_pass_graph.nodes[pass_id].input_edges)
+		pass_resource_not_prior_relation.Reset(ordered_pass_count, GetInternalResourceCount());
+		for (uint32_t ordered_pass_id = 0; ordered_pass_id < ordered_pass_count; ++ordered_pass_id) {
+			for (const auto *p_edge : ordered_pass_graph.nodes[ordered_pass_id].input_edges)
 				if (~p_edge->pass_from)
-					pass_resource_not_prior_relation.ApplyRelations(p_edge->pass_from, pass_id);
-			ordered_pass_graph.nodes[pass_id].pass->for_each_input([this, pass_id, &pass_resource_not_prior_relation](
-			                                                           const Input *p_input) {
-				pass_resource_not_prior_relation.SetRelation(pass_id, GetInternalResourceID(p_input->GetResource()));
-			});
+					pass_resource_not_prior_relation.ApplyRelations(p_edge->pass_from, ordered_pass_id);
+			ordered_pass_graph.nodes[ordered_pass_id].pass->for_each_input(
+			    [this, ordered_pass_id, &pass_resource_not_prior_relation](const Input *p_input) {
+				    pass_resource_not_prior_relation.SetRelation(ordered_pass_id,
+				                                                 GetInternalResourceID(p_input->GetResource()));
+			    });
 		}
 	}
 
 	RelationMatrix resource_not_prior_relation;
 	{
 		resource_not_prior_relation.Reset(GetInternalResourceCount(), GetInternalResourceCount());
-		for (uint32_t pass_id = 0; pass_id < pass_count; ++pass_id) {
-			ordered_pass_graph.nodes[pass_id].pass->for_each_input(
-			    [this, pass_id, &pass_resource_not_prior_relation, &resource_not_prior_relation](const Input *p_input) {
-				    resource_not_prior_relation.ApplyRelations(pass_resource_not_prior_relation, pass_id,
+		for (uint32_t ordered_pass_id = 0; ordered_pass_id < ordered_pass_count; ++ordered_pass_id) {
+			ordered_pass_graph.nodes[ordered_pass_id].pass->for_each_input(
+			    [this, ordered_pass_id, &pass_resource_not_prior_relation,
+			     &resource_not_prior_relation](const Input *p_input) {
+				    resource_not_prior_relation.ApplyRelations(pass_resource_not_prior_relation, ordered_pass_id,
 				                                               GetInternalResourceID(p_input->GetResource()));
 			    });
 		}
@@ -300,11 +318,21 @@ void RenderGraphResolver::initialize_naive_resource_relation(const OrderedPassGr
 	}
 }
 
+std::vector<uint32_t> RenderGraphResolver::_compute_ordered_pass_merge_length(
+    const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
+	std::vector<uint32_t> merge_length(ordered_pass_graph.nodes.size());
+
+	return std::vector<uint32_t>();
+}
+
+void RenderGraphResolver::extract_passes(OrderedPassGraph &&ordered_pass_graph) {}
+
 void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 	Graph graph = make_graph(p_render_graph);
 	extract_resources(graph);
 	OrderedPassGraph ordered_pass_graph = make_ordered_pass_graph(std::move(graph));
-	initialize_naive_resource_relation(ordered_pass_graph);
+	initialize_basic_resource_relation(ordered_pass_graph);
+	extract_passes(std::move(ordered_pass_graph));
 }
 
 } // namespace myvk_rg::_details_
