@@ -47,6 +47,7 @@ target_link_libraries(MyVK_Vulkan PUBLIC MyVK_Dep_Vulkan)
 
 add_library(MyVK_RenderGraph STATIC
         src/rg/RenderGraphResolver.cpp
+        src/rg/RenderGraphAllocator.cpp
         src/rg/RenderGraph.cpp
         )
 add_library(myvk::rg ALIAS MyVK_RenderGraph)

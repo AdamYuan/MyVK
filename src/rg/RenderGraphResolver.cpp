@@ -1,7 +1,4 @@
-#include <myvk_rg/_details_/Input.hpp>
-#include <myvk_rg/_details_/Pass.hpp>
-#include <myvk_rg/_details_/RenderGraphResolver.hpp>
-#include <myvk_rg/_details_/Resource.hpp>
+#include "RenderGraphResolver.hpp"
 
 #include <list>
 #include <queue>
@@ -232,17 +229,17 @@ void RenderGraphResolver::extract_resources(const Graph &graph) {
 		}
 	}
 	// Compute Image View Relation
-	// TODO: Optimize this with ApplyRelations
-	m_image_view_parent_relation.Reset(GetInternalImageViewCount(), GetInternalImageViewCount());
+	// TODO: Optimize this with ApplyRelations, or REMOVE it
+	/* m_image_view_parent_relation.Reset(GetInternalImageViewCount(), GetInternalImageViewCount());
 	for (uint32_t image_view_id = 0; image_view_id < GetInternalImageViewCount(); ++image_view_id) {
-		m_internal_image_views[image_view_id].image->Visit([this, image_view_id](const auto *image) -> void {
-			if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
-				image->ForAllImages([this, image_view_id](const auto *sub_image) -> void {
-					if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsInternal)
-						m_image_view_parent_relation.SetRelation(image_view_id, GetInternalImageViewID(sub_image));
-				});
-		});
-	}
+	    m_internal_image_views[image_view_id].image->Visit([this, image_view_id](const auto *image) -> void {
+	        if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
+	            image->ForAllImages([this, image_view_id](const auto *sub_image) -> void {
+	                if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsInternal)
+	                    m_image_view_parent_relation.SetRelation(image_view_id, GetInternalImageViewID(sub_image));
+	            });
+	    });
+	} */
 }
 
 void RenderGraphResolver::_initialize_combined_image(const CombinedImage *image) {
@@ -275,19 +272,20 @@ RenderGraphResolver::_extract_transitive_closure(const OrderedPassGraph &ordered
 } */
 
 void RenderGraphResolver::initialize_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph) {
-	const uint32_t ordered_pass_count = ordered_pass_graph.nodes.size();
+	const uint32_t kOrderedPassCount = ordered_pass_graph.nodes.size();
 
 	RelationMatrix pass_resource_not_prior_relation;
 	{
-		pass_resource_not_prior_relation.Reset(ordered_pass_count, GetInternalResourceCount());
-		for (uint32_t ordered_pass_id = 0; ordered_pass_id < ordered_pass_count; ++ordered_pass_id) {
+		pass_resource_not_prior_relation.Reset(kOrderedPassCount, GetInternalResourceCount());
+		for (uint32_t ordered_pass_id = 0; ordered_pass_id < kOrderedPassCount; ++ordered_pass_id) {
 			for (const auto *p_edge : ordered_pass_graph.nodes[ordered_pass_id].input_edges)
 				if (~p_edge->pass_from)
 					pass_resource_not_prior_relation.ApplyRelations(p_edge->pass_from, ordered_pass_id);
 			ordered_pass_graph.nodes[ordered_pass_id].pass->for_each_input(
 			    [this, ordered_pass_id, &pass_resource_not_prior_relation](const Input *p_input) {
-				    pass_resource_not_prior_relation.SetRelation(ordered_pass_id,
-				                                                 GetInternalResourceID(p_input->GetResource()));
+				    uint32_t internal_resource_id = GetInternalResourceID(p_input->GetResource());
+				    if (~internal_resource_id)
+					    pass_resource_not_prior_relation.SetRelation(ordered_pass_id, internal_resource_id);
 			    });
 		}
 	}
@@ -295,12 +293,14 @@ void RenderGraphResolver::initialize_basic_resource_relation(const OrderedPassGr
 	RelationMatrix resource_not_prior_relation;
 	{
 		resource_not_prior_relation.Reset(GetInternalResourceCount(), GetInternalResourceCount());
-		for (uint32_t ordered_pass_id = 0; ordered_pass_id < ordered_pass_count; ++ordered_pass_id) {
+		for (uint32_t ordered_pass_id = 0; ordered_pass_id < kOrderedPassCount; ++ordered_pass_id) {
 			ordered_pass_graph.nodes[ordered_pass_id].pass->for_each_input(
 			    [this, ordered_pass_id, &pass_resource_not_prior_relation,
 			     &resource_not_prior_relation](const Input *p_input) {
-				    resource_not_prior_relation.ApplyRelations(pass_resource_not_prior_relation, ordered_pass_id,
-				                                               GetInternalResourceID(p_input->GetResource()));
+				    uint32_t internal_resource_id = GetInternalResourceID(p_input->GetResource());
+				    if (~internal_resource_id)
+					    resource_not_prior_relation.ApplyRelations(pass_resource_not_prior_relation, ordered_pass_id,
+					                                               internal_resource_id);
 			    });
 		}
 	}
@@ -320,12 +320,130 @@ void RenderGraphResolver::initialize_basic_resource_relation(const OrderedPassGr
 
 std::vector<uint32_t> RenderGraphResolver::_compute_ordered_pass_merge_length(
     const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
-	std::vector<uint32_t> merge_length(ordered_pass_graph.nodes.size());
+	const uint32_t kOrderedPassCount = ordered_pass_graph.nodes.size();
+	if (kOrderedPassCount == 0)
+		assert(false);
+	std::vector<uint32_t> merge_length(kOrderedPassCount);
 
-	return std::vector<uint32_t>();
+	// Calculate merge_length, Complexity: O(N + M)
+	// merge_length == 0: The pass is not a graphics pass
+	// merge_length == 1: The pass is a graphics pass, but can't be merged
+	// merge_length >  1: The pass is a graphics pass, and it can be merged to a group of _merge_length_ with the
+	// passes before
+	{
+		merge_length[0] = ordered_pass_graph.nodes[0].pass->m_p_attachment_data ? 1u : 0u;
+		for (uint32_t i = 1; i < kOrderedPassCount; ++i)
+			merge_length[i] = ordered_pass_graph.nodes[i].pass->m_p_attachment_data ? merge_length[i - 1] + 1 : 0;
+	}
+	for (uint32_t ordered_pass_id = 0; ordered_pass_id < kOrderedPassCount; ++ordered_pass_id) {
+		auto &length = merge_length[ordered_pass_id];
+		if (length <= 1)
+			continue;
+		for (auto *p_edge : ordered_pass_graph.nodes[ordered_pass_id].input_edges) {
+			if (!UsageIsAttachment(p_edge->p_input_to->GetUsage()) ||
+			    (p_edge->p_input_from && !UsageIsAttachment(p_edge->p_input_from->GetUsage()))) {
+				// If an input dependency is not attachment, then all its producers can't be merged
+				// Or an input dependency is attachment, but it is not produced as an attachment, then the producer
+				// can't be merged
+				length = std::min(length, ordered_pass_id - p_edge->pass_from);
+			}
+		}
+	}
+	return merge_length;
 }
 
-void RenderGraphResolver::extract_passes(OrderedPassGraph &&ordered_pass_graph) {}
+void RenderGraphResolver::_add_merged_passes(const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
+	const uint32_t kOrderedPassCount = ordered_pass_graph.nodes.size();
+	std::vector<uint32_t> merge_length = _compute_ordered_pass_merge_length(ordered_pass_graph);
+	for (uint32_t i = 0, prev_length = 0; i < kOrderedPassCount; ++i) {
+		const PassBase *pass = ordered_pass_graph.nodes[i].pass;
+		auto &length = merge_length[i];
+		if (length > prev_length)
+			length = prev_length + 1;
+		else
+			length = pass->m_p_attachment_data ? 1 : 0;
+
+		if (length <= 1) {
+			pass->m_internal_info.pass_id = m_passes.size();
+			pass->m_internal_info.subpass_id = 0;
+			m_passes.emplace_back();
+			m_passes.back().subpasses.push_back({pass});
+			m_passes.back().is_render_pass = length;
+		} else {
+			pass->m_internal_info.pass_id = m_passes.size() - 1;
+			pass->m_internal_info.subpass_id = length - 1;
+			m_passes.back().subpasses.push_back({pass});
+		}
+
+		prev_length = length;
+	}
+}
+
+void RenderGraphResolver::_add_pass_dependencies_and_attachments(
+    const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
+	for (auto &edge : ordered_pass_graph.edges) {
+		const PassBase *pass_to = ordered_pass_graph.nodes[edge.pass_to].pass;
+		uint32_t to_pass_id = pass_to->m_internal_info.pass_id;
+		uint32_t to_subpass_id = pass_to->m_internal_info.subpass_id;
+		// Add Dependencies
+		if (~edge.pass_from) {
+			const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
+			uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
+			uint32_t from_subpass_id = pass_from->m_internal_info.subpass_id;
+			if (from_pass_id == to_pass_id) {
+				assert(UsageIsAttachment(edge.p_input_from->GetUsage()) &&
+				       UsageIsAttachment(edge.p_input_to->GetUsage()));
+				// Subpass Dependency
+				m_passes[to_pass_id].subpasses[to_subpass_id].subpass_input_dependencies.push_back(
+				    {edge.resource, edge.p_input_from, edge.p_input_to, from_subpass_id, to_subpass_id});
+			} else {
+				// Pass Dependency
+				m_passes[to_pass_id].input_dependencies.push_back(
+				    {edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id, to_pass_id});
+			}
+		} else {
+			m_passes[to_pass_id].input_dependencies.push_back(
+			    {edge.resource, edge.p_input_from, edge.p_input_to, (uint32_t)-1, to_pass_id});
+		}
+		// Add Attachments
+		if (UsageIsAttachment(edge.p_input_to->GetUsage())) {
+			edge.resource->Visit([this, to_pass_id](const auto *resource) -> void {
+				if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage)
+					m_passes[to_pass_id].attachments.insert(resource);
+				else
+					assert(false);
+			});
+		}
+	}
+}
+
+void RenderGraphResolver::add_extra_resource_relation() {
+	// Avoid Memory Alias Barriers to subpass from previous passes
+	for (const auto &pass_info : m_passes) {
+		if (!pass_info.is_render_pass)
+			continue;
+		for (const ImageBase *attachment_image : pass_info.attachments) {
+			uint32_t internal_attachment_resource_id = GetInternalResourceID(attachment_image);
+			if (internal_attachment_resource_id == -1)
+				continue;
+			for (const auto &dependency : pass_info.input_dependencies) {
+				uint32_t internal_dependent_resource_id = GetInternalResourceID(dependency.resource);
+				if (~internal_dependent_resource_id) {
+					m_resource_conflicted_relation.SetRelation(internal_attachment_resource_id,
+					                                           internal_dependent_resource_id);
+					m_resource_conflicted_relation.SetRelation(internal_dependent_resource_id,
+					                                           internal_attachment_resource_id);
+				}
+			}
+		}
+	}
+}
+
+void RenderGraphResolver::extract_passes(OrderedPassGraph &&ordered_pass_graph) {
+	m_passes.clear();
+	_add_merged_passes(ordered_pass_graph);
+	_add_pass_dependencies_and_attachments(ordered_pass_graph);
+}
 
 void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 	Graph graph = make_graph(p_render_graph);
@@ -333,6 +451,7 @@ void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 	OrderedPassGraph ordered_pass_graph = make_ordered_pass_graph(std::move(graph));
 	initialize_basic_resource_relation(ordered_pass_graph);
 	extract_passes(std::move(ordered_pass_graph));
+	add_extra_resource_relation();
 }
 
 } // namespace myvk_rg::_details_

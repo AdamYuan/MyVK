@@ -5,18 +5,11 @@
 #include <vector>
 
 #include "Bitset.hpp"
-#include "Pass.hpp"
-#include "ResourceBase.hpp"
+#include <myvk_rg/_details_/Pass.hpp>
+#include <myvk_rg/_details_/RenderGraphBase.hpp>
+#include <myvk_rg/_details_/Resource.hpp>
 
 namespace myvk_rg::_details_ {
-
-class ResourceBase;
-class PassBase;
-class RenderGraphBase;
-class ImageBase;
-class CombinedImage;
-class ManagedBuffer;
-class Input;
 
 class RenderGraphResolver {
 public:
@@ -52,7 +45,8 @@ public:
 	struct PassInfo {
 		std::vector<SubpassInfo> subpasses;
 		std::vector<PassDependency> input_dependencies;
-		bool is_graphics_pass{};
+		std::unordered_set<const ImageBase *> attachments; // Attachment and its ID
+		bool is_render_pass{};
 	};
 
 private:
@@ -63,7 +57,7 @@ private:
 	std::vector<InternalImageViewInfo> m_internal_image_views;
 	std::vector<InternalBufferInfo> m_internal_buffers;
 
-	RelationMatrix m_image_view_parent_relation, m_resource_conflicted_relation;
+	RelationMatrix /* m_image_view_parent_relation, */ m_resource_conflicted_relation;
 
 	std::vector<PassInfo> m_passes;
 
@@ -76,7 +70,9 @@ private:
 	static OrderedPassGraph make_ordered_pass_graph(Graph &&graph);
 	// static RelationMatrix _extract_transitive_closure(const OrderedPassGraph &ordered_pass_graph);
 	void initialize_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph);
-	std::vector<uint32_t> _compute_ordered_pass_merge_length(const OrderedPassGraph &ordered_pass_graph);
+	static std::vector<uint32_t> _compute_ordered_pass_merge_length(const OrderedPassGraph &ordered_pass_graph);
+	void _add_merged_passes(const OrderedPassGraph &ordered_pass_graph);
+	void _add_pass_dependencies_and_attachments(const OrderedPassGraph &ordered_pass_graph);
 	void extract_passes(OrderedPassGraph &&ordered_pass_graph);
 	void add_extra_resource_relation();
 
@@ -97,8 +93,10 @@ public:
 				return image->m_internal_info.image_view_id;
 			else if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
 				return GetInternalImageViewID(image->GetPointedResource());
-			else
+			else {
+				assert(false);
 				return -1;
+			}
 		});
 	}
 	inline static uint32_t GetInternalImageViewID(const CombinedImage *image) {
@@ -113,8 +111,10 @@ public:
 				return image->m_internal_info.image_id;
 			else if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
 				return GetInternalImageID(image->GetPointedResource());
-			else
+			else {
+				assert(false);
 				return -1;
+			}
 		});
 	}
 	inline static uint32_t GetInternalImageID(const CombinedImage *image) { return image->m_internal_info.image_id; }
@@ -132,16 +132,18 @@ public:
 				return GetInternalResourceID(resource);
 			else if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias)
 				return GetInternalResourceID(resource->GetPointedResource());
-			else
+			else {
+				assert(false);
 				return -1;
+			}
 		});
 	}
 
 	// inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.ordered_pass_id; }
 
-	inline bool IsParentInternalImageView(uint32_t parent_image_view, uint32_t cur_image_view) const {
-		return m_image_view_parent_relation.GetRelation(parent_image_view, cur_image_view);
-	}
+	/* inline bool IsParentInternalImageView(uint32_t parent_image_view, uint32_t cur_image_view) const {
+	    return m_image_view_parent_relation.GetRelation(parent_image_view, cur_image_view);
+	} */
 	inline bool IsConflictedInternalResources(uint32_t resource_0, uint32_t resource_1) const {
 		return m_resource_conflicted_relation.GetRelation(resource_0, resource_1);
 	}

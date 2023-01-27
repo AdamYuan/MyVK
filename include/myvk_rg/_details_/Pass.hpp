@@ -22,6 +22,7 @@ private:
 
 	mutable struct {
 		uint32_t ordered_pass_id{};
+		uint32_t pass_id{}, subpass_id{};
 	} m_internal_info{};
 
 	template <typename, uint8_t> friend class Pass;
