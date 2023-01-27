@@ -110,7 +110,6 @@ public:
 	inline ResourceState GetState() const { return GetResourceState(m_class); }
 	inline ResourceClass GetClass() const { return m_class; }
 
-	// TODO: Is that actually needed ? (currently implemented in Resource.hpp)
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Visit(Visitor &&visitor) const;
 	// virtual bool IsPerFrame() const = 0;
