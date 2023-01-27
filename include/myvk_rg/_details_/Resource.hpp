@@ -69,7 +69,7 @@ public:
 	inline void SetLoadOp(VkAttachmentLoadOp load_op) {
 		if (m_load_op != load_op) {
 			m_load_op = load_op;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkRenderPass);
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kMakeExecutor);
 		}
 	}
 	inline void SetClearColorValue(const VkClearColorValue &clear_color_value) {
@@ -216,7 +216,7 @@ public:
 	inline void SetPersistence(bool persistence = true) {
 		if (m_persistence != persistence) {
 			m_persistence = persistence;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocateResource);
 		}
 	}
 	inline const SizeType &GetSize() const {
@@ -229,14 +229,14 @@ public:
 		m_size_func = nullptr;
 		if (m_size != size) {
 			m_size = size;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocateResource);
 		}
 	}
 	inline bool HaveSizeFunc() const { return m_size_func; }
 	inline const SizeFunc &GetSizeFunc() const { return m_size_func; }
 	template <typename Func> inline void SetSizeFunc(Func &&func) {
 		m_size_func = func;
-		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kGenerateVkResource);
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocateResource);
 	}
 };
 
@@ -246,7 +246,6 @@ private:
 		uint32_t buffer_id{};
 	} m_internal_info{};
 
-	friend class RenderGraphBase;
 	friend class RenderGraphResolver;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {}
@@ -322,16 +321,12 @@ class ManagedImage final : public ImageBase,
                            public ManagedResourceInfo<ManagedImage, SubImageSize> {
 private:
 	mutable struct {
-		const CombinedImage *parent{};
 		uint32_t image_id{}, image_view_id{};
-		uint32_t base_layer{};
-		bool _has_parent_{};
 	} m_internal_info{};
 
 	VkImageViewType m_view_type{};
 	VkFormat m_format{};
 
-	friend class RenderGraphBase;
 	friend class RenderGraphResolver;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(VkFormat format, VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_2D) {
@@ -376,17 +371,12 @@ public:
 class CombinedImage final : public ImageBase {
 private:
 	mutable struct {
-		SubImageSize size{};
-		const CombinedImage *parent{};
 		uint32_t image_id{}, image_view_id{};
-		uint32_t base_layer{};
-		bool _has_parent_{};
 	} m_internal_info{};
 
 	VkImageViewType m_view_type;
 	std::vector<const ImageBase *> m_images;
 
-	friend class RenderGraphBase;
 	friend class RenderGraphResolver;
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(VkImageViewType view_type, std::vector<const ImageBase *> &&images) {

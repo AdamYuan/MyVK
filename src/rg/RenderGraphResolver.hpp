@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Bitset.hpp"
+
 #include <myvk_rg/_details_/Pass.hpp>
 #include <myvk_rg/_details_/RenderGraphBase.hpp>
 #include <myvk_rg/_details_/Resource.hpp>
@@ -13,19 +14,26 @@ namespace myvk_rg::_details_ {
 
 class RenderGraphResolver {
 public:
-	struct InternalResourceInfo {};
-	struct InternalBufferInfo : public InternalResourceInfo {
-		const ManagedBuffer *buffer{};
-		VkDeviceSize size{};
+	struct IntResourceInfo {
+		uint32_t order_weight = -1;
+		bool dependency_persistence{};
 	};
-	struct InternalImageInfo : public InternalResourceInfo {
+	struct IntBufferInfo : public IntResourceInfo {
+		const ManagedBuffer *buffer{};
+
+		VkBufferUsageFlags vk_buffer_usages{};
+	};
+	struct IntImageInfo : public IntResourceInfo {
 		const ImageBase *image{};
 		// uint32_t image_view_id;
+		VkImageUsageFlags vk_image_usages{};
+		VkImageType vk_image_type{VK_IMAGE_TYPE_2D};
+		bool is_transient{};
 	};
-	struct InternalImageViewInfo {
+	struct IntImageViewInfo {
 		const ImageBase *image{};
 		// uint32_t image_id;
-		bool has_parent{};
+		// bool has_parent{};
 	};
 
 	struct Dependency {
@@ -53,9 +61,9 @@ private:
 	struct Graph; // The Graph Containing Passes and Internal Resources
 	struct OrderedPassGraph;
 
-	std::vector<InternalImageInfo> m_internal_images;
-	std::vector<InternalImageViewInfo> m_internal_image_views;
-	std::vector<InternalBufferInfo> m_internal_buffers;
+	std::vector<IntImageInfo> m_internal_images;
+	std::vector<IntImageViewInfo> m_internal_image_views;
+	std::vector<IntBufferInfo> m_internal_buffers;
 
 	RelationMatrix /* m_image_view_parent_relation, */ m_resource_conflicted_relation;
 
@@ -69,82 +77,102 @@ private:
 	void extract_resources(const Graph &graph);
 	static OrderedPassGraph make_ordered_pass_graph(Graph &&graph);
 	// static RelationMatrix _extract_transitive_closure(const OrderedPassGraph &ordered_pass_graph);
-	void initialize_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph);
+	void extract_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph);
+	void extract_resource_info(const OrderedPassGraph &ordered_pass_graph);
 	static std::vector<uint32_t> _compute_ordered_pass_merge_length(const OrderedPassGraph &ordered_pass_graph);
 	void _add_merged_passes(const OrderedPassGraph &ordered_pass_graph);
 	void _add_pass_dependencies_and_attachments(const OrderedPassGraph &ordered_pass_graph);
 	void extract_passes(OrderedPassGraph &&ordered_pass_graph);
-	void add_extra_resource_relation();
+	void extract_extra_resource_relation();
+	void extract_resource_transient_info();
 
 public:
 	void Resolve(const RenderGraphBase *p_render_graph);
-	// inline uint32_t GetPassCount() const { return m_passes.size(); }
-	inline uint32_t GetInternalBufferCount() const { return m_internal_buffers.size(); }
-	inline uint32_t GetInternalImageCount() const { return m_internal_images.size(); }
-	inline uint32_t GetInternalResourceCount() const { return GetInternalBufferCount() + GetInternalImageCount(); }
-	inline uint32_t GetInternalImageViewCount() const { return m_internal_image_views.size(); }
 
-	inline static uint32_t GetInternalBufferID(const ManagedBuffer *buffer) {
-		return buffer->m_internal_info.buffer_id;
+	inline uint32_t GetPassCount() const { return m_passes.size(); }
+	inline const PassInfo &GetPassInfo(uint32_t pass_id) const { return m_passes[pass_id]; }
+	inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.pass_id; }
+	inline static uint32_t GetSubpassID(const PassBase *pass) { return pass->m_internal_info.subpass_id; }
+
+	inline uint32_t GetIntBufferCount() const { return m_internal_buffers.size(); }
+	inline const IntBufferInfo &GetIntBufferInfo(uint32_t buffer_id) const { return m_internal_buffers[buffer_id]; }
+	inline uint32_t GetIntImageCount() const { return m_internal_images.size(); }
+	inline const IntImageInfo &GetIntImageInfo(uint32_t image_id) const { return m_internal_images[image_id]; }
+	inline uint32_t GetIntResourceCount() const { return GetIntBufferCount() + GetIntImageCount(); }
+	inline const IntResourceInfo &GetIntResourceInfo(uint32_t resource_id) const {
+		return resource_id < GetIntImageCount()
+		           ? (const IntResourceInfo &)GetIntImageInfo(resource_id)
+		           : (const IntResourceInfo &)GetIntBufferInfo(resource_id - GetIntImageCount());
 	}
-	inline static uint32_t GetInternalImageViewID(const ImageBase *image) {
+	inline uint32_t GetIntImageViewCount() const { return m_internal_image_views.size(); }
+	inline const IntImageViewInfo &GetIntImageViewInfo(uint32_t image_view_id) const {
+		return m_internal_image_views[image_view_id];
+	}
+
+	inline static uint32_t GetIntBufferID(const BufferBase *buffer) {
+		return buffer->Visit([](const auto *buffer) -> uint32_t {
+			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kIsInternal)
+				return buffer->m_internal_info.buffer_id;
+			else if constexpr (ResourceVisitorTrait<decltype(buffer)>::kIsAlias)
+				return GetIntBufferID(buffer->GetPointedResource());
+			else
+				return -1;
+		});
+	}
+	inline static uint32_t GetIntBufferID(const ManagedBuffer *buffer) { return buffer->m_internal_info.buffer_id; }
+
+	inline static uint32_t GetIntImageViewID(const ImageBase *image) {
 		return image->Visit([](const auto *image) -> uint32_t {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal)
 				return image->m_internal_info.image_view_id;
 			else if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
-				return GetInternalImageViewID(image->GetPointedResource());
-			else {
-				assert(false);
+				return GetIntImageViewID(image->GetPointedResource());
+			else
 				return -1;
-			}
 		});
 	}
-	inline static uint32_t GetInternalImageViewID(const CombinedImage *image) {
+	inline static uint32_t GetIntImageViewID(const CombinedImage *image) {
 		return image->m_internal_info.image_view_id;
 	}
-	inline static uint32_t GetInternalImageViewID(const ManagedImage *image) {
-		return image->m_internal_info.image_view_id;
-	}
-	inline static uint32_t GetInternalImageID(const ImageBase *image) {
+	inline static uint32_t GetIntImageViewID(const ManagedImage *image) { return image->m_internal_info.image_view_id; }
+
+	inline static uint32_t GetIntImageID(const ImageBase *image) {
 		return image->Visit([](const auto *image) -> uint32_t {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal)
 				return image->m_internal_info.image_id;
 			else if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
-				return GetInternalImageID(image->GetPointedResource());
-			else {
-				assert(false);
+				return GetIntImageID(image->GetPointedResource());
+			else
 				return -1;
-			}
 		});
 	}
-	inline static uint32_t GetInternalImageID(const CombinedImage *image) { return image->m_internal_info.image_id; }
-	inline static uint32_t GetInternalImageID(const ManagedImage *image) { return image->m_internal_info.image_id; }
+	inline static uint32_t GetIntImageID(const CombinedImage *image) { return image->m_internal_info.image_id; }
+	inline static uint32_t GetIntImageID(const ManagedImage *image) { return image->m_internal_info.image_id; }
 
-	inline uint32_t GetInternalResourceID(const ManagedBuffer *buffer) const {
-		return GetInternalBufferID(buffer) + GetInternalImageCount();
+	inline uint32_t GetIntResourceID(const BufferBase *buffer) const {
+		return GetIntBufferID(buffer) + GetIntImageCount();
 	}
-	inline static uint32_t GetInternalResourceID(const CombinedImage *image) { return GetInternalImageID(image); }
-	inline static uint32_t GetInternalResourceID(const ManagedImage *image) { return GetInternalImageID(image); }
-	inline static uint32_t GetInternalResourceID(const ImageBase *image) { return GetInternalImageID(image); }
-	inline uint32_t GetInternalResourceID(const ResourceBase *resource) const {
+	inline uint32_t GetIntResourceID(const ManagedBuffer *buffer) const {
+		return GetIntBufferID(buffer) + GetIntImageCount();
+	}
+	inline static uint32_t GetIntResourceID(const ImageBase *image) { return GetIntImageID(image); }
+	inline static uint32_t GetIntResourceID(const CombinedImage *image) { return GetIntImageID(image); }
+	inline static uint32_t GetIntResourceID(const ManagedImage *image) { return GetIntImageID(image); }
+	inline uint32_t GetIntResourceID(const ResourceBase *resource) const {
 		return resource->Visit([this](const auto *resource) -> uint32_t {
 			if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal)
-				return GetInternalResourceID(resource);
+				return GetIntResourceID(resource);
 			else if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias)
-				return GetInternalResourceID(resource->GetPointedResource());
-			else {
-				assert(false);
+				return GetIntResourceID(resource->GetPointedResource());
+			else
 				return -1;
-			}
 		});
 	}
 
-	// inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.ordered_pass_id; }
-
-	/* inline bool IsParentInternalImageView(uint32_t parent_image_view, uint32_t cur_image_view) const {
+	/* inline bool IsParentIntImageView(uint32_t parent_image_view, uint32_t cur_image_view) const {
 	    return m_image_view_parent_relation.GetRelation(parent_image_view, cur_image_view);
 	} */
-	inline bool IsConflictedInternalResources(uint32_t resource_0, uint32_t resource_1) const {
+	inline bool IsConflictedIntResources(uint32_t resource_0, uint32_t resource_1) const {
 		return m_resource_conflicted_relation.GetRelation(resource_0, resource_1);
 	}
 };

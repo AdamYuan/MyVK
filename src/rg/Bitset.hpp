@@ -15,13 +15,13 @@ inline constexpr void BitsetSet(uint64_t *data, uint32_t bit_pos) {
 	data[bit_pos >> 6u] |= (1ull << (bit_pos & 0x3fu));
 }
 
-class Bitset {
+/* class Bitset {
 private:
-	std::vector<uint64_t> m_bits;
+    std::vector<uint64_t> m_bits;
 
 public:
 
-};
+}; */
 
 class RelationMatrix {
 private:

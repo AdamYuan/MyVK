@@ -109,7 +109,7 @@ private:
 		auto ret = _InputPool::template CreateAndInitializeForce<0, Input>(input_key, resource, usage,
 		                                                                   std::forward<Args>(input_args)...);
 		assert(ret);
-		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolveGraph);
 		return ret;
 	}
 
@@ -499,7 +499,7 @@ template <typename Derived> void InputPool<Derived>::RemoveInput(const PoolKey &
 			((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_remove_input(input);
 	}
 	InputPool::Delete(input_key);
-	get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
+	get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolveGraph);
 }
 
 template <typename Derived> void InputPool<Derived>::ClearInputs() {
@@ -508,7 +508,7 @@ template <typename Derived> void InputPool<Derived>::ClearInputs() {
 	if constexpr (std::is_base_of_v<AttachmentInputSlot<Derived>, Derived>)
 		((AttachmentInputSlot<Derived> *)static_cast<Derived *>(this))->pre_clear_inputs();
 	InputPool::Clear();
-	get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAssignPassResourceIndices);
+	get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolveGraph);
 }
 
 } // namespace myvk_rg::_details_
