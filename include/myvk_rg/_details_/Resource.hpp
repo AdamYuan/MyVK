@@ -69,7 +69,7 @@ public:
 	inline void SetLoadOp(VkAttachmentLoadOp load_op) {
 		if (m_load_op != load_op) {
 			m_load_op = load_op;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kMakeExecutor);
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kPrepareExecutor);
 		}
 	}
 	inline void SetClearColorValue(const VkClearColorValue &clear_color_value) {
@@ -216,7 +216,7 @@ public:
 	inline void SetPersistence(bool persistence = true) {
 		if (m_persistence != persistence) {
 			m_persistence = persistence;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocateResource);
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
 		}
 	}
 	inline const SizeType &GetSize() const {
@@ -229,14 +229,14 @@ public:
 		m_size_func = nullptr;
 		if (m_size != size) {
 			m_size = size;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocateResource);
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
 		}
 	}
 	inline bool HaveSizeFunc() const { return m_size_func; }
 	inline const SizeFunc &GetSizeFunc() const { return m_size_func; }
 	template <typename Func> inline void SetSizeFunc(Func &&func) {
 		m_size_func = func;
-		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocateResource);
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
 	}
 };
 

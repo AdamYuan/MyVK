@@ -1,6 +1,7 @@
 #include <myvk_rg/RenderGraph.hpp>
 
 #include "RenderGraphAllocator.hpp"
+#include "RenderGraphExecutor.hpp"
 #include "RenderGraphResolver.hpp"
 #include "myvk_rg/_details_/RenderGraphBase.hpp"
 
@@ -9,6 +10,7 @@ namespace myvk_rg::_details_ {
 struct RenderGraphBase::Compiler {
 	RenderGraphResolver resolver;
 	RenderGraphAllocator allocator;
+	RenderGraphExecutor executor;
 };
 
 inline static constexpr VkShaderStageFlags VkShaderStagesFromVkPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
@@ -60,7 +62,7 @@ DescriptorSetData::GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &devic
 	return m_descriptor_set_layout;
 }
 
-void RenderGraphBase::initialize(const myvk::Ptr<myvk::Device> &device) {
+void RenderGraphBase::MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &device) {
 	m_device_ptr = device;
 	// Check Lazy Allocation Support
 	for (uint32_t i = 0; i < GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypeCount; i++) {
@@ -81,10 +83,12 @@ void RenderGraphBase::Compile() {
 	if (m_compile_phrase == 0u)
 		return;
 	switch (m_compile_phrase & -m_compile_phrase) { // Switch with Lowest Bit
-	case CompilePhrase::kResolveGraph:
+	case CompilePhrase::kResolve:
 		m_compiler->resolver.Resolve(this);
-	case CompilePhrase::kAllocateResource:
+	case CompilePhrase::kAllocate:
 		m_compiler->allocator.Allocate(this, m_compiler->resolver);
+	case CompilePhrase::kPrepareExecutor:
+		m_compiler->executor.Prepare(this, m_compiler->resolver, m_compiler->allocator);
 	}
 	m_compile_phrase = 0u;
 }

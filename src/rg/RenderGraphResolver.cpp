@@ -53,7 +53,7 @@ struct RenderGraphResolver::OrderedPassGraph {
 		std::vector<const Edge *> input_edges, output_edges;
 	};
 	std::vector<Node> nodes;
-	std::list<Edge> edges;
+	std::vector<Edge> edges;
 
 	inline void add_edge(uint32_t pass_from, uint32_t pass_to, const ResourceBase *resource, const Input *p_input_from,
 	                     const Input *p_input_to) {
@@ -121,7 +121,6 @@ void RenderGraphResolver::_visit_resource_dep_passes(RenderGraphResolver::Graph 
 }
 
 void RenderGraphResolver::_insert_write_after_read_edges(RenderGraphResolver::Graph *p_graph) {
-	// TODO: Deal with Image Read as different layout (Or check that all READs' layout is the same)
 	std::unordered_map<const ResourceBase *, const RenderGraphResolver::Graph::Edge *> write_outputs;
 	for (auto &pair : p_graph->nodes) {
 		auto &node = pair.second;
@@ -132,6 +131,7 @@ void RenderGraphResolver::_insert_write_after_read_edges(RenderGraphResolver::Gr
 				assert(p_edge->pass_to);
 				assert(write_outputs.find(p_edge->resource) ==
 				       write_outputs.end()); // An output can only be written once
+
 				write_outputs[p_edge->resource] = p_edge;
 			}
 		}
@@ -152,12 +152,18 @@ void RenderGraphResolver::_insert_write_after_read_edges(RenderGraphResolver::Gr
 	}
 }
 
+void RenderGraphResolver::_insert_image_read_layout_edges(RenderGraphResolver::Graph *p_graph) {
+	// TODO: Deal with Image Read as different layout ()
+}
+
 RenderGraphResolver::Graph RenderGraphResolver::make_graph(const RenderGraphBase *p_render_graph) {
 	Graph graph = {};
 	for (auto it = p_render_graph->m_p_result_pool_data->pool.begin();
 	     it != p_render_graph->m_p_result_pool_data->pool.end(); ++it)
-		_visit_resource_dep_passes(&graph, *p_render_graph->m_p_result_pool_data->ValueGet<0, ResourceBase *>(it));
+		_visit_resource_dep_passes(&graph, *p_render_graph->m_p_result_pool_data->ValueGet<0, ResourceBase *>(it),
+		                           nullptr, nullptr); // TODO: Add Future Result Input
 	_insert_write_after_read_edges(&graph);
+	_insert_image_read_layout_edges(&graph);
 	return graph;
 }
 
@@ -189,6 +195,8 @@ RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_gra
 				candidate_queue.push(p_edge->pass_to);
 		}
 	}
+
+	ordered_pass_graph.edges.reserve(graph.edges.size());
 	for (const auto &edge : graph.edges) {
 		if (edge.deleted)
 			continue;
@@ -462,55 +470,80 @@ void RenderGraphResolver::_add_merged_passes(const RenderGraphResolver::OrderedP
 
 void RenderGraphResolver::_add_pass_dependencies_and_attachments(
     const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
+	m_dependencies.clear();
+	m_dependencies.reserve(ordered_pass_graph.edges.size());
+
+	m_post_dependencies.clear();
+
 	for (auto &edge : ordered_pass_graph.edges) {
+		PassDependency *p_pass_dependency{nullptr};
 		// Add Dependencies
-		if (~edge.pass_to) {
+		if (~edge.pass_from && ~edge.pass_to) {
 			const PassBase *pass_to = ordered_pass_graph.nodes[edge.pass_to].pass;
 			uint32_t to_pass_id = pass_to->m_internal_info.pass_id;
 			uint32_t to_subpass_id = pass_to->m_internal_info.subpass_id;
 
-			if (~edge.pass_from) {
-				const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
-				uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
-				uint32_t from_subpass_id = pass_from->m_internal_info.subpass_id;
+			const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
+			uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
+			uint32_t from_subpass_id = pass_from->m_internal_info.subpass_id;
 
-				if (from_pass_id == to_pass_id) {
-					assert(UsageIsAttachment(edge.p_input_from->GetUsage()) &&
-					       UsageIsAttachment(edge.p_input_to->GetUsage()));
-					// Subpass Dependency
-					m_passes[to_pass_id].subpasses[to_subpass_id].subpass_input_dependencies.push_back(
-					    {edge.resource, edge.p_input_from, edge.p_input_to, from_subpass_id, to_subpass_id});
-				} else {
-					// Pass Dependency
-					PassDependency pass_dependency = {edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id,
-					                                  to_pass_id};
-					m_passes[to_pass_id].input_dependencies.push_back(pass_dependency);
-					m_passes[from_pass_id].output_dependencies.push_back(pass_dependency);
-				}
+			if (from_pass_id == to_pass_id) {
+				assert(UsageIsAttachment(edge.p_input_from->GetUsage()) &&
+				       UsageIsAttachment(edge.p_input_to->GetUsage()));
+				// Subpass Dependency
+				m_passes[to_pass_id].subpass_dependencies.push_back(
+				    {edge.resource, edge.p_input_from, edge.p_input_to, from_subpass_id, to_subpass_id});
 			} else {
-				m_passes[to_pass_id].input_dependencies.push_back(
-				    {edge.resource, edge.p_input_from, edge.p_input_to, (uint32_t)-1, to_pass_id});
-			}
-			// Add Attachments
-			if (UsageIsAttachment(edge.p_input_to->GetUsage())) {
-				edge.resource->Visit([this, to_pass_id](const auto *resource) -> void {
-					if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage)
-						m_passes[to_pass_id].attachments.insert(resource);
-					else
-						assert(false);
-				});
+				// Pass Dependency
+				m_dependencies.push_back({edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id, to_pass_id});
+				p_pass_dependency = &m_dependencies.back();
+				// m_passes[from_pass_id].output_dependencies.push_back(p_pass_dependency);
+				m_passes[to_pass_id].input_dependencies.push_back(p_pass_dependency);
 			}
 		} else if (~edge.pass_from) {
 			const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
 			uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
 
-			m_passes[from_pass_id].output_dependencies.push_back(
-			    {edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id, (uint32_t)-1});
+			m_dependencies.push_back({edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id, (uint32_t)-1});
+			p_pass_dependency = &m_dependencies.back();
+			// m_passes[from_pass_id].output_dependencies.push_back(p_pass_dependency);
+			m_post_dependencies.push_back(p_pass_dependency);
+		} else if (~edge.pass_to) {
+			const PassBase *pass_to = ordered_pass_graph.nodes[edge.pass_to].pass;
+			uint32_t to_pass_id = pass_to->m_internal_info.pass_id;
+
+			m_dependencies.push_back({edge.resource, edge.p_input_from, edge.p_input_to, (uint32_t)-1, to_pass_id});
+			p_pass_dependency = &m_dependencies.back();
+			m_passes[to_pass_id].input_dependencies.push_back(p_pass_dependency);
+		}
+
+		// Add Attachments
+		if (p_pass_dependency) {
+			edge.resource->Visit([this, p_pass_dependency](const auto *resource) -> void {
+				if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
+					if ((~p_pass_dependency->pass_to) && p_pass_dependency->p_input_to &&
+					    UsageIsAttachment(p_pass_dependency->p_input_to->GetUsage())) {
+
+						// p_pass_dependency->is_attachment_dependency = true;
+						// Update attachment's initial state
+						m_passes[p_pass_dependency->pass_to].maintain_attachment(
+						    resource, p_pass_dependency->p_input_to, nullptr);
+					}
+					if ((~p_pass_dependency->pass_from) && p_pass_dependency->p_input_from &&
+					    UsageIsAttachment(p_pass_dependency->p_input_from->GetUsage())) {
+
+						// p_pass_dependency->is_attachment_dependency = true;
+						// Update attachment's final state
+						m_passes[p_pass_dependency->pass_from].maintain_attachment(resource, nullptr,
+						                                                           p_pass_dependency->p_input_from);
+					}
+				}
+			});
 		}
 	}
 }
 
-void RenderGraphResolver::extract_passes(OrderedPassGraph &&ordered_pass_graph) {
+void RenderGraphResolver::extract_passes_and_dependencies(OrderedPassGraph &&ordered_pass_graph) {
 	m_passes.clear();
 	_add_merged_passes(ordered_pass_graph);
 	_add_pass_dependencies_and_attachments(ordered_pass_graph);
@@ -521,14 +554,14 @@ void RenderGraphResolver::extract_extra_resource_relation() {
 	for (const auto &pass_info : m_passes) {
 		if (!pass_info.is_render_pass)
 			continue;
-		for (const ImageBase *attachment_image : pass_info.attachments) {
-			uint32_t internal_attachment_resource_id = GetIntResourceID(attachment_image);
+		for (const auto &attachment_it : pass_info.attachments) {
+			uint32_t internal_attachment_resource_id = GetIntResourceID(attachment_it.first);
 			if (internal_attachment_resource_id == -1)
 				continue;
-			for (const auto &dependency : pass_info.input_dependencies) {
-				if (UsageIsAttachment(dependency.p_input_to->GetUsage()))
+			for (const auto *dependency : pass_info.input_dependencies) {
+				if (UsageIsAttachment(dependency->p_input_to->GetUsage()))
 					continue; // attachments are allowed to overlap in memory
-				uint32_t internal_dependent_resource_id = GetIntResourceID(dependency.resource);
+				uint32_t internal_dependent_resource_id = GetIntResourceID(dependency->resource);
 				if (~internal_dependent_resource_id) {
 					m_resource_conflicted_relation.SetRelation(internal_attachment_resource_id,
 					                                           internal_dependent_resource_id);
@@ -550,7 +583,7 @@ void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 	OrderedPassGraph ordered_pass_graph = make_ordered_pass_graph(std::move(graph));
 	extract_basic_resource_relation(ordered_pass_graph);
 	extract_resource_info(ordered_pass_graph);
-	extract_passes(std::move(ordered_pass_graph));
+	extract_passes_and_dependencies(std::move(ordered_pass_graph));
 	extract_extra_resource_relation();
 	if (p_render_graph->m_lazy_allocation_supported)
 		extract_resource_transient_info();
@@ -564,7 +597,8 @@ void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 		if (pass_info.is_render_pass) {
 			printf("PASS_ATTACHMENTS: ");
 			for (const auto &attachment : pass_info.attachments)
-				std::cout << attachment->GetKey().GetName() << ":" << attachment->GetKey().GetID() << ", ";
+				std::cout << attachment.first->GetKey().GetName() << ":" << attachment.first->GetKey().GetID()
+				          << " id = " << attachment.second.attachment_id << ", ";
 			printf("\n");
 		}
 	}

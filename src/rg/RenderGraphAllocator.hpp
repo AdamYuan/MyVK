@@ -12,8 +12,6 @@
 namespace myvk_rg::_details_ {
 
 class RenderGraphAllocation;
-class RenderGraphImage;
-class RenderGraphBuffer;
 
 class RenderGraphAllocator {
 public:
@@ -22,24 +20,30 @@ public:
 		VkDeviceSize memory_offset{};
 		uint32_t allocation_id{};
 
+	protected:
 		uint32_t internal_resource_id{};
 		const RenderGraphResolver::IntResourceInfo *p_info{};
+		friend class RenderGraphAllocator;
 	};
 	struct IntImageAlloc final : public IntResourceAlloc {
+		myvk::Ptr<myvk::ImageBase> myvk_image{};
+		const SubImageSize *p_size{};
+		bool persistence{};
+
+	protected:
 		const RenderGraphResolver::IntImageInfo &GetImageInfo() const {
 			return *static_cast<const RenderGraphResolver::IntImageInfo *>(p_info);
 		}
-
-		myvk::Ptr<RenderGraphImage> myvk_image{};
-		const SubImageSize *p_size{};
-		bool persistence{};
+		friend class RenderGraphAllocator;
 	};
 	struct IntBufferAlloc final : public IntResourceAlloc {
+		myvk::Ptr<myvk::BufferBase> myvk_buffer{};
+
+	protected:
 		const RenderGraphResolver::IntBufferInfo &GetBufferInfo() const {
 			return *static_cast<const RenderGraphResolver::IntBufferInfo *>(p_info);
 		}
-
-		myvk::Ptr<RenderGraphBuffer> myvk_buffer{};
+		friend class RenderGraphAllocator;
 	};
 	struct IntImageViewAlloc {
 		myvk::Ptr<myvk::ImageView> myvk_image_view{};
@@ -51,9 +55,9 @@ private:
 	const RenderGraphBase *m_p_render_graph;
 	const RenderGraphResolver *m_p_resolved;
 
-	std::vector<IntImageAlloc> m_internal_images;
-	std::vector<IntBufferAlloc> m_internal_buffers;
-	std::vector<IntImageViewAlloc> m_internal_image_views;
+	std::vector<IntImageAlloc> m_allocated_images;
+	std::vector<IntBufferAlloc> m_allocated_buffers;
+	std::vector<IntImageViewAlloc> m_allocated_image_views;
 
 	struct AllocationInfo {
 		myvk::Ptr<RenderGraphAllocation> myvk_allocation{};
@@ -71,7 +75,7 @@ private:
 	};
 	std::vector<AllocationInfo> m_allocations;
 
-	void reset_resource_arrays();
+	void reset_resource_vectors();
 	void _maintain_combined_image(const CombinedImage *image);
 	void _accumulate_combined_image_base_layer(const CombinedImage *image);
 	void update_image_info();
@@ -83,6 +87,68 @@ private:
 
 public:
 	void Allocate(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved);
+
+	inline const IntImageAlloc &GetIntImageAlloc(uint32_t image_id) const { return m_allocated_images[image_id]; }
+	inline const std::vector<IntImageAlloc> &GetIntImageAllocVector() const { return m_allocated_images; }
+
+	inline const IntBufferAlloc &GetIntBufferAlloc(uint32_t buffer_id) const { return m_allocated_buffers[buffer_id]; }
+	inline const std::vector<IntBufferAlloc> &GetIntBufferAllocVector() const { return m_allocated_buffers; }
+
+	inline const IntImageViewAlloc &GetIntImageViewAlloc(uint32_t image_view_id) const {
+		return m_allocated_image_views[image_view_id];
+	}
+	inline const std::vector<IntImageViewAlloc> &GetIntImageViewAllocVector() const { return m_allocated_image_views; }
+
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ManagedImage *image) const {
+		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image)].myvk_image_view;
+	}
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const CombinedImage *image) const {
+		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image)].myvk_image_view;
+	}
+	inline static const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ExternalImageBase *image) {
+		return image->GetVkImageView();
+	}
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageAlias *image) const {
+		return image->GetPointedResource()->Visit(
+		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
+	}
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageBase *image) const {
+		return image->Visit(
+		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
+	}
+
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ManagedImage *image) const {
+		return m_allocated_images[m_p_resolved->GetIntImageID(image)].myvk_image;
+	}
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const CombinedImage *image) const {
+		return m_allocated_images[m_p_resolved->GetIntImageID(image)].myvk_image;
+	}
+	inline static const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ExternalImageBase *image) {
+		return image->GetVkImageView()->GetImagePtr();
+	}
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageAlias *image) const {
+		return image->GetPointedResource()->Visit(
+		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
+	}
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageBase *image) const {
+		return image->Visit(
+		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
+	}
+
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ManagedBuffer *buffer) const {
+		return m_allocated_buffers[m_p_resolved->GetIntBufferID(buffer)].myvk_buffer;
+	}
+	inline static const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ExternalBufferBase *buffer) {
+		return buffer->GetVkBuffer();
+	}
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferAlias *buffer) const {
+		return buffer->GetPointedResource()->Visit(
+		    [this](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer); });
+	}
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferBase *buffer) const {
+		return buffer->Visit(
+		    [this](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer); });
+	}
 };
 
 } // namespace myvk_rg::_details_

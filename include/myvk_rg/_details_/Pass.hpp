@@ -72,7 +72,7 @@ protected:
 		PassType *ret =
 		    _PassPool::template CreateAndInitialize<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
 		assert(ret);
-		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolveGraph);
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolve);
 		return ret;
 	}
 	inline void DeletePass(const PoolKey &pass_key) { return PassPool::Delete(pass_key); }
@@ -84,7 +84,7 @@ protected:
 	}
 	inline void ClearPasses() {
 		_PassPool::Clear();
-		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolveGraph);
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kResolve);
 	}
 };
 

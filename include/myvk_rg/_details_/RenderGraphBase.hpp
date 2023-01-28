@@ -24,16 +24,16 @@ class RenderGraphAllocation;
 class RenderGraphBase : public myvk::DeviceObjectBase {
 private:
 	myvk::Ptr<myvk::Device> m_device_ptr;
-	bool m_lazy_allocation_supported{};
-	VkExtent2D m_canvas_size{};
-
 	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
+	VkExtent2D m_canvas_size{};
+	VkPipelineStageFlags2 m_src_stages{VK_PIPELINE_STAGE_2_NONE}, m_dst_stages{VK_PIPELINE_STAGE_2_NONE};
+	bool m_lazy_allocation_supported{};
 
 	struct CompilePhrase {
 		enum : uint8_t {
-			kResolveGraph = 1u,
-			kAllocateResource = 8u,
-			kMakeExecutor = 32u,
+			kResolve = 1u,
+			kAllocate = 2u,
+			kPrepareExecutor = 4u,
 		};
 	};
 	uint8_t m_compile_phrase{};
@@ -42,7 +42,7 @@ private:
 	struct Compiler;
 	std::unique_ptr<Compiler> m_compiler{};
 
-	void initialize(const myvk::Ptr<myvk::Device> &device);
+	void MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &device);
 
 	template <typename> friend class RenderGraph;
 	template <typename> friend class ImageAttachmentInfo;
@@ -55,6 +55,7 @@ private:
 	friend class RenderGraphImage;
 
 	friend class RenderGraphResolver;
+	friend class RenderGraphExecutor;
 
 public:
 	RenderGraphBase();
@@ -63,7 +64,19 @@ public:
 	inline void SetCanvasSize(const VkExtent2D &canvas_size) {
 		if (canvas_size.width != m_canvas_size.width || canvas_size.height != m_canvas_size.height) {
 			m_canvas_size = canvas_size;
-			set_compile_phrase(CompilePhrase::kAllocateResource);
+			set_compile_phrase(CompilePhrase::kAllocate);
+		}
+	}
+	inline void SetSrcStages(VkPipelineStageFlags2 src_stages) {
+		if (m_src_stages != src_stages) {
+			m_src_stages = src_stages;
+			set_compile_phrase(CompilePhrase::kPrepareExecutor);
+		}
+	}
+	inline void SetDstStages(VkPipelineStageFlags2 dst_stages) {
+		if (m_dst_stages != dst_stages) {
+			m_dst_stages = dst_stages;
+			set_compile_phrase(CompilePhrase::kPrepareExecutor);
 		}
 	}
 
