@@ -29,8 +29,10 @@ struct RenderGraphResolver::Graph {
 		edges.push_back({resource, p_input_from, p_input_to, pass_from, pass_to, is_read_to_write_edge});
 		const auto *edge = &edges.back();
 		nodes[pass_from].output_edges.push_back(edge);
-		nodes[pass_to].input_edges.push_back(edge);
-		++nodes[pass_to].in_degree;
+		if (pass_to) {
+			nodes[pass_to].input_edges.push_back(edge);
+			++nodes[pass_to].in_degree;
+		}
 	}
 	inline void add_internal_buffer(const ManagedBuffer *buffer) { internal_buffer_set.insert(buffer); }
 	inline void add_internal_image(const ImageBase *image, bool set_has_parent = false) {
@@ -59,7 +61,8 @@ struct RenderGraphResolver::OrderedPassGraph {
 		const auto *edge = &edges.back();
 		if (~pass_from)
 			nodes[pass_from].output_edges.push_back(edge);
-		nodes[pass_to].input_edges.push_back(edge);
+		if (~pass_to)
+			nodes[pass_to].input_edges.push_back(edge);
 	}
 	/* inline bool is_visited(uint32_t pass) const { return nodes[pass].visited; }
 	inline void set_visited(uint32_t pass) const { nodes[pass].visited = true; }
@@ -71,21 +74,14 @@ struct RenderGraphResolver::OrderedPassGraph {
 
 void RenderGraphResolver::_visit_resource_dep_passes(RenderGraphResolver::Graph *p_graph, const ResourceBase *resource,
                                                      const PassBase *pass, const Input *p_input) {
-	const auto add_edge = [p_graph, pass, p_input](const ResourceBase *resource, const PassBase *dep_pass) -> void {
-		if (pass)
-			p_graph->add_edge(dep_pass, pass, resource,
-			                  p_input->GetResource()->Visit([](const auto *resource) -> const Input * {
-				                  if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias)
-					                  return resource->GetProducerInput();
-				                  else
-					                  return nullptr;
-			                  }),
-			                  p_input, false);
+	const auto add_edge = [p_graph, pass, p_input](const ResourceBase *resource, const PassBase *dep_pass,
+	                                               const Input *p_dep_input) -> void {
+		p_graph->add_edge(dep_pass, pass, resource, p_dep_input, p_input, false);
 	};
-	const auto add_edge_and_visit_dep_pass = [p_graph, &add_edge](const ResourceBase *resource,
-	                                                              const PassBase *dep_pass) -> void {
+	const auto add_edge_and_visit_dep_pass =
+	    [p_graph, &add_edge](const ResourceBase *resource, const PassBase *dep_pass, const Input *p_dep_input) -> void {
 		bool not_visited = p_graph->nodes.find(dep_pass) == p_graph->nodes.end();
-		add_edge(resource, dep_pass);
+		add_edge(resource, dep_pass, p_dep_input);
 		if (dep_pass && not_visited) {
 			// Further Traverse dep_pass's dependent Resources
 			dep_pass->for_each_input([p_graph, dep_pass](const Input *p_input) {
@@ -102,22 +98,24 @@ void RenderGraphResolver::_visit_resource_dep_passes(RenderGraphResolver::Graph 
 			resource->ForEachImage([p_graph, &add_edge_and_visit_dep_pass, &add_edge](auto *sub_image) -> void {
 				if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
 					p_graph->add_internal_image(sub_image, true);
-					add_edge(sub_image, nullptr);
+					add_edge(sub_image, nullptr, nullptr);
 				} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsAlias) {
 					p_graph->add_internal_image(sub_image->GetPointedResource(), true);
-					add_edge_and_visit_dep_pass(sub_image->GetPointedResource(), sub_image->GetProducerPass());
+					add_edge_and_visit_dep_pass(sub_image->GetPointedResource(), sub_image->GetProducerPass(),
+					                            sub_image->GetProducerInput());
 				} else
 					assert(false);
 			});
 		} else {
 			if constexpr (kClass == ResourceClass::kManagedImage) {
 				p_graph->add_internal_image(resource);
-				add_edge(resource, nullptr);
+				add_edge(resource, nullptr, nullptr);
 			} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
 				p_graph->add_internal_buffer(resource);
-				add_edge(resource, nullptr);
+				add_edge(resource, nullptr, nullptr);
 			} else if constexpr (GetResourceState(kClass) == ResourceState::kAlias)
-				add_edge_and_visit_dep_pass(resource->GetPointedResource(), resource->GetProducerPass());
+				add_edge_and_visit_dep_pass(resource->GetPointedResource(), resource->GetProducerPass(),
+				                            resource->GetProducerInput());
 		}
 	});
 }
@@ -128,14 +126,20 @@ void RenderGraphResolver::_insert_write_after_read_edges(RenderGraphResolver::Gr
 	for (auto &pair : p_graph->nodes) {
 		auto &node = pair.second;
 		for (const auto *p_edge : node.output_edges) {
-			if (!p_edge->is_read_to_write_edge && !UsageIsReadOnly(p_edge->p_input_to->GetUsage())) {
+			if (!p_edge->is_read_to_write_edge && p_edge->p_input_to &&
+			    !UsageIsReadOnly(p_edge->p_input_to->GetUsage())) {
+
+				assert(p_edge->pass_to);
 				assert(write_outputs.find(p_edge->resource) ==
 				       write_outputs.end()); // An output can only be written once
 				write_outputs[p_edge->resource] = p_edge;
 			}
 		}
 		for (const auto *p_edge : node.output_edges) {
-			if (!p_edge->is_read_to_write_edge && UsageIsReadOnly(p_edge->p_input_to->GetUsage())) {
+			if (!p_edge->is_read_to_write_edge && p_edge->p_input_to &&
+			    UsageIsReadOnly(p_edge->p_input_to->GetUsage())) {
+
+				assert(p_edge->pass_to);
 				auto it = write_outputs.find(p_edge->resource);
 				if (it != write_outputs.end()) {
 					p_graph->add_edge(p_edge->pass_to, it->second->pass_to, p_edge->resource, p_edge->p_input_to,
@@ -172,6 +176,9 @@ RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_gra
 	while (!candidate_queue.empty()) {
 		const PassBase *pass = candidate_queue.front();
 		candidate_queue.pop();
+
+		if (!pass)
+			continue;
 
 		graph.nodes[pass].ordered_pass_id = ordered_pass_graph.nodes.size();
 		ordered_pass_graph.nodes.push_back({pass});
@@ -343,7 +350,7 @@ inline static void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_typ
 	}
 }
 void RenderGraphResolver::extract_resource_info(const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
-	// extract vk_image_usages, vk_image_type, vk_buffer_usages, is_dependency_persistent, order_weight
+	// extract vk_image_usages, vk_image_type, vk_buffer_usages, dependency_persistence, order_weight
 
 	const auto update_resource_creation_info = [this](const auto *resource, const Input *p_input,
 	                                                  uint32_t order) -> void {
@@ -456,37 +463,49 @@ void RenderGraphResolver::_add_merged_passes(const RenderGraphResolver::OrderedP
 void RenderGraphResolver::_add_pass_dependencies_and_attachments(
     const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
 	for (auto &edge : ordered_pass_graph.edges) {
-		const PassBase *pass_to = ordered_pass_graph.nodes[edge.pass_to].pass;
-		uint32_t to_pass_id = pass_to->m_internal_info.pass_id;
-		uint32_t to_subpass_id = pass_to->m_internal_info.subpass_id;
 		// Add Dependencies
-		if (~edge.pass_from) {
+		if (~edge.pass_to) {
+			const PassBase *pass_to = ordered_pass_graph.nodes[edge.pass_to].pass;
+			uint32_t to_pass_id = pass_to->m_internal_info.pass_id;
+			uint32_t to_subpass_id = pass_to->m_internal_info.subpass_id;
+
+			if (~edge.pass_from) {
+				const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
+				uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
+				uint32_t from_subpass_id = pass_from->m_internal_info.subpass_id;
+
+				if (from_pass_id == to_pass_id) {
+					assert(UsageIsAttachment(edge.p_input_from->GetUsage()) &&
+					       UsageIsAttachment(edge.p_input_to->GetUsage()));
+					// Subpass Dependency
+					m_passes[to_pass_id].subpasses[to_subpass_id].subpass_input_dependencies.push_back(
+					    {edge.resource, edge.p_input_from, edge.p_input_to, from_subpass_id, to_subpass_id});
+				} else {
+					// Pass Dependency
+					PassDependency pass_dependency = {edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id,
+					                                  to_pass_id};
+					m_passes[to_pass_id].input_dependencies.push_back(pass_dependency);
+					m_passes[from_pass_id].output_dependencies.push_back(pass_dependency);
+				}
+			} else {
+				m_passes[to_pass_id].input_dependencies.push_back(
+				    {edge.resource, edge.p_input_from, edge.p_input_to, (uint32_t)-1, to_pass_id});
+			}
+			// Add Attachments
+			if (UsageIsAttachment(edge.p_input_to->GetUsage())) {
+				edge.resource->Visit([this, to_pass_id](const auto *resource) -> void {
+					if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage)
+						m_passes[to_pass_id].attachments.insert(resource);
+					else
+						assert(false);
+				});
+			}
+		} else if (~edge.pass_from) {
 			const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
 			uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
-			uint32_t from_subpass_id = pass_from->m_internal_info.subpass_id;
-			if (from_pass_id == to_pass_id) {
-				assert(UsageIsAttachment(edge.p_input_from->GetUsage()) &&
-				       UsageIsAttachment(edge.p_input_to->GetUsage()));
-				// Subpass Dependency
-				m_passes[to_pass_id].subpasses[to_subpass_id].subpass_input_dependencies.push_back(
-				    {edge.resource, edge.p_input_from, edge.p_input_to, from_subpass_id, to_subpass_id});
-			} else {
-				// Pass Dependency
-				m_passes[to_pass_id].input_dependencies.push_back(
-				    {edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id, to_pass_id});
-			}
-		} else {
-			m_passes[to_pass_id].input_dependencies.push_back(
-			    {edge.resource, edge.p_input_from, edge.p_input_to, (uint32_t)-1, to_pass_id});
-		}
-		// Add Attachments
-		if (UsageIsAttachment(edge.p_input_to->GetUsage())) {
-			edge.resource->Visit([this, to_pass_id](const auto *resource) -> void {
-				if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage)
-					m_passes[to_pass_id].attachments.insert(resource);
-				else
-					assert(false);
-			});
+
+			m_passes[from_pass_id].output_dependencies.push_back(
+			    {edge.resource, edge.p_input_from, edge.p_input_to, from_pass_id, (uint32_t)-1});
 		}
 	}
 }
@@ -507,6 +526,8 @@ void RenderGraphResolver::extract_extra_resource_relation() {
 			if (internal_attachment_resource_id == -1)
 				continue;
 			for (const auto &dependency : pass_info.input_dependencies) {
+				if (UsageIsAttachment(dependency.p_input_to->GetUsage()))
+					continue; // attachments are allowed to overlap in memory
 				uint32_t internal_dependent_resource_id = GetIntResourceID(dependency.resource);
 				if (~internal_dependent_resource_id) {
 					m_resource_conflicted_relation.SetRelation(internal_attachment_resource_id,

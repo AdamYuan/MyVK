@@ -52,7 +52,7 @@ public:
 	};
 	struct PassInfo {
 		std::vector<SubpassInfo> subpasses;
-		std::vector<PassDependency> input_dependencies;
+		std::vector<PassDependency> input_dependencies, output_dependencies;
 		std::unordered_set<const ImageBase *> attachments; // Attachment and its ID
 		bool is_render_pass{};
 	};
@@ -93,6 +93,7 @@ public:
 	inline const PassInfo &GetPassInfo(uint32_t pass_id) const { return m_passes[pass_id]; }
 	inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.pass_id; }
 	inline static uint32_t GetSubpassID(const PassBase *pass) { return pass->m_internal_info.subpass_id; }
+	inline const std::vector<PassInfo> &GetPassInfoVector() const { return m_passes; }
 
 	inline uint32_t GetIntBufferCount() const { return m_internal_buffers.size(); }
 	inline const IntBufferInfo &GetIntBufferInfo(uint32_t buffer_id) const { return m_internal_buffers[buffer_id]; }
