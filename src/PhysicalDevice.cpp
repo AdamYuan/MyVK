@@ -56,6 +56,7 @@ PhysicalDeviceFeatures PhysicalDevice::GetDefaultFeatures() const {
 	ret.vk10 = m_features.vk10;
 	ret.vk10.robustBufferAccess = VK_FALSE;
 	ret.vk12.imagelessFramebuffer = VK_TRUE;
+	ret.vk13.synchronization2 = VK_TRUE;
 	return ret;
 }
 bool PhysicalDevice::GetQueueSupport(const QueueSelectorFunc &queue_selector_func) const {

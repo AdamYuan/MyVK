@@ -9,7 +9,7 @@ Ptr<Instance> Instance::CreateWithGlfwExtensions(bool use_validation_layer,
 
 	VkApplicationInfo app_info = {};
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	app_info.apiVersion = VK_API_VERSION_1_2;
+	app_info.apiVersion = VK_API_VERSION_1_3;
 
 	VkInstanceCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
