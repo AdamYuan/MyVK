@@ -152,10 +152,6 @@ void RenderGraphResolver::_insert_write_after_read_edges(RenderGraphResolver::Gr
 	}
 }
 
-void RenderGraphResolver::_insert_image_read_layout_edges(RenderGraphResolver::Graph *p_graph) {
-	// TODO: Deal with Image Read as different layout ()
-}
-
 RenderGraphResolver::Graph RenderGraphResolver::make_graph(const RenderGraphBase *p_render_graph) {
 	Graph graph = {};
 	for (auto it = p_render_graph->m_p_result_pool_data->pool.begin();
@@ -165,6 +161,10 @@ RenderGraphResolver::Graph RenderGraphResolver::make_graph(const RenderGraphBase
 	_insert_write_after_read_edges(&graph);
 	_insert_image_read_layout_edges(&graph);
 	return graph;
+}
+
+void RenderGraphResolver::_insert_image_read_layout_edges(RenderGraphResolver::Graph *p_graph) {
+	// TODO: Deal with Image Read as different layout ()
 }
 
 RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_graph(Graph &&graph) {
@@ -195,6 +195,8 @@ RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_gra
 				candidate_queue.push(p_edge->pass_to);
 		}
 	}
+
+	_insert_image_read_layout_edges(&graph);
 
 	ordered_pass_graph.edges.reserve(graph.edges.size());
 	for (const auto &edge : graph.edges) {
@@ -435,6 +437,10 @@ std::vector<uint32_t> RenderGraphResolver::_compute_ordered_pass_merge_length(
 				// Or an input dependency is attachment, but it is not produced as an attachment, then the producer
 				// can't be merged
 				length = std::min(length, ordered_pass_id - p_edge->pass_from);
+			} else if (p_edge->p_input_from) {
+				// If the input dependencies are both attachments
+				assert(~p_edge->pass_from);
+				length = std::min(length, ordered_pass_id - p_edge->pass_from + merge_length[p_edge->pass_from]);
 			}
 		}
 	}

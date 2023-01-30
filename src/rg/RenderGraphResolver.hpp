@@ -108,10 +108,10 @@ private:
 	static void _visit_resource_dep_passes(Graph *p_graph, const ResourceBase *resource, const PassBase *pass,
 	                                       const Input *p_input);
 	static void _insert_write_after_read_edges(Graph *p_graph);
-	static void _insert_image_read_layout_edges(Graph *p_graph);
 	static Graph make_graph(const RenderGraphBase *p_render_graph);
 	static void _initialize_combined_image(const CombinedImage *image);
 	void extract_resources(const Graph &graph);
+	static void _insert_image_read_layout_edges(Graph *p_graph);
 	static OrderedPassGraph make_ordered_pass_graph(Graph &&graph);
 	// static RelationMatrix _extract_transitive_closure(const OrderedPassGraph &ordered_pass_graph);
 	void extract_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph);
