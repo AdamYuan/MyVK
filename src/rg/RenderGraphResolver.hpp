@@ -15,8 +15,13 @@ namespace myvk_rg::_details_ {
 class RenderGraphResolver {
 public:
 	struct IntResourceInfo {
+		struct ResourceReference {
+			const Input *p_input;
+			const PassBase *pass;
+		};
 		uint32_t order_weight = -1;
 		bool dependency_persistence{};
+		std::vector<ResourceReference> last_references;
 	};
 	struct IntBufferInfo : public IntResourceInfo {
 		const ManagedBuffer *buffer{};
@@ -25,75 +30,49 @@ public:
 	};
 	struct IntImageInfo : public IntResourceInfo {
 		const ImageBase *image{};
-		// uint32_t image_view_id;
 		VkImageUsageFlags vk_image_usages{};
 		VkImageType vk_image_type{VK_IMAGE_TYPE_2D};
 		bool is_transient{};
 	};
 	struct IntImageViewInfo {
 		const ImageBase *image{};
-		// uint32_t image_id;
-		// bool has_parent{};
 	};
 
-	struct Dependency {
+	struct SingleDependency {
 		const ResourceBase *resource{};
 		const Input *p_input_from{}, *p_input_to{};
 	};
-	struct SubpassDependency : public Dependency {
+	struct SubpassDependency {
 		uint32_t subpass_from{}, subpass_to{};
 	};
 	struct SubpassInfo {
+		struct ResourceValidation {
+			const ResourceBase *resource;
+			const Input *p_input;
+		};
 		const PassBase *pass{};
+		std::vector<ResourceValidation> validate_resources;
+		std::vector<VkAttachmentReference> attachment_references;
 	};
-	struct PassDependency : public Dependency {
-		uint32_t pass_from{}, pass_to{};
-		// bool is_attachment_dependency{};
-	};
-	struct AttachmentInfo {
-		uint32_t attachment_id{};
-		VkImageLayout initial_layout{VK_IMAGE_LAYOUT_UNDEFINED}, final_layout{VK_IMAGE_LAYOUT_UNDEFINED};
-		bool is_initial{true}, is_final{true};
+	struct PassDependency {
+		struct PassLink {
+			const PassBase *pass{};
+			const Input *p_input{};
+		};
+		const ResourceBase *resource{};
+		std::vector<PassLink> from, to;
 	};
 	struct PassInfo {
-		std::vector<const PassDependency *> input_dependencies /*, output_dependencies*/;
-
 		std::vector<SubpassInfo> subpasses;
 		std::vector<SubpassDependency> subpass_dependencies;
-		std::unordered_map<const ImageBase *, AttachmentInfo> attachments; // Attachment and its Info
+		std::vector<const ImageBase *> attachments;
 		bool is_render_pass{};
-
-	private:
-		friend class RenderGraphResolver;
-		inline void maintain_attachment(const ImageBase *image, const Input *p_initial_input,
-		                                const Input *p_final_input) {
-			AttachmentInfo *p_info;
-			{
-				auto it = attachments.find(image);
-				if (it == attachments.end()) {
-					uint32_t id = attachments.size();
-					p_info = &(attachments.insert({image, {id}}).first->second);
-				} else
-					p_info = &(it->second);
-			}
-			if (p_initial_input) {
-				assert(p_info->initial_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
-				       p_info->initial_layout == UsageGetImageLayout(p_initial_input->GetUsage()));
-				p_info->is_initial = false;
-				p_info->initial_layout = UsageGetImageLayout(p_initial_input->GetUsage());
-			}
-			if (p_final_input) {
-				assert(p_info->final_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
-				       p_info->final_layout == UsageGetImageLayout(p_final_input->GetUsage()));
-				p_info->is_final = false;
-				p_info->final_layout = UsageGetImageLayout(p_final_input->GetUsage());
-			}
-		}
 	};
 
 private:
 	struct Graph; // The Graph Containing Passes and Internal Resources
 	struct OrderedPassGraph;
+	struct GroupedPassGraph;
 
 	std::vector<IntImageInfo> m_internal_images;
 	std::vector<IntImageViewInfo> m_internal_image_views;
@@ -102,25 +81,25 @@ private:
 	RelationMatrix /* m_image_view_parent_relation, */ m_resource_conflicted_relation;
 
 	std::vector<PassInfo> m_passes;
-	std::vector<PassDependency> m_dependencies;
-	std::vector<const PassDependency *> m_post_dependencies;
+	std::vector<PassDependency> m_pass_dependencies;
 
-	static void _visit_resource_dep_passes(Graph *p_graph, const ResourceBase *resource, const PassBase *pass,
-	                                       const Input *p_input);
-	static void _insert_write_after_read_edges(Graph *p_graph);
+	// std::vector<PassInfo> m_passes;
+	// std::vector<const PassDependency *> m_post_dependencies;
+	// std::list<PassDependency> m_dependencies;
+
 	static Graph make_graph(const RenderGraphBase *p_render_graph);
 	static void _initialize_combined_image(const CombinedImage *image);
 	void extract_resources(const Graph &graph);
-	static void _insert_image_read_layout_edges(Graph *p_graph);
+
 	static OrderedPassGraph make_ordered_pass_graph(Graph &&graph);
 	// static RelationMatrix _extract_transitive_closure(const OrderedPassGraph &ordered_pass_graph);
 	void extract_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph);
 	void extract_resource_info(const OrderedPassGraph &ordered_pass_graph);
-	static std::vector<uint32_t> _compute_ordered_pass_merge_length(const OrderedPassGraph &ordered_pass_graph);
-	void _add_merged_passes(const OrderedPassGraph &ordered_pass_graph);
-	void _add_pass_dependencies_and_attachments(const OrderedPassGraph &ordered_pass_graph);
+
+	static GroupedPassGraph make_grouped_pass_graph(OrderedPassGraph &&ordered_pass_graph);
+
 	void extract_passes_and_dependencies(OrderedPassGraph &&ordered_pass_graph);
-	void extract_extra_resource_relation();
+	// void extract_extra_resource_relation(const GroupedPassGraph &grouped_pass_graph);
 	void extract_resource_transient_info();
 
 public:
@@ -131,8 +110,8 @@ public:
 	inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.pass_id; }
 	inline static uint32_t GetSubpassID(const PassBase *pass) { return pass->m_internal_info.subpass_id; }
 	inline const std::vector<PassInfo> &GetPassInfoVector() const { return m_passes; }
-	inline const std::vector<PassDependency> &GetDependencies() const { return m_dependencies; }
-	inline const std::vector<const PassDependency *> &GetPostDependencyPtrs() const { return m_post_dependencies; }
+	// inline const std::vector<const PassDependency *> &GetPostDependencyPtrs() const { return m_post_dependencies; }
+	inline const std::list<PassDependency> &GetPassDependencyVector() const { return m_dependencies; }
 
 	inline uint32_t GetIntBufferCount() const { return m_internal_buffers.size(); }
 	inline const IntBufferInfo &GetIntBufferInfo(uint32_t buffer_id) const { return m_internal_buffers[buffer_id]; }
@@ -218,6 +197,10 @@ public:
 	} */
 	inline bool IsIntResourcesConflicted(uint32_t resource_0, uint32_t resource_1) const {
 		return m_resource_conflicted_relation.GetRelation(resource_0, resource_1);
+	}
+	template <typename Resource0, typename Resource1>
+	inline bool IsIntResourcesConflicted(const Resource0 *resource_0, const Resource1 *resource_1) const {
+		return m_resource_conflicted_relation.GetRelation(GetIntResourceID(resource_0), GetIntResourceID(resource_1));
 	}
 };
 

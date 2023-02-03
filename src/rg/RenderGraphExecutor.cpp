@@ -13,7 +13,7 @@ void RenderGraphExecutor::reset_pass_executor_vector() {
 }
 
 void RenderGraphExecutor::extract_barriers() {
-	const auto extract_barriers =
+	/* const auto extract_barriers =
 	    [this](const std::vector<const RenderGraphResolver::PassDependency *> &input_dependencies) -> BarrierInfo {
 		std::unordered_map<const ImageBase *, VkImageMemoryBarrier2> image_barriers;
 		std::unordered_map<const BufferBase *, VkBufferMemoryBarrier2> buffer_barriers;
@@ -66,9 +66,6 @@ void RenderGraphExecutor::extract_barriers() {
 						p_barrier->srcStageMask |= UsageGetWriteAccessFlags(p_dep->p_input_from->GetUsage());
 					}
 					if (p_dep->p_input_to) {
-						std::cout << p_dep->resource->GetKey().GetName();
-						printf(" layout: %d, %d\n", p_barrier->newLayout,
-						       UsageGetImageLayout(p_dep->p_input_to->GetUsage()));
 						assert(p_barrier->newLayout == VK_IMAGE_LAYOUT_UNDEFINED ||
 						       p_barrier->newLayout == UsageGetImageLayout(p_dep->p_input_to->GetUsage()));
 						p_barrier->newLayout = UsageGetImageLayout(p_dep->p_input_to->GetUsage());
@@ -107,7 +104,7 @@ void RenderGraphExecutor::extract_barriers() {
 		std::cout << pass_executor.p_info->subpasses[0].pass->GetKey().GetName() << std::endl;
 		pass_executor.barrier_info = extract_barriers(pass_executor.p_info->input_dependencies);
 	}
-	m_post_barrier = extract_barriers(m_p_resolved->GetPostDependencyPtrs());
+	m_post_barrier = extract_barriers(m_p_resolved->GetPostDependencyPtrs()); */
 }
 
 void RenderGraphExecutor::extract_render_passes_and_framebuffers() {

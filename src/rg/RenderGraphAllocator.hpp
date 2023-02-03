@@ -8,6 +8,7 @@
 #include <myvk/ImageView.hpp>
 
 #include "RenderGraphResolver.hpp"
+#include "Bitset.hpp"
 
 namespace myvk_rg::_details_ {
 
@@ -74,6 +75,8 @@ private:
 		inline bool empty() const { return resources.empty(); }
 	};
 	std::vector<AllocationInfo> m_allocations;
+
+	RelationMatrix m_allocated_resource_conflicted_relation;
 
 	void reset_resource_vectors();
 	void _maintain_combined_image(const CombinedImage *image);

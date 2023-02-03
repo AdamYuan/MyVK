@@ -80,6 +80,9 @@ RenderGraphBase::RenderGraphBase() = default;
 RenderGraphBase::~RenderGraphBase() = default;
 
 void RenderGraphBase::Compile() {
+	// RenderGraphResolver2 resolver2;
+	// resolver2.Resolve(this);
+
 	if (m_compile_phrase == 0u)
 		return;
 	switch (m_compile_phrase & -m_compile_phrase) { // Switch with Lowest Bit

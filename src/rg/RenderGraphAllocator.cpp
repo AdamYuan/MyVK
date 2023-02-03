@@ -341,6 +341,26 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 		}
 	}
 
+	// Extract resource conflicts
+	for (uint32_t i = 0; i < memory_info.resources.size(); ++i) {
+		const auto &resource_info_i = memory_info.resources[i];
+		// Self
+		m_allocated_resource_conflicted_relation.SetRelation(resource_info_i->internal_resource_id,
+		                                                     resource_info_i->internal_resource_id);
+		for (uint32_t j = 0; j < i; ++j) {
+			const auto &resource_info_j = memory_info.resources[j];
+			if (resource_info_i->memory_offset + resource_info_i->vk_memory_requirements.size >
+			        resource_info_j->memory_offset &&
+			    resource_info_j->memory_offset + resource_info_j->vk_memory_requirements.size >
+			        resource_info_i->memory_offset) {
+				m_allocated_resource_conflicted_relation.SetRelation(resource_info_i->internal_resource_id,
+				                                                     resource_info_j->internal_resource_id);
+				m_allocated_resource_conflicted_relation.SetRelation(resource_info_j->internal_resource_id,
+				                                                     resource_info_i->internal_resource_id);
+			}
+		}
+	}
+
 	VkMemoryRequirements memory_requirements = {};
 	memory_requirements.alignment = memory_info.alignment;
 	memory_requirements.memoryTypeBits = memory_info.memory_type_bits;
@@ -352,6 +372,7 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 
 void RenderGraphAllocator::create_and_bind_allocations() {
 	m_allocations.clear();
+
 	{ // Create Allocations
 		MemoryInfo device_memory{}, persistent_device_memory{}, lazy_memory{}, mapped_memory{};
 
