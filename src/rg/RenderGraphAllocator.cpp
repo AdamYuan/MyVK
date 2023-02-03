@@ -372,6 +372,8 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 
 void RenderGraphAllocator::create_and_bind_allocations() {
 	m_allocations.clear();
+	m_allocated_resource_conflicted_relation.Reset(m_p_resolved->GetIntResourceCount(),
+	                                               m_p_resolved->GetIntResourceCount());
 
 	{ // Create Allocations
 		MemoryInfo device_memory{}, persistent_device_memory{}, lazy_memory{}, mapped_memory{};

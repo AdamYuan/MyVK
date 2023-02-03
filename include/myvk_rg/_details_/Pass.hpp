@@ -20,7 +20,7 @@ private:
 	const AttachmentData *m_p_attachment_data{};
 
 	mutable struct {
-		uint32_t pass_id{}, subpass_id{};
+		uint32_t pass_order{}, pass_id{}, subpass_id{};
 	} m_internal_info{};
 
 	template <typename, uint8_t> friend class Pass;

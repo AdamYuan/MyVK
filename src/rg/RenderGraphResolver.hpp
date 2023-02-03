@@ -21,7 +21,7 @@ public:
 		};
 		uint32_t order_weight = -1;
 		bool dependency_persistence{};
-		std::vector<ResourceReference> last_references;
+		std::vector<ResourceReference> last_references; // TODO: Compute this
 	};
 	struct IntBufferInfo : public IntResourceInfo {
 		const ManagedBuffer *buffer{};
@@ -38,12 +38,13 @@ public:
 		const ImageBase *image{};
 	};
 
-	struct SingleDependency {
-		const ResourceBase *resource{};
-		const Input *p_input_from{}, *p_input_to{};
+	struct DependencyLink {
+		const Input *p_input{};
+		const PassBase *pass{};
 	};
 	struct SubpassDependency {
-		uint32_t subpass_from{}, subpass_to{};
+		const ResourceBase *resource{};
+		DependencyLink from{}, to{};
 	};
 	struct SubpassInfo {
 		struct ResourceValidation {
@@ -52,33 +53,27 @@ public:
 		};
 		const PassBase *pass{};
 		std::vector<ResourceValidation> validate_resources;
-		std::vector<VkAttachmentReference> attachment_references;
 	};
 	struct PassDependency {
-		struct PassLink {
-			const PassBase *pass{};
-			const Input *p_input{};
-		};
 		const ResourceBase *resource{};
-		std::vector<PassLink> from, to;
+		std::vector<DependencyLink> from, to;
 	};
 	struct PassInfo {
 		std::vector<SubpassInfo> subpasses;
 		std::vector<SubpassDependency> subpass_dependencies;
-		std::vector<const ImageBase *> attachments;
+		std::unordered_map<const ImageBase *, uint32_t> attachment_id_map;
 		bool is_render_pass{};
 	};
 
 private:
 	struct Graph; // The Graph Containing Passes and Internal Resources
 	struct OrderedPassGraph;
-	struct GroupedPassGraph;
 
 	std::vector<IntImageInfo> m_internal_images;
 	std::vector<IntImageViewInfo> m_internal_image_views;
 	std::vector<IntBufferInfo> m_internal_buffers;
 
-	RelationMatrix /* m_image_view_parent_relation, */ m_resource_conflicted_relation;
+	RelationMatrix m_resource_conflict_relation, m_pass_prior_relation;
 
 	std::vector<PassInfo> m_passes;
 	std::vector<PassDependency> m_pass_dependencies;
@@ -92,14 +87,15 @@ private:
 	void extract_resources(const Graph &graph);
 
 	static OrderedPassGraph make_ordered_pass_graph(Graph &&graph);
-	// static RelationMatrix _extract_transitive_closure(const OrderedPassGraph &ordered_pass_graph);
-	void extract_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph);
+	void extract_pass_prior_relation(const OrderedPassGraph &ordered_pass_graph);
+	void extract_resource_conflict_relation(const OrderedPassGraph &ordered_pass_graph);
 	void extract_resource_info(const OrderedPassGraph &ordered_pass_graph);
 
-	static GroupedPassGraph make_grouped_pass_graph(OrderedPassGraph &&ordered_pass_graph);
-
+	void _extract_passes(const OrderedPassGraph &ordered_pass_graph);
+	void _extract_dependencies_and_resource_validations(const OrderedPassGraph &ordered_pass_graph);
+	void _sort_and_insert_image_dependencies();
+	void _extract_pass_attachments();
 	void extract_passes_and_dependencies(OrderedPassGraph &&ordered_pass_graph);
-	// void extract_extra_resource_relation(const GroupedPassGraph &grouped_pass_graph);
 	void extract_resource_transient_info();
 
 public:
@@ -109,9 +105,10 @@ public:
 	inline const PassInfo &GetPassInfo(uint32_t pass_id) const { return m_passes[pass_id]; }
 	inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.pass_id; }
 	inline static uint32_t GetSubpassID(const PassBase *pass) { return pass->m_internal_info.subpass_id; }
+	inline static uint32_t GetPassOrder(const PassBase *pass) { return pass->m_internal_info.pass_order; }
 	inline const std::vector<PassInfo> &GetPassInfoVector() const { return m_passes; }
 	// inline const std::vector<const PassDependency *> &GetPostDependencyPtrs() const { return m_post_dependencies; }
-	inline const std::list<PassDependency> &GetPassDependencyVector() const { return m_dependencies; }
+	inline const std::vector<PassDependency> &GetPassDependencyVector() const { return m_pass_dependencies; }
 
 	inline uint32_t GetIntBufferCount() const { return m_internal_buffers.size(); }
 	inline const IntBufferInfo &GetIntBufferInfo(uint32_t buffer_id) const { return m_internal_buffers[buffer_id]; }
@@ -196,11 +193,17 @@ public:
 	    return m_image_view_parent_relation.GetRelation(parent_image_view, cur_image_view);
 	} */
 	inline bool IsIntResourcesConflicted(uint32_t resource_0, uint32_t resource_1) const {
-		return m_resource_conflicted_relation.GetRelation(resource_0, resource_1);
+		return m_resource_conflict_relation.GetRelation(resource_0, resource_1);
 	}
 	template <typename Resource0, typename Resource1>
 	inline bool IsIntResourcesConflicted(const Resource0 *resource_0, const Resource1 *resource_1) const {
-		return m_resource_conflicted_relation.GetRelation(GetIntResourceID(resource_0), GetIntResourceID(resource_1));
+		return m_resource_conflict_relation.GetRelation(GetIntResourceID(resource_0), GetIntResourceID(resource_1));
+	}
+	inline bool IsPassPrior(uint32_t pass_order_0, uint32_t pass_order_1) const {
+		return m_pass_prior_relation.GetRelation(pass_order_0, pass_order_1);
+	}
+	inline bool IsPassPrior(const PassBase *pass_0, const PassBase *pass_1) const {
+		return m_pass_prior_relation.GetRelation(GetPassOrder(pass_0), GetPassOrder(pass_1));
 	}
 };
 

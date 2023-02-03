@@ -9,6 +9,10 @@
 
 namespace myvk_rg::_details_ {
 
+struct SingleDependency {
+	const ResourceBase *resource{};
+	const Input *p_input_from{}, *p_input_to{};
+};
 struct RenderGraphResolver::Graph {
 	struct Edge : public SingleDependency {
 		const PassBase *pass_from{}, *pass_to{};
@@ -17,7 +21,7 @@ struct RenderGraphResolver::Graph {
 	};
 	struct Node {
 		std::vector<const Edge *> input_edges, output_edges;
-		uint32_t in_degree{}, ordered_pass_id = -1;
+		uint32_t in_degree{};
 	};
 	std::unordered_map<const ImageBase *, bool> internal_image_set;
 	std::unordered_set<const ManagedBuffer *> internal_buffer_set;
@@ -209,7 +213,7 @@ struct RenderGraphResolver::OrderedPassGraph {
 		std::vector<const Edge *> input_edges, output_edges;
 	};
 	std::vector<Node> nodes;
-	std::list<Edge> edges;
+	std::vector<Edge> edges;
 	std::vector<const Edge *> src_output_edges, dst_input_edges;
 
 	inline void add_edge(uint32_t pass_from, uint32_t pass_to, const ResourceBase *resource, const Input *p_input_from,
@@ -298,7 +302,7 @@ RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_gra
 		if (!pass)
 			continue;
 
-		graph.nodes[pass].ordered_pass_id = ordered_pass_graph.nodes.size();
+		pass->m_internal_info.pass_order = ordered_pass_graph.nodes.size();
 		ordered_pass_graph.nodes.push_back({pass});
 
 		for (auto *p_edge : graph.nodes[pass].output_edges) {
@@ -308,12 +312,13 @@ RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_gra
 		}
 	}
 
+	ordered_pass_graph.edges.reserve(graph.edges.size() << 1); // 2-times reserved for extra image sequence edges
 	// ordered_pass_graph.edges.reserve(graph.edges.size());
 	for (const auto &edge : graph.edges) {
 		if (edge.deleted)
 			continue;
-		ordered_pass_graph.add_edge(graph.nodes[edge.pass_from].ordered_pass_id,
-		                            graph.nodes[edge.pass_to].ordered_pass_id, edge.resource, edge.p_input_from,
+		ordered_pass_graph.add_edge(edge.pass_from ? GetPassOrder(edge.pass_from) : -1,
+		                            edge.pass_to ? GetPassOrder(edge.pass_to) : -1, edge.resource, edge.p_input_from,
 		                            edge.p_input_to,
 		                            edge.is_read_to_write && edge.resource->GetType() == ResourceType::kImage, false);
 	}
@@ -323,22 +328,19 @@ RenderGraphResolver::OrderedPassGraph RenderGraphResolver::make_ordered_pass_gra
 	return ordered_pass_graph;
 }
 
-/* RenderGraphResolver::RelationMatrix
-RenderGraphResolver::_extract_transitive_closure(const OrderedPassGraph &ordered_pass_graph) {
-    RelationMatrix relation;
-    const uint32_t pass_count = ordered_pass_graph.nodes.size();
-    relation.Reset(pass_count, pass_count);
-    for (uint32_t i = pass_count - 1; ~i; --i) {
-        for (const auto *p_edge : ordered_pass_graph.nodes[i].input_edges)
-            if (~p_edge->pass_from) {
-                relation.SetRelation(p_edge->pass_from, i);
-                relation.ApplyRelations(i, p_edge->pass_from);
-            }
-    }
-    return relation;
-} */
+void RenderGraphResolver::extract_pass_prior_relation(const OrderedPassGraph &ordered_pass_graph) {
+	const uint32_t kOrderedPassCount = ordered_pass_graph.nodes.size();
+	m_pass_prior_relation.Reset(kOrderedPassCount, kOrderedPassCount);
+	for (uint32_t i = kOrderedPassCount - 1; ~i; --i) {
+		for (const auto *p_edge : ordered_pass_graph.nodes[i].input_edges)
+			if (~p_edge->pass_from) {
+				m_pass_prior_relation.SetRelation(p_edge->pass_from, i);
+				m_pass_prior_relation.ApplyRelations(i, p_edge->pass_from);
+			}
+	}
+}
 
-void RenderGraphResolver::extract_basic_resource_relation(const OrderedPassGraph &ordered_pass_graph) {
+void RenderGraphResolver::extract_resource_conflict_relation(const OrderedPassGraph &ordered_pass_graph) {
 	const uint32_t kOrderedPassCount = ordered_pass_graph.nodes.size();
 
 	RelationMatrix pass_resource_not_prior_relation;
@@ -375,14 +377,14 @@ void RenderGraphResolver::extract_basic_resource_relation(const OrderedPassGraph
 		}
 	}
 
-	m_resource_conflicted_relation.Reset(GetIntResourceCount(), GetIntResourceCount());
+	m_resource_conflict_relation.Reset(GetIntResourceCount(), GetIntResourceCount());
 	for (uint32_t resource_id_0 = 0; resource_id_0 < GetIntResourceCount(); ++resource_id_0) {
-		m_resource_conflicted_relation.SetRelation(resource_id_0, resource_id_0);
+		m_resource_conflict_relation.SetRelation(resource_id_0, resource_id_0);
 		for (uint32_t resource_id_1 = 0; resource_id_1 < resource_id_0; ++resource_id_1) {
 			if (resource_not_prior_relation.GetRelation(resource_id_0, resource_id_1) &&
 			    resource_not_prior_relation.GetRelation(resource_id_1, resource_id_0)) {
-				m_resource_conflicted_relation.SetRelation(resource_id_0, resource_id_1);
-				m_resource_conflicted_relation.SetRelation(resource_id_1, resource_id_0);
+				m_resource_conflict_relation.SetRelation(resource_id_0, resource_id_1);
+				m_resource_conflict_relation.SetRelation(resource_id_1, resource_id_0);
 			}
 		}
 	}
@@ -461,356 +463,178 @@ void RenderGraphResolver::extract_resource_info(const RenderGraphResolver::Order
 	}
 }
 
-struct RenderGraphResolver::GroupedPassGraph {
-	struct SubpassDependency : public SingleDependency {
-		uint32_t subpass_from{}, subpass_to{};
-	};
-	struct SubpassInfo {
-		const PassBase *pass{};
-		std::vector<ResourceValidation> validate_resources;
-	};
-	struct PassDependency {
-		struct Link {
-			const Input *p_input{};
-			uint32_t pass = -1, subpass = -1;
-		};
-		const ResourceBase *resource{};
-		std::vector<Link> from, to;
-	};
-	struct AttachmentInfo {
-		uint32_t attachment_id{};
-		VkImageLayout initial_layout{VK_IMAGE_LAYOUT_UNDEFINED}, final_layout{VK_IMAGE_LAYOUT_UNDEFINED};
-		bool is_initial{true}, is_final{true};
-	};
-	struct PassInfo {
-		std::vector<SubpassInfo> subpasses;
-		std::vector<SubpassDependency> subpass_dependencies;
-		std::unordered_map<const ImageBase *, AttachmentInfo> attachments; // Attachment and its Info
-		bool is_render_pass{};
+void RenderGraphResolver::_extract_passes(const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
+	const uint32_t kOrderedPassCount = ordered_pass_graph.nodes.size();
+	std::vector<uint32_t> merge_length = ordered_pass_graph.compute_ordered_pass_merge_length();
+	for (uint32_t i = 0, prev_length = 0; i < kOrderedPassCount; ++i) {
+		const PassBase *pass = ordered_pass_graph.nodes[i].pass;
+		auto &length = merge_length[i];
+		if (length > prev_length)
+			length = prev_length + 1;
+		else
+			length = pass->m_p_attachment_data ? 1 : 0;
 
-		inline void maintain_attachment(const ImageBase *image, VkImageLayout initial_layout,
-		                                VkImageLayout final_layout) {
-			AttachmentInfo *p_info;
-			{
-				auto it = attachments.find(image);
-				if (it == attachments.end()) {
-					uint32_t id = attachments.size();
-					p_info = &(attachments.insert({image, {id}}).first->second);
-				} else
-					p_info = &(it->second);
-			}
-			if (initial_layout) { // Not UNDEFINED
-				assert(initial_layout == p_info->initial_layout);
-				p_info->is_initial = false;
-				p_info->initial_layout = initial_layout;
-			}
-			if (final_layout) { // Not UNDEFINED
-				assert(final_layout == p_info->final_layout);
-				p_info->is_final = false;
-				p_info->final_layout = final_layout;
-			}
+		if (length <= 1) {
+			pass->m_internal_info.pass_id = m_passes.size();
+			pass->m_internal_info.subpass_id = 0;
+			m_passes.emplace_back();
+			m_passes.back().subpasses.push_back({pass});
+			m_passes.back().is_render_pass = length;
+		} else {
+			pass->m_internal_info.pass_id = m_passes.size() - 1;
+			pass->m_internal_info.subpass_id = length - 1;
+			m_passes.back().subpasses.push_back({pass});
 		}
-	};
 
-	std::vector<PassInfo> passes;
-	std::list<PassDependency> dependencies;
-
-	inline void initialize_passes(const OrderedPassGraph &ordered_pass_graph) {
-		const uint32_t kOrderedPassCount = ordered_pass_graph.nodes.size();
-		std::vector<uint32_t> merge_length = ordered_pass_graph.compute_ordered_pass_merge_length();
-		for (uint32_t i = 0, prev_length = 0; i < kOrderedPassCount; ++i) {
-			const PassBase *pass = ordered_pass_graph.nodes[i].pass;
-			auto &length = merge_length[i];
-			if (length > prev_length)
-				length = prev_length + 1;
-			else
-				length = pass->m_p_attachment_data ? 1 : 0;
-
-			if (length <= 1) {
-				pass->m_internal_info.pass_id = passes.size();
-				pass->m_internal_info.subpass_id = 0;
-				passes.emplace_back();
-				passes.back().subpasses.push_back({pass});
-				passes.back().is_render_pass = length;
-			} else {
-				pass->m_internal_info.pass_id = passes.size() - 1;
-				pass->m_internal_info.subpass_id = length - 1;
-				passes.back().subpasses.push_back({pass});
-			}
-
-			prev_length = length;
-		}
+		prev_length = length;
 	}
-
-	inline void initialize_raw_dependencies(const OrderedPassGraph &ordered_pass_graph) {
-		std::vector<std::unordered_map<const ResourceBase *, PassDependency *>> input_dep_maps(passes.size()),
-		    output_dep_maps(passes.size());
-		const auto maintain_dependency = [this, &input_dep_maps, &output_dep_maps](
-		                                     const ResourceBase *resource, const PassDependency::Link &link_from,
-		                                     const PassDependency::Link &link_to) {
-			if (link_from.p_input == nullptr) {
-				// Mark as resource validation
-				assert(~link_to.pass && link_to.p_input);
-				if (~link_to.pass && link_to.p_input)
-					passes[link_to.pass].subpasses[link_to.subpass].validate_resources.push_back(
-					    {resource, link_to.p_input});
-				return;
-			}
-
-			PassDependency *p_dep;
-			if (~link_from.pass && ~link_to.pass) {
-				auto &dep_map_from = output_dep_maps[link_from.pass], dep_map_to = input_dep_maps[link_to.pass];
-				auto it_from = dep_map_from.find(resource), it_to = dep_map_to.find(resource);
-				assert(it_from == dep_map_from.end() || it_to == dep_map_to.end());
-
-				if (it_from != dep_map_from.end()) {
-					p_dep = it_from->second;
-					p_dep->to.push_back(link_to);
-					dep_map_to[resource] = p_dep;
-				} else if (it_to != dep_map_to.end()) {
-					p_dep = it_to->second;
-					p_dep->from.push_back(link_from);
-					dep_map_from[resource] = p_dep;
-				} else {
-					dependencies.push_back({resource, {link_from}, {link_to}});
-					p_dep = &dependencies.back();
-					dep_map_from[resource] = p_dep;
-					dep_map_to[resource] = p_dep;
-				}
-			} else if (~link_from.pass) {
-				auto &dep_map_from = output_dep_maps[link_from.pass];
-				auto it_from = dep_map_from.find(resource);
-				if (it_from != dep_map_from.end()) {
-					p_dep = it_from->second;
-					p_dep->to.push_back(link_to);
-				} else {
-					dependencies.push_back({resource, {link_from}, {link_to}});
-					p_dep = &dependencies.back();
-					dep_map_from[resource] = p_dep;
-				}
-			} else if (~link_to.pass) {
-				auto dep_map_to = input_dep_maps[link_to.pass];
-				auto it_to = dep_map_to.find(resource);
-				if (it_to != dep_map_to.end()) {
-					p_dep = it_to->second;
-					p_dep->from.push_back(link_from);
-				} else {
-					dependencies.push_back({resource, {link_from}, {link_to}});
-					p_dep = &dependencies.back();
-					dep_map_to[resource] = p_dep;
-				}
-			}
-		};
-
-		for (auto &edge : ordered_pass_graph.edges) {
-			if (edge.is_extra || edge.is_image_read_to_write)
-				continue;
-			// Add Dependencies
-			if (~edge.pass_from && ~edge.pass_to) {
-				const PassBase *pass_to = ordered_pass_graph.nodes[edge.pass_to].pass;
-				uint32_t to_pass_id = pass_to->m_internal_info.pass_id;
-				uint32_t to_subpass_id = pass_to->m_internal_info.subpass_id;
-
-				const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
-				uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
-				uint32_t from_subpass_id = pass_from->m_internal_info.subpass_id;
-
-				if (from_pass_id == to_pass_id) {
-					assert(UsageIsAttachment(edge.p_input_from->GetUsage()) &&
-					       UsageIsAttachment(edge.p_input_to->GetUsage()));
-					// Subpass Dependency
-					passes[to_pass_id].subpass_dependencies.push_back(
-					    {edge.resource, edge.p_input_from, edge.p_input_to, from_subpass_id, to_subpass_id});
-				} else {
-					// Pass Dependency
-					maintain_dependency(edge.resource, {edge.p_input_from, from_pass_id, from_subpass_id},
-					                    {edge.p_input_to, to_pass_id, to_subpass_id});
-				}
-			} else if (~edge.pass_from) {
-				const PassBase *pass_from = ordered_pass_graph.nodes[edge.pass_from].pass;
-				uint32_t from_pass_id = pass_from->m_internal_info.pass_id;
-				uint32_t from_subpass_id = pass_from->m_internal_info.subpass_id;
-
-				maintain_dependency(edge.resource, {edge.p_input_from, from_pass_id, from_subpass_id},
-				                    {edge.p_input_to});
-			} else if (~edge.pass_to) {
-				const PassBase *pass_to = ordered_pass_graph.nodes[edge.pass_to].pass;
-				uint32_t to_pass_id = pass_to->m_internal_info.pass_id;
-				uint32_t to_subpass_id = pass_to->m_internal_info.subpass_id;
-
-				maintain_dependency(edge.resource, {edge.p_input_from}, {edge.p_input_to, to_pass_id, to_subpass_id});
-			}
-		}
-	}
-
-	inline void sort_and_insert_image_dependencies() {
-		auto dep_it = dependencies.begin();
-		for (uint32_t i = 0, cnt = dependencies.size(); i++ < cnt; ++dep_it) {
-			auto &dep = *dep_it;
-
-			assert(dep.from.size() == 1 && !dep.to.empty());
-
-			if (dep.to.size() == 1)
-				continue;
-
-			// Sort the outputs and cull the useless ones
-			std::sort(dep.to.begin(), dep.to.end(), [](const PassDependency::Link &l, const PassDependency::Link &r) {
-				return !r.p_input || l.pass < r.pass;
-			});
-			while (!dep.to.empty() && dep.to.back().p_input == nullptr)
-				dep.to.pop_back();
-
-			if (dep.resource->GetType() == ResourceType::kImage) {
-				std::vector<PassDependency::Link> links = std::move(dep.to);
-				dep.to.clear();
-
-				PassDependency *p_cur_dep = &dep;
-
-				for (const auto &link : links) {
-					if (link.p_input && !p_cur_dep->to.empty()) {
-						const auto &prev_link = p_cur_dep->to.back();
-						bool prev_is_attachment = UsageIsAttachment(prev_link.p_input->GetUsage());
-						bool image_layout_changed = UsageGetImageLayout(prev_link.p_input->GetUsage()) !=
-						                            UsageGetImageLayout(link.p_input->GetUsage());
-						bool is_write_or_result = !UsageIsReadOnly(link.p_input->GetUsage());
-						assert(!is_write_or_result || link.pass == links.back().pass);
-						if (prev_is_attachment || image_layout_changed || is_write_or_result) {
-							dependencies.push_back({p_cur_dep->resource, p_cur_dep->to});
-							p_cur_dep = &dependencies.back();
-						}
-					}
-					p_cur_dep->to.push_back(link);
-					if (!link.p_input) {
-						assert(link.pass == -1 && links.size() == 1);
-						break;
-					}
-				}
-			}
-		}
-	}
-
-	/* inline void initialize_attachment_and_cull_dependencies() {
-		for (auto dep_it = dependencies.begin(); dep_it != dependencies.end();) {
-			PassDependency &dep = *dep_it;
-
-			if (dep.resource->GetType() != ResourceType::kImage) {
-				++dep_it;
-				continue;
-			}
-			auto *image = static_cast<const ImageBase *>(dep.resource);
-
-			assert(!dep.from.empty() && !dep.to.empty());
-
-			bool is_from_attachment =
-			    dep.from.front().p_input && UsageIsAttachment(dep.from.front().p_input->GetUsage());
-			bool is_to_attachment = dep.to.front().p_input && UsageIsAttachment(dep.to.front().p_input->GetUsage());
-
-			assert(!is_from_attachment || dep.from.size() == 1);
-			assert(!is_to_attachment || dep.to.size() == 1);
-
-			if (is_from_attachment && is_to_attachment) {
-				const auto &link_from = dep.from.front(), &link_to = dep.to.front();
-				assert((~link_from.pass) || (~link_to.pass));
-
-				VkImageLayout trans_layout = UsageGetImageLayout(link_from.p_input->GetUsage());
-				if (~link_from.pass)
-					passes[link_from.pass].maintain_attachment(image, VK_IMAGE_LAYOUT_UNDEFINED, trans_layout);
-				if (~link_to.pass) {
-					passes[link_to.pass].maintain_attachment(image, trans_layout, VK_IMAGE_LAYOUT_UNDEFINED);
-					assert(~link_to.subpass);
-					passes[link_to.pass].subpass_dependencies.push_back(
-					    {image, link_from.p_input, link_to.p_input, VK_SUBPASS_EXTERNAL, link_to.subpass});
-				}
-			} else if (is_from_attachment) {
-				const auto &link_from = dep.from.front();
-				if (~link_from.pass) {
-					for (const auto &link_to : dep.to) {
-						passes[link_from.pass].maintain_attachment(
-						    image, VK_IMAGE_LAYOUT_UNDEFINED,
-						    link_to.p_input ? UsageGetImageLayout(link_to.p_input->GetUsage())
-						                    : VK_IMAGE_LAYOUT_UNDEFINED);
-						passes[link_from.pass].subpass_dependencies.push_back(
-						    {image, link_from.p_input, link_to.p_input, link_from.subpass, VK_SUBPASS_EXTERNAL});
-					}
-				}
-			} else if (is_to_attachment) {
-				const auto &link_to = dep.to.front();
-				if (~link_to.pass) {
-					for (const auto &link_from : dep.from) {
-						passes[link_to.pass].maintain_attachment(
-						    image,
-						    link_from.p_input ? UsageGetImageLayout(link_from.p_input->GetUsage())
-						                      : VK_IMAGE_LAYOUT_UNDEFINED,
-						    VK_IMAGE_LAYOUT_UNDEFINED);
-						passes[link_to.pass].subpass_dependencies.push_back(
-						    {image, link_from.p_input, link_to.p_input, VK_SUBPASS_EXTERNAL, link_to.subpass});
-					}
-				}
-			}
-
-			// Remove Attachment-Related Dependencies
-			if (is_from_attachment || is_to_attachment)
-				dep_it = dependencies.erase(dep_it);
-			else
-				++dep_it;
-		}
-	} */
-};
-
-RenderGraphResolver::GroupedPassGraph
-RenderGraphResolver::make_grouped_pass_graph(OrderedPassGraph &&ordered_pass_graph) {
-	GroupedPassGraph grouped_pass_graph{};
-
-	grouped_pass_graph.initialize_passes(ordered_pass_graph);
-	grouped_pass_graph.initialize_raw_dependencies(ordered_pass_graph);
-	grouped_pass_graph.sort_and_insert_image_dependencies();
-	// grouped_pass_graph.initialize_attachment_and_cull_dependencies();
-
-	return grouped_pass_graph;
 }
 
-/* void RenderGraphResolver::_set_dependency_pointers() {
-    for (const auto &dep : m_dependencies) {
-        assert(std::is_sorted(
-            dep.to.begin(), dep.to.end(),
-            [](const PassDependency::Link &l, const PassDependency::Link &r) { return l.pass < r.pass; }));
-        auto pass = dep.to.front().pass;
-        (~pass ? m_passes[pass].prior_dependencies : m_post_dependencies).push_back(&dep);
-    }
-} */
+void RenderGraphResolver::_extract_pass_attachments() {
+	for (auto &pass_info : m_passes) {
+		const auto register_attachment = [&pass_info](const ImageBase *image) {
+			if (pass_info.attachment_id_map.find(image) == pass_info.attachment_id_map.end()) {
+				uint32_t id = pass_info.attachment_id_map.size();
+				pass_info.attachment_id_map[image] = id;
+			}
+		};
+
+		for (const auto &subpass_info : pass_info.subpasses) {
+			subpass_info.pass->for_each_input([&register_attachment](const Input *p_input) {
+				if (UsageIsAttachment(p_input->GetUsage())) {
+					p_input->GetResource()->Visit([&register_attachment](const auto *image) {
+						if constexpr (ResourceVisitorTrait<decltype(image)>::kType == ResourceType::kImage) {
+							if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
+								register_attachment(image->GetPointedResource());
+							else
+								register_attachment(image);
+						} else
+							assert(false);
+					});
+				}
+			});
+		}
+	}
+}
+
+void RenderGraphResolver::_extract_dependencies_and_resource_validations(
+    const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
+	std::vector<std::unordered_map<const ResourceBase *, PassDependency *>> input_dep_maps(m_passes.size()),
+	    output_dep_maps(m_passes.size());
+	std::unordered_map<const ResourceBase *, PassDependency *> src_output_dep_map, dst_input_dep_map;
+
+	const auto maintain_dependency = [this, &input_dep_maps, &output_dep_maps, &src_output_dep_map,
+	                                  &dst_input_dep_map](const ResourceBase *resource, const DependencyLink &link_from,
+	                                                      const DependencyLink &link_to) {
+		if (link_from.p_input == nullptr) {
+			// Mark as resource validation
+			assert(link_to.pass && link_to.p_input);
+			if (link_to.pass && link_to.p_input)
+				m_passes[GetPassID(link_to.pass)].subpasses[GetSubpassID(link_to.pass)].validate_resources.push_back(
+				    {resource, link_to.p_input});
+			return;
+		}
+
+		auto &dep_map_from = link_from.pass ? output_dep_maps[GetPassID(link_from.pass)] : src_output_dep_map,
+		     dep_map_to = link_to.pass ? input_dep_maps[GetPassID(link_to.pass)] : dst_input_dep_map;
+
+		auto it_from = dep_map_from.find(resource), it_to = dep_map_to.find(resource);
+		assert(it_from == dep_map_from.end() || it_to == dep_map_to.end());
+
+		PassDependency *p_dep;
+		if (it_from != dep_map_from.end()) {
+			p_dep = it_from->second;
+			p_dep->to.push_back(link_to);
+			dep_map_to[resource] = p_dep;
+		} else if (it_to != dep_map_to.end()) {
+			p_dep = it_to->second;
+			p_dep->from.push_back(link_from);
+			dep_map_from[resource] = p_dep;
+		} else {
+			m_pass_dependencies.push_back({resource, {link_from}, {link_to}});
+			p_dep = &m_pass_dependencies.back();
+			dep_map_from[resource] = p_dep;
+			dep_map_to[resource] = p_dep;
+		}
+	};
+
+	m_pass_dependencies.reserve(ordered_pass_graph.edges.size()); // Ensure the pointers are valid
+
+	for (auto &edge : ordered_pass_graph.edges) {
+		if (edge.is_extra || edge.is_image_read_to_write)
+			continue;
+		// Add Dependencies
+		const PassBase *pass_from = ~edge.pass_from ? ordered_pass_graph.nodes[edge.pass_from].pass : nullptr;
+		const PassBase *pass_to = ~edge.pass_to ? ordered_pass_graph.nodes[edge.pass_to].pass : nullptr;
+
+		if (pass_from && pass_to && GetPassID(pass_from) == GetPassID(pass_to)) {
+			assert(GetSubpassID(pass_from) != GetSubpassID(pass_to));
+			assert(UsageIsAttachment(edge.p_input_from->GetUsage()) && UsageIsAttachment(edge.p_input_to->GetUsage()));
+			m_passes[GetPassID(pass_to)].subpass_dependencies.push_back(
+			    {edge.resource, {edge.p_input_from, pass_from}, {edge.p_input_to, pass_to}});
+		} else
+			maintain_dependency(edge.resource, {edge.p_input_from, pass_from}, {edge.p_input_to, pass_to});
+	}
+}
+
+void RenderGraphResolver::_sort_and_insert_image_dependencies() {
+	uint32_t origin_dependency_count = m_pass_dependencies.size();
+	for (uint32_t i = 0; i < origin_dependency_count; ++i) {
+		auto &dep = m_pass_dependencies[i];
+		// WARNING: dep might be invalid after push_back()
+
+		assert(dep.from.size() == 1 && !dep.to.empty());
+
+		if (dep.to.size() == 1)
+			continue;
+
+		// Sort the outputs and cull the useless ones
+		std::sort(dep.to.begin(), dep.to.end(), [](const DependencyLink &l, const DependencyLink &r) {
+			uint32_t l_pass_id = l.pass ? GetPassID(l.pass) : -1;
+			uint32_t r_pass_id = r.pass ? GetPassID(r.pass) : -1;
+			return !r.p_input || l_pass_id < r_pass_id;
+		});
+		while (!dep.to.empty() && dep.to.back().p_input == nullptr)
+			dep.to.pop_back();
+
+		if (dep.resource->GetType() == ResourceType::kImage) {
+			std::vector<DependencyLink> links = std::move(dep.to);
+			dep.to.clear();
+
+			PassDependency *p_cur_dep = &dep;
+
+			for (const auto &link : links) {
+				if (link.p_input && !p_cur_dep->to.empty()) {
+					const auto &prev_link = p_cur_dep->to.back();
+					bool prev_is_attachment = UsageIsAttachment(prev_link.p_input->GetUsage());
+					bool image_layout_changed = UsageGetImageLayout(prev_link.p_input->GetUsage()) !=
+					                            UsageGetImageLayout(link.p_input->GetUsage());
+					bool is_write_or_result = !UsageIsReadOnly(link.p_input->GetUsage());
+					assert(!is_write_or_result || link.pass == links.back().pass);
+					if (prev_is_attachment || image_layout_changed || is_write_or_result) {
+						m_pass_dependencies.push_back({p_cur_dep->resource, p_cur_dep->to});
+						p_cur_dep = &m_pass_dependencies.back();
+					}
+				}
+				p_cur_dep->to.push_back(link);
+				if (!link.p_input) {
+					assert(link.pass == nullptr && links.size() == 1);
+					break;
+				}
+			}
+		}
+	}
+}
 
 void RenderGraphResolver::extract_passes_and_dependencies(OrderedPassGraph &&ordered_pass_graph) {
 	m_passes.clear();
 	m_pass_dependencies.clear();
-	// m_passes.clear();
-	// m_dependencies.clear();
-	// m_post_dependencies.clear();
+
+	_extract_passes(ordered_pass_graph);
+	_extract_dependencies_and_resource_validations(ordered_pass_graph);
+	_sort_and_insert_image_dependencies();
+	_extract_pass_attachments();
 }
-
-/* void RenderGraphResolver::extract_extra_resource_relation(const GroupedPassGraph &grouped_pass_graph) {
-    // Avoid Memory Alias Barriers to subpass from previous passes
-    for (const auto &dep : grouped_pass_graph.dependencies) {
-        uint32_t int_resource_id = GetIntResourceID(dep.resource);
-        if (int_resource_id == -1)
-            continue;
-
-        assert(!dep.from.empty() && !dep.to.empty());
-        assert(!dep.to.front().p_input ||
-               !UsageIsAttachment(dep.to.front().p_input->GetUsage())); // All attachment related dependencies should
-                                                                        // have been deleted in _extract_attachments()
-
-        for (const auto &link_to : dep.to) {
-            if (~link_to.pass && grouped_pass_graph.passes[link_to.pass].is_render_pass)
-                for (const auto &attachment_it : grouped_pass_graph.passes[link_to.pass].attachments) {
-                    uint32_t int_attachment_resource_id = GetIntResourceID(attachment_it.first);
-                    if (int_attachment_resource_id == -1)
-                        continue;
-                    m_resource_conflicted_relation.SetRelation(int_attachment_resource_id, int_resource_id);
-                    m_resource_conflicted_relation.SetRelation(int_resource_id, int_attachment_resource_id);
-                }
-        }
-    }
-} */
 
 void RenderGraphResolver::extract_resource_transient_info() {
 	// TODO: finish this, set is_transient and VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT
@@ -819,11 +643,13 @@ void RenderGraphResolver::extract_resource_transient_info() {
 void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 	Graph graph = make_graph(p_render_graph);
 	extract_resources(graph);
+
 	OrderedPassGraph ordered_pass_graph = make_ordered_pass_graph(std::move(graph));
-	extract_basic_resource_relation(ordered_pass_graph);
+	extract_pass_prior_relation(ordered_pass_graph);
+	extract_resource_conflict_relation(ordered_pass_graph);
 	extract_resource_info(ordered_pass_graph);
-	GroupedPassGraph grouped_pass_graph = make_grouped_pass_graph(std::move(ordered_pass_graph));
-	extract_passes_and_dependencies(std::move(grouped_pass_graph));
+
+	extract_passes_and_dependencies(std::move(ordered_pass_graph));
 	if (p_render_graph->m_lazy_allocation_supported)
 		extract_resource_transient_info();
 
@@ -835,9 +661,9 @@ void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 		printf("\n");
 		if (pass_info.is_render_pass) {
 			printf("PASS_ATTACHMENTS: ");
-			for (const auto &attachment : pass_info.attachments)
+			for (const auto &attachment : pass_info.attachment_id_map)
 				std::cout << attachment.first->GetKey().GetName() << ":" << attachment.first->GetKey().GetID()
-				          << " id = " << attachment.second.attachment_id << ", ";
+				          << " id = " << attachment.second << ", ";
 			printf("\n");
 		}
 	}
