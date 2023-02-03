@@ -261,21 +261,21 @@ struct RenderGraphResolver::OrderedPassGraph {
 			for (uint32_t i = 1; i < kOrderedPassCount; ++i)
 				merge_length[i] = nodes[i].pass->m_p_attachment_data ? merge_length[i - 1] + 1 : 0;
 		}
-		for (uint32_t ordered_pass_id = 0; ordered_pass_id < kOrderedPassCount; ++ordered_pass_id) {
-			auto &length = merge_length[ordered_pass_id];
+		for (uint32_t pass_order = 0; pass_order < kOrderedPassCount; ++pass_order) {
+			auto &length = merge_length[pass_order];
 			if (length <= 1)
 				continue;
-			for (auto *p_edge : nodes[ordered_pass_id].input_edges) {
+			for (auto *p_edge : nodes[pass_order].input_edges) {
 				if (!UsageIsAttachment(p_edge->p_input_to->GetUsage()) ||
 				    (p_edge->p_input_from && !UsageIsAttachment(p_edge->p_input_from->GetUsage()))) {
 					// If an input dependency is not attachment, then all its producers can't be merged
 					// Or an input dependency is attachment, but it is not produced as an attachment, then the producer
 					// can't be merged
-					length = std::min(length, ordered_pass_id - p_edge->pass_from);
+					length = std::min(length, pass_order - p_edge->pass_from);
 				} else if (p_edge->p_input_from) {
 					// If the input dependencies are both attachments
 					assert(~p_edge->pass_from);
-					length = std::min(length, ordered_pass_id - p_edge->pass_from + merge_length[p_edge->pass_from]);
+					length = std::min(length, pass_order - p_edge->pass_from + merge_length[p_edge->pass_from]);
 				}
 			}
 		}
@@ -346,17 +346,17 @@ void RenderGraphResolver::extract_resource_conflict_relation(const OrderedPassGr
 	RelationMatrix pass_resource_not_prior_relation;
 	{
 		pass_resource_not_prior_relation.Reset(kOrderedPassCount, GetIntResourceCount());
-		for (uint32_t ordered_pass_id = 0; ordered_pass_id < kOrderedPassCount; ++ordered_pass_id) {
-			for (const auto *p_edge : ordered_pass_graph.nodes[ordered_pass_id].input_edges) {
+		for (uint32_t pass_order = 0; pass_order < kOrderedPassCount; ++pass_order) {
+			for (const auto *p_edge : ordered_pass_graph.nodes[pass_order].input_edges) {
 				if (p_edge->is_extra)
 					continue;
 				if (~p_edge->pass_from)
-					pass_resource_not_prior_relation.ApplyRelations(p_edge->pass_from, ordered_pass_id);
-				ordered_pass_graph.nodes[ordered_pass_id].pass->for_each_input(
-				    [this, ordered_pass_id, &pass_resource_not_prior_relation](const Input *p_input) {
+					pass_resource_not_prior_relation.ApplyRelations(p_edge->pass_from, pass_order);
+				ordered_pass_graph.nodes[pass_order].pass->for_each_input(
+				    [this, pass_order, &pass_resource_not_prior_relation](const Input *p_input) {
 					    uint32_t internal_resource_id = GetIntResourceID(p_input->GetResource());
 					    if (~internal_resource_id)
-						    pass_resource_not_prior_relation.SetRelation(ordered_pass_id, internal_resource_id);
+						    pass_resource_not_prior_relation.SetRelation(pass_order, internal_resource_id);
 				    });
 			}
 		}
@@ -365,13 +365,13 @@ void RenderGraphResolver::extract_resource_conflict_relation(const OrderedPassGr
 	RelationMatrix resource_not_prior_relation;
 	{
 		resource_not_prior_relation.Reset(GetIntResourceCount(), GetIntResourceCount());
-		for (uint32_t ordered_pass_id = 0; ordered_pass_id < kOrderedPassCount; ++ordered_pass_id) {
-			ordered_pass_graph.nodes[ordered_pass_id].pass->for_each_input(
-			    [this, ordered_pass_id, &pass_resource_not_prior_relation,
+		for (uint32_t pass_order = 0; pass_order < kOrderedPassCount; ++pass_order) {
+			ordered_pass_graph.nodes[pass_order].pass->for_each_input(
+			    [this, pass_order, &pass_resource_not_prior_relation,
 			     &resource_not_prior_relation](const Input *p_input) {
 				    uint32_t internal_resource_id = GetIntResourceID(p_input->GetResource());
 				    if (~internal_resource_id)
-					    resource_not_prior_relation.ApplyRelations(pass_resource_not_prior_relation, ordered_pass_id,
+					    resource_not_prior_relation.ApplyRelations(pass_resource_not_prior_relation, pass_order,
 					                                               internal_resource_id);
 			    });
 		}
