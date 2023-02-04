@@ -209,9 +209,6 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 										    for (const auto &last_ref :
 										         m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
 											    assert(m_p_resolved->IsPassPrior(last_ref.pass, pass));
-											    /* if (m_p_resolved->GetPassOrder(last_ref.pass) >
-											        m_p_resolved->GetPassOrder(pass))
-											        continue; */ // Prevent double dependency
 											    sub_dep.validation_subpass_dependencies.push_back(
 											        {resource,
 											         {last_ref.p_input, last_ref.pass},
@@ -249,9 +246,6 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 									    m_p_resolved->IsIntResourcePrior(dep_int_res_id, int_res_id)) {
 										for (const auto &last_ref :
 										     m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
-											// if (m_p_resolved->GetPassOrder(last_ref.pass) >
-											//   m_p_resolved->GetPassOrder(pass))
-											// 		continue; // Prevent double dependency
 											barrier.src_stage_mask |= last_ref.p_input->GetUsagePipelineStages();
 										}
 									}
@@ -314,13 +308,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 			                           ? m_p_resolved->GetSubpassID(sub_dep.to.pass)
 			                           : VK_SUBPASS_EXTERNAL;
 
-			// TODO: Is this correct?
-			// if (~src_subpass && ~dst_subpass && src_subpass >= dst_subpass)
-			// 	return;
-
 			SubpassDependencyKey key{src_subpass, dst_subpass, is_by_region};
-
-			// assert(src_subpass < dst_subpass);
 
 			VkMemoryBarrier2 *p_barrier;
 			auto it = subpass_dependency_map.find(key);

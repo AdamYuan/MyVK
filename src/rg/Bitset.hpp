@@ -25,11 +25,13 @@ public:
 
 class RelationMatrix {
 private:
+	uint32_t m_count_l{}, m_count_r{};
 	uint32_t m_size_r{};
 	std::vector<uint64_t> m_bit_matrix;
 
 public:
 	inline void Reset(uint32_t count_l, uint32_t count_r) {
+		m_count_l = count_l, m_count_r = count_r;
 		m_size_r = BitsetSize(count_r);
 		m_bit_matrix.clear();
 		m_bit_matrix.resize(count_l * m_size_r);
@@ -49,6 +51,16 @@ public:
 	inline uint64_t *GetRowData(uint32_t l) { return m_bit_matrix.data() + l * m_size_r; }
 	inline const uint64_t *GetRowData(uint32_t l) const { return m_bit_matrix.data() + l * m_size_r; }
 	inline uint32_t GetRowSize() const { return m_size_r; }
+
+	inline RelationMatrix GetTranspose() const {
+		RelationMatrix trans;
+		trans.Reset(m_count_r, m_count_l);
+		for (uint32_t r = 0; r < m_count_r; ++r)
+			for (uint32_t l = 0; l < m_count_l; ++l)
+				if (GetRelation(l, r))
+					trans.SetRelation(r, l);
+		return trans;
+	}
 };
 
 } // namespace myvk_rg::_details_
