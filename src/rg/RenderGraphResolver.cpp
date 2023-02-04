@@ -30,7 +30,6 @@ struct RenderGraphResolver::Graph {
 
 	inline void add_edge(const PassBase *pass_from, const PassBase *pass_to, const ResourceBase *resource,
 	                     const Input *p_input_from, const Input *p_input_to, bool is_read_to_write_edge) {
-		// p_input_from == nullptr: Resource initial validation
 		edges.push_back({resource, p_input_from, p_input_to, pass_from, pass_to, is_read_to_write_edge});
 		const auto *edge = &edges.back();
 		nodes[pass_from].output_edges.push_back(edge);
@@ -338,6 +337,11 @@ void RenderGraphResolver::extract_pass_prior_relation(const OrderedPassGraph &or
 				m_pass_prior_relation.ApplyRelations(i, p_edge->pass_from);
 			}
 	}
+	for (uint32_t i = 0; i < kOrderedPassCount; ++i) {
+		for (uint32_t j = 0; j < kOrderedPassCount; ++j)
+			printf("%d ", m_pass_prior_relation.GetRelation(i, j));
+		printf("\n");
+	}
 }
 
 void RenderGraphResolver::extract_resource_conflict_relation(const OrderedPassGraph &ordered_pass_graph) {
@@ -390,76 +394,74 @@ void RenderGraphResolver::extract_resource_conflict_relation(const OrderedPassGr
 	}
 }
 
-inline static void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
-	// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
-	switch (view_type) {
-	case VK_IMAGE_VIEW_TYPE_1D:
-	case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
-		*p_image_type = VK_IMAGE_TYPE_1D;
-		return;
-	case VK_IMAGE_VIEW_TYPE_CUBE:
-	case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:
-		*p_image_type = VK_IMAGE_TYPE_2D;
-		return;
-	case VK_IMAGE_VIEW_TYPE_2D:
-	case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
-		if (*p_image_type == VK_IMAGE_TYPE_1D)
-			*p_image_type = VK_IMAGE_TYPE_2D;
-		return;
-	case VK_IMAGE_VIEW_TYPE_3D:
-		*p_image_type = VK_IMAGE_TYPE_3D;
-		return;
-	default:
-		return;
-	}
-}
 void RenderGraphResolver::extract_resource_info(const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
-	// extract vk_image_usages, vk_image_type, vk_buffer_usages, dependency_persistence, order_weight
+	// Extract dependency_persistence, reference, last_references
+	RelationMatrix resource_pass_visited;
+	resource_pass_visited.Reset(GetIntResourceCount(), ordered_pass_graph.nodes.size());
 
-	const auto update_resource_creation_info = [this](const auto *resource, const Input *p_input,
-	                                                  uint32_t order) -> void {
-		if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
-				auto &image_info = m_internal_images[GetIntImageID(resource)];
-				image_info.order_weight = std::min(image_info.order_weight, order);
-				image_info.vk_image_usages |= UsageGetCreationUsages(p_input->GetUsage());
-				UpdateVkImageTypeFromVkImageViewType(&image_info.vk_image_type, resource->GetViewType());
-			} else {
-				auto &buffer_info = m_internal_buffers[GetIntBufferID(resource)];
-				buffer_info.order_weight = std::min(buffer_info.order_weight, order);
-				buffer_info.vk_buffer_usages |= UsageGetCreationUsages(p_input->GetUsage());
-			}
-		}
-	};
-	const auto resource_set_persistent = [this](const auto *resource) -> void {
-		if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
-				auto &image_info = m_internal_images[GetIntImageID(resource)];
-				image_info.dependency_persistence = true;
-			} else {
-				auto &buffer_info = m_internal_buffers[GetIntBufferID(resource)];
-				buffer_info.dependency_persistence = true;
-			}
-		}
-	};
-	for (uint32_t order = 0; order < ordered_pass_graph.nodes.size(); ++order) {
+	for (uint32_t order = ordered_pass_graph.nodes.size() - 1; ~order; --order) {
 		const auto &node = ordered_pass_graph.nodes[order];
-		node.pass->for_each_input(
-		    [&update_resource_creation_info, &resource_set_persistent, order](const Input *p_input) -> void {
-			    const auto local_update_resource_creation_info = [&update_resource_creation_info, p_input,
-			                                                      order](const auto *resource) {
-				    return update_resource_creation_info(resource, p_input, order);
-			    };
-			    p_input->GetResource()->Visit(
-			        [&local_update_resource_creation_info, &resource_set_persistent](const auto *resource) {
-				        if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias) {
-					        if (resource->GetProducerPass() == nullptr)
-						        resource->GetPointedResource()->Visit(resource_set_persistent);
-					        resource->GetPointedResource()->Visit(local_update_resource_creation_info);
-				        } else
-					        local_update_resource_creation_info(resource);
-			        });
-		    });
+
+		const auto update_resource_reference =
+		    [this, order, &node, &resource_pass_visited](const auto *resource, const Input *p_input) -> void {
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
+				uint32_t int_resource_id = GetIntResourceID(resource);
+
+				if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
+					auto &image_info = m_internal_images[GetIntImageID(resource)];
+					image_info.references.push_back({p_input, node.pass /* , resource */});
+					if (!resource_pass_visited.GetRelation(int_resource_id, order))
+						image_info.last_references.push_back({p_input, node.pass /* , resource */});
+				} else {
+					auto &buffer_info = m_internal_buffers[GetIntBufferID(resource)];
+					buffer_info.references.push_back({p_input, node.pass});
+					if (!resource_pass_visited.GetRelation(int_resource_id, order))
+						buffer_info.last_references.push_back({p_input, node.pass});
+				}
+
+				// Exclude all the passes prior than last_reference
+				assert(resource_pass_visited.GetRowSize() == m_pass_prior_relation.GetRowSize());
+				for (uint32_t i = 0; i < resource_pass_visited.GetRowSize(); ++i)
+					resource_pass_visited.GetRowData(int_resource_id)[i] |= ~m_pass_prior_relation.GetRowData(order)[i];
+			}
+		};
+
+		const auto resource_set_persistent = [this](const auto *resource) -> void {
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
+				if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
+					auto &image_info = m_internal_images[GetIntImageID(resource)];
+					image_info.dependency_persistence = true;
+				} else {
+					auto &buffer_info = m_internal_buffers[GetIntBufferID(resource)];
+					buffer_info.dependency_persistence = true;
+				}
+			}
+		};
+
+		node.pass->for_each_input([&update_resource_reference, &resource_set_persistent](const Input *p_input) -> void {
+			const auto local_update_resource_reference = [&update_resource_reference, p_input](const auto *resource) {
+				return update_resource_reference(resource, p_input);
+			};
+			p_input->GetResource()->Visit(
+			    [&local_update_resource_reference, &resource_set_persistent](const auto *resource) {
+				    if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias) {
+					    if (resource->GetProducerPass() == nullptr)
+						    resource->GetPointedResource()->Visit(resource_set_persistent);
+					    resource->GetPointedResource()->Visit(local_update_resource_reference);
+				    } else
+					    local_update_resource_reference(resource);
+			    });
+		});
+	}
+
+	// Reverse the references so that the first reference is in the earliest pass
+	for (auto &image_info : m_internal_images) {
+		assert(!image_info.references.empty() && !image_info.last_references.empty());
+		std::reverse(image_info.references.begin(), image_info.references.end());
+	}
+	for (auto &buffer_info : m_internal_buffers) {
+		assert(!buffer_info.references.empty() && !buffer_info.last_references.empty());
+		std::reverse(buffer_info.references.begin(), buffer_info.references.end());
 	}
 }
 

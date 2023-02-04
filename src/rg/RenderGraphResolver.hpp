@@ -18,20 +18,17 @@ public:
 		struct ResourceReference {
 			const Input *p_input;
 			const PassBase *pass;
+			// const ImageBase *view_image;
 		};
-		uint32_t order_weight = -1;
 		bool dependency_persistence{};
+		std::vector<ResourceReference> references;
 		std::vector<ResourceReference> last_references; // TODO: Compute this
 	};
 	struct IntBufferInfo : public IntResourceInfo {
 		const ManagedBuffer *buffer{};
-
-		VkBufferUsageFlags vk_buffer_usages{};
 	};
 	struct IntImageInfo : public IntResourceInfo {
 		const ImageBase *image{};
-		VkImageUsageFlags vk_image_usages{};
-		VkImageType vk_image_type{VK_IMAGE_TYPE_2D};
 		bool is_transient{};
 	};
 	struct IntImageViewInfo {

@@ -94,8 +94,39 @@ void RenderGraphAllocator::_accumulate_combined_image_base_layer(const CombinedI
 	});
 }
 
-void RenderGraphAllocator::update_image_info() {
-	// Update Image Sizes and Base Layers
+inline static void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
+	// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
+	switch (view_type) {
+	case VK_IMAGE_VIEW_TYPE_1D:
+	case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
+		*p_image_type = VK_IMAGE_TYPE_1D;
+		return;
+	case VK_IMAGE_VIEW_TYPE_CUBE:
+	case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:
+		*p_image_type = VK_IMAGE_TYPE_2D;
+		return;
+	case VK_IMAGE_VIEW_TYPE_2D:
+	case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
+		if (*p_image_type == VK_IMAGE_TYPE_1D)
+			*p_image_type = VK_IMAGE_TYPE_2D;
+		return;
+	case VK_IMAGE_VIEW_TYPE_3D:
+		*p_image_type = VK_IMAGE_TYPE_3D;
+		return;
+	default:
+		return;
+	}
+}
+
+void RenderGraphAllocator::update_resource_info() {
+	// Update VkBufferUsage
+	for (auto &buffer_alloc : m_allocated_buffers) {
+		const auto &buffer_info = buffer_alloc.GetBufferInfo();
+		buffer_alloc.vk_buffer_usages = 0;
+		for (const auto &ref : buffer_info.references)
+			buffer_alloc.vk_buffer_usages |= UsageGetCreationUsages(ref.p_input->GetUsage());
+	}
+	// Update Image Sizes, Base Layers and VkImageUsage
 	for (auto &image_alloc : m_allocated_images) {
 		const auto &image_info = image_alloc.GetImageInfo();
 		image_alloc.persistence = false;
@@ -114,14 +145,24 @@ void RenderGraphAllocator::update_image_info() {
 			} else
 				assert(false);
 		});
+
+		image_alloc.vk_image_usages = 0;
+		image_alloc.vk_image_type = VK_IMAGE_TYPE_2D;
+		for (const auto &ref : image_info.references)
+			image_alloc.vk_image_usages |= UsageGetCreationUsages(ref.p_input->GetUsage());
 	}
-	// Update Image Persistence
+
+	// Update Image Persistence and VkImageType
 	for (uint32_t image_view_id = 0; image_view_id < m_p_resolved->GetIntImageViewCount(); ++image_view_id) {
 		const auto &image_view_info = m_p_resolved->GetIntImageViewInfo(image_view_id);
 		image_view_info.image->Visit([this](const auto *image) {
-			if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage) {
-				m_allocated_images[m_p_resolved->GetIntImageID(image)].persistence |= image->GetPersistence();
-			}
+			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal) {
+				auto &image_alloc = m_allocated_images[m_p_resolved->GetIntImageID(image)];
+				UpdateVkImageTypeFromVkImageViewType(&image_alloc.vk_image_type, image->GetViewType());
+				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage)
+					image_alloc.persistence |= image->GetPersistence();
+			} else
+				assert(false);
 		});
 	}
 }
@@ -131,7 +172,7 @@ void RenderGraphAllocator::create_vk_resources() {
 	for (auto &buffer_alloc : m_allocated_buffers) {
 		const auto &buffer_info = buffer_alloc.GetBufferInfo();
 		VkBufferCreateInfo create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
-		create_info.usage = buffer_info.vk_buffer_usages;
+		create_info.usage = buffer_alloc.vk_buffer_usages;
 		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		create_info.size = buffer_info.buffer->GetSize();
 
@@ -146,7 +187,7 @@ void RenderGraphAllocator::create_vk_resources() {
 		assert(image_alloc.p_size && image_alloc.p_size->GetBaseMipLevel() == 0);
 
 		VkImageCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-		create_info.usage = image_info.vk_image_usages;
+		create_info.usage = image_alloc.vk_image_usages;
 		if (image_info.is_transient)
 			create_info.usage |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
 		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -154,7 +195,7 @@ void RenderGraphAllocator::create_vk_resources() {
 		create_info.format = image_info.image->GetFormat();
 		create_info.samples = VK_SAMPLE_COUNT_1_BIT;
 		create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		create_info.imageType = image_info.vk_image_type;
+		create_info.imageType = image_alloc.vk_image_type;
 		{ // Set Size Info
 			VkExtent3D &extent = create_info.extent;
 			extent = {1, 1, 1};
@@ -285,10 +326,11 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 
 	// Sort Resources by required sizes, place large resources first
 	std::sort(memory_info.resources.begin(), memory_info.resources.end(),
-	          [](const IntResourceAlloc *l, const IntResourceAlloc *r) -> bool {
+	          [this](const IntResourceAlloc *l, const IntResourceAlloc *r) -> bool {
 		          return l->vk_memory_requirements.size > r->vk_memory_requirements.size ||
 		                 (l->vk_memory_requirements.size == r->vk_memory_requirements.size &&
-		                  l->p_info->order_weight > r->p_info->order_weight);
+		                  m_p_resolved->GetPassOrder(l->p_info->references[0].pass) <
+		                      m_p_resolved->GetPassOrder(r->p_info->references[0].pass));
 	          });
 
 	VkDeviceSize allocation_blocks = 0;
@@ -477,7 +519,7 @@ void RenderGraphAllocator::Allocate(const RenderGraphBase *p_render_graph, const
 	m_p_resolved = &resolved;
 
 	reset_resource_vectors();
-	update_image_info();
+	update_resource_info();
 	create_vk_resources();
 	create_and_bind_allocations();
 	create_vk_image_views();
@@ -487,10 +529,10 @@ void RenderGraphAllocator::Allocate(const RenderGraphBase *p_render_graph, const
 		const auto &image_info = m_p_resolved->GetIntImageInfo(i);
 		const auto &image_alloc = m_allocated_images[i];
 		std::cout << image_info.image->GetKey().GetName() << ":" << image_info.image->GetKey().GetID()
-		          << " mip_levels = " << image_alloc.p_size->GetMipLevels() << " usage = " << image_info.vk_image_usages
-		          << " {size, alignment, flag} = {" << image_alloc.vk_memory_requirements.size << ", "
-		          << image_alloc.vk_memory_requirements.alignment << ", "
-		          << image_alloc.vk_memory_requirements.memoryTypeBits << "}"
+		          << " mip_levels = " << image_alloc.p_size->GetMipLevels()
+		          << " usage = " << image_alloc.vk_image_usages << " {size, alignment, flag} = {"
+		          << image_alloc.vk_memory_requirements.size << ", " << image_alloc.vk_memory_requirements.alignment
+		          << ", " << image_alloc.vk_memory_requirements.memoryTypeBits << "}"
 		          << " transient = " << image_info.is_transient << " offset = " << image_alloc.memory_offset
 		          << std::endl;
 	}

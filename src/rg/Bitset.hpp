@@ -45,6 +45,10 @@ public:
 			m_bit_matrix[l_to * m_size_r + i] |= src_matrix.m_bit_matrix[l_from * m_size_r + i];
 	}
 	inline bool GetRelation(uint32_t l, uint32_t r) const { return BitsetGet(m_bit_matrix.data() + l * m_size_r, r); }
+
+	inline uint64_t *GetRowData(uint32_t l) { return m_bit_matrix.data() + l * m_size_r; }
+	inline const uint64_t *GetRowData(uint32_t l) const { return m_bit_matrix.data() + l * m_size_r; }
+	inline uint32_t GetRowSize() const { return m_size_r; }
 };
 
 } // namespace myvk_rg::_details_

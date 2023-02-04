@@ -7,8 +7,8 @@
 #include <myvk/ImageBase.hpp>
 #include <myvk/ImageView.hpp>
 
-#include "RenderGraphResolver.hpp"
 #include "Bitset.hpp"
+#include "RenderGraphResolver.hpp"
 
 namespace myvk_rg::_details_ {
 
@@ -28,6 +28,9 @@ public:
 	};
 	struct IntImageAlloc final : public IntResourceAlloc {
 		myvk::Ptr<myvk::ImageBase> myvk_image{};
+
+		VkImageUsageFlags vk_image_usages{};
+		VkImageType vk_image_type{VK_IMAGE_TYPE_2D};
 		const SubImageSize *p_size{};
 		bool persistence{};
 
@@ -39,6 +42,8 @@ public:
 	};
 	struct IntBufferAlloc final : public IntResourceAlloc {
 		myvk::Ptr<myvk::BufferBase> myvk_buffer{};
+
+		VkBufferUsageFlags vk_buffer_usages{};
 
 	protected:
 		const RenderGraphResolver::IntBufferInfo &GetBufferInfo() const {
@@ -81,7 +86,7 @@ private:
 	void reset_resource_vectors();
 	void _maintain_combined_image(const CombinedImage *image);
 	void _accumulate_combined_image_base_layer(const CombinedImage *image);
-	void update_image_info();
+	void update_resource_info();
 	void create_vk_resources();
 	void create_vk_image_views();
 	void _make_naive_allocation(MemoryInfo &&memory_info, const VmaAllocationCreateInfo &allocation_create_info);
