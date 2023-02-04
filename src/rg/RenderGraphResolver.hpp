@@ -69,7 +69,8 @@ private:
 	std::vector<IntImageViewInfo> m_internal_image_views;
 	std::vector<IntBufferInfo> m_internal_buffers;
 
-	RelationMatrix m_resource_conflict_relation, m_resource_not_prior_relation, m_pass_prior_relation, m_pass_after_relation;
+	RelationMatrix m_resource_conflict_relation, m_resource_not_prior_relation, m_pass_prior_relation,
+	    m_pass_prior_relation_transpose;
 
 	std::vector<PassInfo> m_passes;
 	std::vector<PassDependency> m_pass_dependencies;

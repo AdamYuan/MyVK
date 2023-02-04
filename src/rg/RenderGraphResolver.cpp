@@ -341,7 +341,7 @@ void RenderGraphResolver::extract_pass_relation(const OrderedPassGraph &ordered_
 	}
 
 	// The transpose of m_pass_prior_relation
-	m_pass_after_relation = m_pass_prior_relation.GetTranspose();
+	m_pass_prior_relation_transpose = m_pass_prior_relation.GetTranspose();
 	/* m_pass_after_relation.Reset(kOrderedPassCount, kOrderedPassCount);
 	for (uint32_t i = 0; i < kOrderedPassCount; ++i) {
 	    for (const auto *p_edge : ordered_pass_graph.nodes[i].output_edges) {
@@ -361,23 +361,22 @@ void RenderGraphResolver::extract_resource_relation(const OrderedPassGraph &orde
 	RelationMatrix pass_resource_not_prior_relation;
 	{
 		// Compute its transpose
-		RelationMatrix resource_pass_not_prior_relation;
-		resource_pass_not_prior_relation.Reset(GetIntResourceCount(), kOrderedPassCount);
+		RelationMatrix pass_resource_not_prior_relation_transpose;
+		pass_resource_not_prior_relation_transpose.Reset(GetIntResourceCount(), kOrderedPassCount);
 		for (uint32_t pass_order = 0; pass_order < kOrderedPassCount; ++pass_order) {
 			ordered_pass_graph.nodes[pass_order].pass->for_each_input(
-			    [this, pass_order, &resource_pass_not_prior_relation](const Input *p_input) {
+			    [this, pass_order, &pass_resource_not_prior_relation_transpose](const Input *p_input) {
 				    uint32_t internal_resource_id = GetIntResourceID(p_input->GetResource());
 				    if (~internal_resource_id) {
-					    for (uint32_t i = 0; i < resource_pass_not_prior_relation.GetRowSize(); ++i)
-						    resource_pass_not_prior_relation.GetRowData(internal_resource_id)[i] |=
-						        m_pass_prior_relation.GetRowData(pass_order)[i] |
-						        (~m_pass_after_relation.GetRowData(pass_order)[i]);
-					    // If a pass uses a resource, then all the pass's succeed passes and non-precursor are no prior
-					    // than the resource
+					    for (uint32_t i = 0; i < pass_resource_not_prior_relation_transpose.GetRowSize(); ++i) {
+						    pass_resource_not_prior_relation_transpose.GetRowData(internal_resource_id)[i] |=
+						        ~m_pass_prior_relation_transpose.GetRowData(pass_order)[i];
+					    }
+					    // If a pass uses a resource, then all the pass's non-precursor are no prior than the resource
 				    }
 			    });
 		}
-		pass_resource_not_prior_relation = resource_pass_not_prior_relation.GetTranspose();
+		pass_resource_not_prior_relation = pass_resource_not_prior_relation_transpose.GetTranspose();
 	}
 
 	m_resource_not_prior_relation.Reset(GetIntResourceCount(), GetIntResourceCount());
@@ -404,11 +403,6 @@ void RenderGraphResolver::extract_resource_relation(const OrderedPassGraph &orde
 			}
 		}
 	}
-	/* for (uint32_t i = 0; i < GetIntResourceCount(); ++i) {
-		for (uint32_t j = 0; j < GetIntResourceCount(); ++j)
-			printf("%d ", m_resource_conflict_relation.GetRelation(i, j));
-		printf("\n");
-	} */
 }
 
 void RenderGraphResolver::extract_resource_info(const RenderGraphResolver::OrderedPassGraph &ordered_pass_graph) {
@@ -437,9 +431,10 @@ void RenderGraphResolver::extract_resource_info(const RenderGraphResolver::Order
 				}
 
 				// Exclude all the passes prior than last_reference
-				assert(resource_pass_visited.GetRowSize() == m_pass_after_relation.GetRowSize());
+				assert(resource_pass_visited.GetRowSize() == m_pass_prior_relation_transpose.GetRowSize());
 				for (uint32_t i = 0; i < resource_pass_visited.GetRowSize(); ++i)
-					resource_pass_visited.GetRowData(int_resource_id)[i] |= m_pass_after_relation.GetRowData(order)[i];
+					resource_pass_visited.GetRowData(int_resource_id)[i] |=
+					    m_pass_prior_relation_transpose.GetRowData(order)[i];
 			}
 		};
 
