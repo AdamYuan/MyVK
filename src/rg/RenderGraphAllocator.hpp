@@ -81,7 +81,7 @@ private:
 	};
 	std::vector<AllocationInfo> m_allocations;
 
-	RelationMatrix m_allocated_resource_conflicted_relation;
+	RelationMatrix m_allocated_resource_aliased_relation;
 
 	void reset_resource_vectors();
 	void _maintain_combined_image(const CombinedImage *image);

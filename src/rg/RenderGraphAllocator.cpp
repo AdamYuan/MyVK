@@ -386,19 +386,16 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 	// Extract resource conflicts
 	for (uint32_t i = 0; i < memory_info.resources.size(); ++i) {
 		const auto &resource_info_i = memory_info.resources[i];
-		// Self
-		m_allocated_resource_conflicted_relation.SetRelation(resource_info_i->internal_resource_id,
-		                                                     resource_info_i->internal_resource_id);
 		for (uint32_t j = 0; j < i; ++j) {
 			const auto &resource_info_j = memory_info.resources[j];
 			if (resource_info_i->memory_offset + resource_info_i->vk_memory_requirements.size >
 			        resource_info_j->memory_offset &&
 			    resource_info_j->memory_offset + resource_info_j->vk_memory_requirements.size >
 			        resource_info_i->memory_offset) {
-				m_allocated_resource_conflicted_relation.SetRelation(resource_info_i->internal_resource_id,
-				                                                     resource_info_j->internal_resource_id);
-				m_allocated_resource_conflicted_relation.SetRelation(resource_info_j->internal_resource_id,
-				                                                     resource_info_i->internal_resource_id);
+				m_allocated_resource_aliased_relation.SetRelation(resource_info_i->internal_resource_id,
+				                                                  resource_info_j->internal_resource_id);
+				m_allocated_resource_aliased_relation.SetRelation(resource_info_j->internal_resource_id,
+				                                                  resource_info_i->internal_resource_id);
 			}
 		}
 	}
@@ -414,8 +411,8 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 
 void RenderGraphAllocator::create_and_bind_allocations() {
 	m_allocations.clear();
-	m_allocated_resource_conflicted_relation.Reset(m_p_resolved->GetIntResourceCount(),
-	                                               m_p_resolved->GetIntResourceCount());
+	m_allocated_resource_aliased_relation.Reset(m_p_resolved->GetIntResourceCount(),
+	                                            m_p_resolved->GetIntResourceCount());
 
 	{ // Create Allocations
 		MemoryInfo device_memory{}, persistent_device_memory{}, lazy_memory{}, mapped_memory{};
@@ -474,6 +471,13 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 		vmaBindBufferMemory2(m_p_render_graph->GetDevicePtr()->GetAllocatorHandle(),
 		                     m_allocations[buffer_alloc.allocation_id].myvk_allocation->GetHandle(),
 		                     buffer_alloc.memory_offset, buffer_alloc.myvk_buffer->GetHandle(), nullptr);
+	}
+
+	printf("Aliased:\n");
+	for (uint32_t i = 0; i < m_p_resolved->GetIntResourceCount(); ++i) {
+		for (uint32_t j = 0; j < m_p_resolved->GetIntResourceCount(); ++j)
+			printf("%d ", m_allocated_resource_aliased_relation.GetRelation(i, j));
+		printf("\n");
 	}
 
 	printf("\nAllocations: \n");

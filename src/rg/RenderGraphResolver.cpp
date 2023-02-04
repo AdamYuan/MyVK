@@ -337,11 +337,6 @@ void RenderGraphResolver::extract_pass_prior_relation(const OrderedPassGraph &or
 				m_pass_prior_relation.ApplyRelations(i, p_edge->pass_from);
 			}
 	}
-	for (uint32_t i = 0; i < kOrderedPassCount; ++i) {
-		for (uint32_t j = 0; j < kOrderedPassCount; ++j)
-			printf("%d ", m_pass_prior_relation.GetRelation(i, j));
-		printf("\n");
-	}
 }
 
 void RenderGraphResolver::extract_resource_conflict_relation(const OrderedPassGraph &ordered_pass_graph) {
@@ -391,6 +386,12 @@ void RenderGraphResolver::extract_resource_conflict_relation(const OrderedPassGr
 				m_resource_conflict_relation.SetRelation(resource_id_1, resource_id_0);
 			}
 		}
+	}
+
+	for (uint32_t i = 0; i < GetIntResourceCount(); ++i) {
+		for (uint32_t j = 0; j < GetIntResourceCount(); ++j)
+			printf("%d ", m_resource_conflict_relation.GetRelation(i, j));
+		printf("\n");
 	}
 }
 
