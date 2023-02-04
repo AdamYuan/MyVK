@@ -3,12 +3,19 @@
 #include <cassert>
 
 namespace myvk {
-Ptr<RenderPass> RenderPass::Create(const Ptr<Device> &device,
-                                               const VkRenderPassCreateInfo &create_info) {
+Ptr<RenderPass> RenderPass::Create(const Ptr<Device> &device, const VkRenderPassCreateInfo &create_info) {
 	auto ret = std::make_shared<RenderPass>();
 	ret->m_device_ptr = device;
 
 	if (vkCreateRenderPass(device->GetHandle(), &create_info, nullptr, &ret->m_render_pass) != VK_SUCCESS)
+		return nullptr;
+	return ret;
+}
+Ptr<RenderPass> RenderPass::Create(const Ptr<Device> &device, const VkRenderPassCreateInfo2 &create_info) {
+	auto ret = std::make_shared<RenderPass>();
+	ret->m_device_ptr = device;
+
+	if (vkCreateRenderPass2(device->GetHandle(), &create_info, nullptr, &ret->m_render_pass) != VK_SUCCESS)
 		return nullptr;
 	return ret;
 }

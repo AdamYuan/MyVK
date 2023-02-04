@@ -34,17 +34,17 @@ public:
 		m_bit_matrix.clear();
 		m_bit_matrix.resize(count_l * m_size_r);
 	}
-	inline void SetRelation(uint32_t l, uint32_t r) { BitsetSet(m_bit_matrix.data() + l * m_size_r, r); }
+	inline void SetRelation(uint32_t l, uint32_t r) { BitsetSet(GetRowData(l), r); }
 	inline void ApplyRelations(uint32_t l_from, uint32_t l_to) {
 		for (uint32_t i = 0; i < m_size_r; ++i)
-			m_bit_matrix[l_to * m_size_r + i] |= m_bit_matrix[l_from * m_size_r + i];
+			GetRowData(l_to)[i] |= GetRowData(l_from)[i];
 	}
 	inline void ApplyRelations(const RelationMatrix &src_matrix, uint32_t l_from, uint32_t l_to) {
 		assert(m_size_r == src_matrix.m_size_r);
 		for (uint32_t i = 0; i < m_size_r; ++i)
-			m_bit_matrix[l_to * m_size_r + i] |= src_matrix.m_bit_matrix[l_from * m_size_r + i];
+			GetRowData(l_to)[i] |= src_matrix.GetRowData(l_from)[i];
 	}
-	inline bool GetRelation(uint32_t l, uint32_t r) const { return BitsetGet(m_bit_matrix.data() + l * m_size_r, r); }
+	inline bool GetRelation(uint32_t l, uint32_t r) const { return BitsetGet(GetRowData(l), r); }
 
 	inline uint64_t *GetRowData(uint32_t l) { return m_bit_matrix.data() + l * m_size_r; }
 	inline const uint64_t *GetRowData(uint32_t l) const { return m_bit_matrix.data() + l * m_size_r; }

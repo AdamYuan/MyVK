@@ -18,6 +18,7 @@ private:
 
 public:
 	static Ptr<RenderPass> Create(const Ptr<Device> &device, const VkRenderPassCreateInfo &create_info);
+	static Ptr<RenderPass> Create(const Ptr<Device> &device, const VkRenderPassCreateInfo2 &create_info);
 	static Ptr<RenderPass> Create(const Ptr<Device> &device, const RenderPassState &state);
 
 	VkRenderPass GetHandle() const { return m_render_pass; }

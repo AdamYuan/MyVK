@@ -28,7 +28,7 @@ private:
 	template <typename> friend class GraphicsPass;
 	friend class RenderGraphBase;
 	friend class RenderGraphResolver;
-	friend class RenderGraphResolver2;
+	friend class RenderGraphExecutor;
 
 	template <typename Func> inline void for_each_input(Func &&func) {
 		for (auto it = m_p_input_pool_data->pool.begin(); it != m_p_input_pool_data->pool.end(); ++it)

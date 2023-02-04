@@ -1,5 +1,7 @@
 #include "RenderGraphAllocator.hpp"
 
+#include "VkHelper.hpp"
+
 #include <algorithm>
 #include <iostream>
 
@@ -92,30 +94,6 @@ void RenderGraphAllocator::_accumulate_combined_image_base_layer(const CombinedI
 				_accumulate_combined_image_base_layer(sub_image);
 		}
 	});
-}
-
-inline static void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
-	// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
-	switch (view_type) {
-	case VK_IMAGE_VIEW_TYPE_1D:
-	case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
-		*p_image_type = VK_IMAGE_TYPE_1D;
-		return;
-	case VK_IMAGE_VIEW_TYPE_CUBE:
-	case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:
-		*p_image_type = VK_IMAGE_TYPE_2D;
-		return;
-	case VK_IMAGE_VIEW_TYPE_2D:
-	case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
-		if (*p_image_type == VK_IMAGE_TYPE_1D)
-			*p_image_type = VK_IMAGE_TYPE_2D;
-		return;
-	case VK_IMAGE_VIEW_TYPE_3D:
-		*p_image_type = VK_IMAGE_TYPE_3D;
-		return;
-	default:
-		return;
-	}
 }
 
 void RenderGraphAllocator::update_resource_info() {
@@ -230,22 +208,6 @@ void RenderGraphAllocator::create_vk_resources() {
 	}
 }
 
-inline static constexpr VkImageAspectFlags VkImageAspectFlagsFromVkFormat(VkFormat format) {
-	switch (format) {
-	case VK_FORMAT_D32_SFLOAT:
-	case VK_FORMAT_D16_UNORM:
-	case VK_FORMAT_X8_D24_UNORM_PACK32:
-		return VK_IMAGE_ASPECT_DEPTH_BIT;
-	case VK_FORMAT_D16_UNORM_S8_UINT:
-	case VK_FORMAT_D24_UNORM_S8_UINT:
-	case VK_FORMAT_D32_SFLOAT_S8_UINT:
-		return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-	case VK_FORMAT_S8_UINT:
-		return VK_IMAGE_ASPECT_STENCIL_BIT;
-	default:
-		return VK_IMAGE_ASPECT_COLOR_BIT;
-	}
-}
 void RenderGraphAllocator::create_vk_image_views() {
 	printf("\nImage Views: \n");
 	for (uint32_t image_view_id = 0; image_view_id < m_p_resolved->GetIntImageViewCount(); ++image_view_id) {
@@ -344,8 +306,8 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 			// Find an empty position to place
 			events.clear();
 			for (const auto &block : blocks)
-				if (m_p_resolved->IsIntResourcesConflicted(p_resource_info->internal_resource_id,
-				                                           block.internal_resource_id)) {
+				if (m_p_resolved->IsIntResourceConflicted(p_resource_info->internal_resource_id,
+				                                          block.internal_resource_id)) {
 					events.push_back({block.mem_begin, 1});
 					events.push_back({block.mem_end, (uint32_t)-1});
 				}

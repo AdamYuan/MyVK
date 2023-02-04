@@ -96,6 +96,15 @@ private:
 public:
 	void Allocate(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved);
 
+	inline bool IsIntResourceAliased(uint32_t int_resource_id_0, uint32_t int_resource_id_1) const {
+		return m_allocated_resource_aliased_relation.GetRelation(int_resource_id_0, int_resource_id_1);
+	}
+	template <typename Resource0, typename Resource1>
+	inline bool IsIntResourceAliased(const Resource0 *resource_0, const Resource1 *resource_1) const {
+		return m_allocated_resource_aliased_relation.GetRelation(m_p_resolved->GetIntResourceID(resource_0),
+		                                                         m_p_resolved->GetIntResourceID(resource_1));
+	}
+
 	inline const IntImageAlloc &GetIntImageAlloc(uint32_t image_id) const { return m_allocated_images[image_id]; }
 	inline const std::vector<IntImageAlloc> &GetIntImageAllocVector() const { return m_allocated_images; }
 

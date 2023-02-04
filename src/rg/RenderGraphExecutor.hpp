@@ -15,13 +15,28 @@ private:
 	const RenderGraphResolver *m_p_resolved;
 	const RenderGraphAllocator *m_p_allocated;
 
+	struct MemoryBarrier {
+		VkPipelineStageFlags2 src_stage_mask;
+		VkAccessFlags2 src_access_mask;
+		VkPipelineStageFlags2 dst_stage_mask;
+		VkAccessFlags2 dst_access_mask;
+	};
+	struct BufferMemoryBarrier : public MemoryBarrier {
+		const BufferBase *buffer;
+	};
+	struct ImageMemoryBarrier : public MemoryBarrier {
+		const ImageBase *image;
+		VkImageLayout old_layout;
+		VkImageLayout new_layout;
+	};
+
 	struct RenderPassInfo {
 		myvk::Ptr<myvk::RenderPass> myvk_render_pass;
 		myvk::Ptr<myvk::ImagelessFramebuffer> myvk_framebuffer;
 	};
 	struct BarrierInfo {
-		std::vector<VkBufferMemoryBarrier2> buffer_barriers;
-		std::vector<VkImageMemoryBarrier2> image_barriers;
+		std::vector<BufferMemoryBarrier> buffer_barriers;
+		std::vector<ImageMemoryBarrier> image_barriers;
 		inline bool empty() const { return buffer_barriers.empty() && image_barriers.empty(); }
 		inline void clear() {
 			buffer_barriers.clear();
@@ -30,21 +45,23 @@ private:
 	};
 	struct PassExecutor {
 		const RenderGraphResolver::PassInfo *p_info{};
-		BarrierInfo barrier_info;
+		BarrierInfo prior_barrier_info;
 		RenderPassInfo render_pass_info;
 	};
 	std::vector<PassExecutor> m_pass_executors;
-	BarrierInfo m_post_barrier;
+	BarrierInfo m_post_barrier_info;
+
+	struct SubpassDependencies;
 
 	void reset_pass_executor_vector();
-	void extract_barriers();
-	void extract_render_passes_and_framebuffers();
+	std::vector<SubpassDependencies> extract_barriers_and_subpass_dependencies();
+	void create_render_passes_and_framebuffers(std::vector<SubpassDependencies> &&subpass_dependencies);
 
 public:
 	void Prepare(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved,
 	             const RenderGraphAllocator &allocated);
 
-	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, VkPipelineStageFlags2 src) const;
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
 };
 
 } // namespace myvk_rg::_details_

@@ -239,6 +239,8 @@ private:
 	std::vector<const Input *> m_color_attachments, m_input_attachments;
 	const Input *m_depth_attachment{};
 
+	friend class RenderGraphExecutor;
+
 public:
 	inline AttachmentData() {
 		m_color_attachments.reserve(8);
