@@ -25,11 +25,6 @@ struct RenderGraphExecutor::SubpassDependencies {
 	std::vector<RenderGraphResolver::SubpassDependency> extra_subpass_dependencies;
 	std::vector<RenderGraphResolver::SubpassDependency> validation_subpass_dependencies;
 	std::vector<AttachmentDependency> attachment_dependencies;
-
-	// std::list<VkMemoryBarrier2> subpass_barriers; // pNext for VkSubpassDependency2
-	// std::vector<VkSubpassDependency2> subpass_dependencies;
-	// std::vector<VkAttachmentDescription2> attachment_descriptions;
-	// std::vector<VkSubpassDescription2> subpass_descriptions;
 };
 
 void RenderGraphExecutor::reset_pass_executor_vector() {
@@ -389,6 +384,10 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 				desc.stencilStoreOp = desc.finalLayout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_ATTACHMENT_STORE_OP_DONT_CARE
 				                                                                    : VK_ATTACHMENT_STORE_OP_STORE;
 			}
+
+			// UNDEFINED finalLayout is not allowed
+			if (desc.finalLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+				desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
 		}
 
 		// Subpass Description
