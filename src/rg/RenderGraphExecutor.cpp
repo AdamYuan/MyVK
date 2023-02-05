@@ -269,9 +269,17 @@ struct SubpassDependencyKey {
 };
 
 struct AttachmentInfo {
+	struct AttachmentReference {
+		const Input *p_input{};
+		uint32_t subpass{};
+	};
 	const ImageBase *image{};
-	std::vector<uint32_t> ref_subpasses;
-	inline void maintain_subpass_lifespan(uint32_t subpass) { ref_subpasses.push_back(subpass); }
+	std::vector<AttachmentReference> references;
+
+	inline bool is_read_only() const {
+		return std::all_of(references.begin(), references.end(),
+		                   [](const AttachmentReference &ref) { return UsageIsReadOnly(ref.p_input->GetUsage()); });
+	}
 };
 
 struct SubpassDescription {
@@ -348,6 +356,96 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 		for (const auto &it : pass_info.attachment_id_map)
 			attachments[it.second].image = it.first;
 
+		// Subpass Description
+		std::vector<SubpassDescription> subpass_descriptions(pass_info.subpasses.size());
+		for (uint32_t subpass_id = 0; subpass_id < pass_info.subpasses.size(); ++subpass_id) {
+			const auto &subpass_info = pass_info.subpasses[subpass_id];
+			auto &subpass_desc = subpass_descriptions[subpass_id];
+
+			const auto &get_att_id = [&pass_info](const auto *image) -> uint32_t {
+				if constexpr (ResourceVisitorTrait<decltype(image)>::kType == ResourceType::kImage) {
+					if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
+						return pass_info.attachment_id_map.at(image->GetPointedResource());
+					else
+						return pass_info.attachment_id_map.at(image);
+				} else {
+					assert(false);
+					return -1;
+				}
+			};
+
+			// Input Attachments
+			subpass_desc.input_attachments.reserve(subpass_info.pass->m_p_attachment_data->m_input_attachments.size());
+			for (const Input *p_input : subpass_info.pass->m_p_attachment_data->m_input_attachments) {
+				uint32_t att_id = p_input->GetResource()->Visit(get_att_id);
+				attachments[att_id].references.push_back({p_input, subpass_id});
+
+				subpass_desc.input_attachments.push_back({VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2});
+				auto &att_ref = subpass_desc.input_attachments.back();
+				att_ref.attachment = att_id;
+				att_ref.layout = UsageGetImageLayout(p_input->GetUsage());
+				att_ref.aspectMask = VkImageAspectFlagsFromVkFormat(
+				    attachments[att_id].image->GetFormat()); // TODO: Better InputAttachment AspectMask Handling
+			}
+
+			// Color Attachments
+			subpass_desc.color_attachments.reserve(subpass_info.pass->m_p_attachment_data->m_color_attachments.size());
+			for (const Input *p_input : subpass_info.pass->m_p_attachment_data->m_color_attachments) {
+				uint32_t att_id = p_input->GetResource()->Visit(get_att_id);
+				attachments[att_id].references.push_back({p_input, subpass_id});
+
+				subpass_desc.color_attachments.push_back({VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2});
+				auto &att_ref = subpass_desc.color_attachments.back();
+				att_ref.attachment = att_id;
+				att_ref.layout = UsageGetImageLayout(p_input->GetUsage());
+			}
+
+			// Depth (Stencil) Attachment
+			{ // TODO: Support Stencil Attachment
+				const Input *p_input = subpass_info.pass->m_p_attachment_data->m_depth_attachment;
+				if (p_input) {
+					uint32_t att_id = p_input->GetResource()->Visit(get_att_id);
+					attachments[att_id].references.push_back({p_input, subpass_id});
+
+					subpass_desc.depth_attachment = {VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2};
+					auto &att_ref = subpass_desc.depth_attachment.value();
+					att_ref.attachment = att_id;
+					att_ref.layout = UsageGetImageLayout(p_input->GetUsage());
+				}
+			}
+		}
+		// Add preserve attachments
+		for (uint32_t att_id = 0; att_id < attachments.size(); ++att_id) {
+			const AttachmentInfo &att_info = attachments[att_id];
+			for (uint32_t i = 1; i < att_info.references.size(); ++i) {
+				for (uint32_t subpass_id = att_info.references[i - 1].subpass + 1;
+				     subpass_id < att_info.references[i].subpass; ++subpass_id) {
+					subpass_descriptions[subpass_id].preserve_attachments.push_back(att_id);
+				}
+			}
+		}
+		std::vector<VkSubpassDescription2> vk_subpass_descriptions;
+		vk_subpass_descriptions.reserve(subpass_descriptions.size());
+		for (auto &info : subpass_descriptions) {
+			vk_subpass_descriptions.push_back({VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2});
+			VkSubpassDescription2 &desc = vk_subpass_descriptions.back();
+
+			desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+			desc.inputAttachmentCount = info.input_attachments.size();
+			desc.pInputAttachments = info.input_attachments.data();
+
+			desc.colorAttachmentCount = info.color_attachments.size();
+			desc.pColorAttachments = info.color_attachments.data();
+			// TODO: pResolveAttachments
+
+			desc.preserveAttachmentCount = info.preserve_attachments.size();
+			desc.pPreserveAttachments = info.preserve_attachments.data();
+
+			desc.pDepthStencilAttachment = info.depth_attachment.has_value() ? &info.depth_attachment.value() : nullptr;
+		}
+
+		// Attachment Desriptions
 		std::vector<VkAttachmentDescription2> vk_attachment_descriptions;
 		vk_attachment_descriptions.reserve(pass_sub_deps.attachment_dependencies.size());
 		for (uint32_t att_id = 0; att_id < attachments.size(); ++att_id) {
@@ -372,6 +470,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 					return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				}
 			});
+
 			if (aspects & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT)) {
 				desc.loadOp =
 				    desc.initialLayout == VK_IMAGE_LAYOUT_UNDEFINED ? initial_load_op : VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -384,99 +483,15 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 				desc.stencilStoreOp = desc.finalLayout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_ATTACHMENT_STORE_OP_DONT_CARE
 				                                                                    : VK_ATTACHMENT_STORE_OP_STORE;
 			}
+			// If Attachment is Read-only, use STORE_OP_NONE
+			if (att_info.is_read_only()) {
+				desc.storeOp = VK_ATTACHMENT_STORE_OP_NONE;
+				desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE;
+			}
 
-			// UNDEFINED finalLayout is not allowed
+			// UNDEFINED finalLayout is not allowed, just use the last layout as final
 			if (desc.finalLayout == VK_IMAGE_LAYOUT_UNDEFINED)
-				desc.finalLayout = VK_IMAGE_LAYOUT_GENERAL;
-		}
-
-		// Subpass Description
-		std::vector<SubpassDescription> subpass_descriptions(pass_info.subpasses.size());
-		for (uint32_t subpass_id = 0; subpass_id < pass_info.subpasses.size(); ++subpass_id) {
-			const auto &subpass_info = pass_info.subpasses[subpass_id];
-			auto &subpass_desc = subpass_descriptions[subpass_id];
-
-			const auto &get_att_id = [&pass_info](const auto *image) -> uint32_t {
-				if constexpr (ResourceVisitorTrait<decltype(image)>::kType == ResourceType::kImage) {
-					if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
-						return pass_info.attachment_id_map.at(image->GetPointedResource());
-					else
-						return pass_info.attachment_id_map.at(image);
-				} else {
-					assert(false);
-					return -1;
-				}
-			};
-
-			// Input Attachments
-			subpass_desc.input_attachments.reserve(subpass_info.pass->m_p_attachment_data->m_input_attachments.size());
-			for (const Input *p_input : subpass_info.pass->m_p_attachment_data->m_input_attachments) {
-				uint32_t att_id = p_input->GetResource()->Visit(get_att_id);
-				attachments[att_id].maintain_subpass_lifespan(subpass_id);
-
-				subpass_desc.input_attachments.push_back({VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2});
-				auto &att_ref = subpass_desc.input_attachments.back();
-				att_ref.attachment = att_id;
-				att_ref.layout = UsageGetImageLayout(p_input->GetUsage());
-				att_ref.aspectMask = VkImageAspectFlagsFromVkFormat(
-				    attachments[att_id].image->GetFormat()); // TODO: Better InputAttachment AspectMask Handling
-			}
-
-			// Color Attachments
-			subpass_desc.color_attachments.reserve(subpass_info.pass->m_p_attachment_data->m_color_attachments.size());
-			for (const Input *p_input : subpass_info.pass->m_p_attachment_data->m_color_attachments) {
-				uint32_t att_id = p_input->GetResource()->Visit(get_att_id);
-				attachments[att_id].maintain_subpass_lifespan(subpass_id);
-
-				subpass_desc.color_attachments.push_back({VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2});
-				auto &att_ref = subpass_desc.color_attachments.back();
-				att_ref.attachment = att_id;
-				att_ref.layout = UsageGetImageLayout(p_input->GetUsage());
-			}
-
-			// Depth (Stencil) Attachment
-			{ // TODO: Support Stencil Attachment
-				const Input *p_input = subpass_info.pass->m_p_attachment_data->m_depth_attachment;
-				if (p_input) {
-					uint32_t att_id = p_input->GetResource()->Visit(get_att_id);
-					attachments[att_id].maintain_subpass_lifespan(subpass_id);
-
-					subpass_desc.depth_attachment = {VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2};
-					auto &att_ref = subpass_desc.depth_attachment.value();
-					att_ref.attachment = att_id;
-					att_ref.layout = UsageGetImageLayout(p_input->GetUsage());
-				}
-			}
-		}
-		// Add preserve attachments
-		for (uint32_t att_id = 0; att_id < attachments.size(); ++att_id) {
-			const AttachmentInfo &att_info = attachments[att_id];
-			for (uint32_t i = 1; i < att_info.ref_subpasses.size(); ++i) {
-				for (uint32_t subpass_id = att_info.ref_subpasses[i - 1] + 1; subpass_id < att_info.ref_subpasses[i];
-				     ++subpass_id) {
-					subpass_descriptions[subpass_id].preserve_attachments.push_back(att_id);
-				}
-			}
-		}
-		std::vector<VkSubpassDescription2> vk_subpass_descriptions;
-		vk_subpass_descriptions.reserve(subpass_descriptions.size());
-		for (auto &info : subpass_descriptions) {
-			vk_subpass_descriptions.push_back({VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2});
-			VkSubpassDescription2 &desc = vk_subpass_descriptions.back();
-
-			desc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-
-			desc.inputAttachmentCount = info.input_attachments.size();
-			desc.pInputAttachments = info.input_attachments.data();
-
-			desc.colorAttachmentCount = info.color_attachments.size();
-			desc.pColorAttachments = info.color_attachments.data();
-			// TODO: pResolveAttachments
-
-			desc.preserveAttachmentCount = info.preserve_attachments.size();
-			desc.pPreserveAttachments = info.preserve_attachments.data();
-
-			desc.pDepthStencilAttachment = info.depth_attachment.has_value() ? &info.depth_attachment.value() : nullptr;
+				desc.finalLayout = UsageGetImageLayout(att_info.references.back().p_input->GetUsage());
 		}
 
 		// Create RenderPass
