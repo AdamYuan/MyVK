@@ -2,7 +2,7 @@
 #define MYVK_RG_RENDER_GRAPH_EXECUTOR_HPP
 
 #include "RenderGraphAllocator.hpp"
-#include "RenderGraphResolver.hpp"
+#include "RenderGraphScheduler.hpp"
 
 #include <myvk/ImagelessFramebuffer.hpp>
 #include <myvk/RenderPass.hpp>
@@ -13,6 +13,7 @@ class RenderGraphExecutor {
 private:
 	const RenderGraphBase *m_p_render_graph;
 	const RenderGraphResolver *m_p_resolved;
+	const RenderGraphScheduler *m_p_scheduled;
 	const RenderGraphAllocator *m_p_allocated;
 
 	struct MemoryBarrier {
@@ -58,7 +59,7 @@ private:
 		}
 	};
 	struct PassExecutor {
-		const RenderGraphResolver::PassInfo *p_info{};
+		const RenderGraphScheduler::PassInfo *p_info{};
 		BarrierInfo prior_barrier_info;
 		RenderPassInfo render_pass_info;
 	};
@@ -72,7 +73,7 @@ private:
 	void create_render_passes_and_framebuffers(std::vector<SubpassDependencies> &&subpass_dependencies);
 
 public:
-	void Prepare(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved,
+	void Prepare(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved, const RenderGraphScheduler &scheduled,
 	             const RenderGraphAllocator &allocated);
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;

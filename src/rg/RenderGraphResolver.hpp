@@ -21,7 +21,7 @@ public:
 		};
 		bool dependency_persistence{};
 		std::vector<ResourceReference> references;
-		std::vector<ResourceReference> last_references; // TODO: Compute this
+		std::vector<ResourceReference> last_references;
 	};
 	struct IntBufferInfo : public IntResourceInfo {
 		const ManagedBuffer *buffer{};
@@ -34,36 +34,22 @@ public:
 		const ImageBase *image{};
 	};
 
-	struct DependencyLink {
+	struct EdgeLink {
 		const Input *p_input{};
 		const PassBase *pass{};
 	};
-	struct SubpassDependency {
+	struct PassEdge {
 		const ResourceBase *resource{};
-		DependencyLink from{}, to{};
+		EdgeLink from{}, to{};
+		bool is_image_read_to_write{};
 	};
-	struct SubpassInfo {
-		struct ResourceValidation {
-			const ResourceBase *resource;
-			const Input *p_input;
-		};
-		const PassBase *pass{};
-		std::vector<ResourceValidation> validate_resources;
-	};
-	struct PassDependency {
-		const ResourceBase *resource{};
-		std::vector<DependencyLink> from, to;
-	};
-	struct PassInfo {
-		std::vector<SubpassInfo> subpasses;
-		std::vector<SubpassDependency> subpass_dependencies;
-		std::unordered_map<const ImageBase *, uint32_t> attachment_id_map;
-		bool is_render_pass{};
+	struct PassNode {
+		const PassBase *pass;
+		std::vector<const PassEdge *> input_edges, output_edges;
 	};
 
 private:
-	struct Graph; // The Graph Containing Passes and Internal Resources
-	struct OrderedPassGraph;
+	struct OriginGraph; // The Graph Containing Passes and Internal Resources
 
 	std::vector<IntImageInfo> m_internal_images;
 	std::vector<IntImageViewInfo> m_internal_image_views;
@@ -72,44 +58,44 @@ private:
 	RelationMatrix m_resource_conflict_relation, m_resource_not_prior_relation, m_pass_prior_relation,
 	    m_pass_prior_relation_transpose;
 
-	std::vector<PassInfo> m_passes;
-	std::vector<PassDependency> m_pass_dependencies;
+	std::vector<PassNode> m_pass_nodes;
+	std::vector<PassEdge> m_pass_edges;
+	std::vector<const PassEdge *> m_src_output_edges, m_dst_input_edges;
 
-	static Graph make_graph(const RenderGraphBase *p_render_graph);
+	static OriginGraph make_origin_graph(const RenderGraphBase *p_render_graph);
 	static void _initialize_combined_image(const CombinedImage *image);
-	void extract_resources(const Graph &graph);
+	void extract_resources(const OriginGraph &graph);
+	void extract_ordered_passes_and_edges(OriginGraph &&graph);
 
-	static OrderedPassGraph make_ordered_pass_graph(Graph &&graph);
-	void extract_pass_relation(const OrderedPassGraph &ordered_pass_graph);
-	void extract_resource_relation(const OrderedPassGraph &ordered_pass_graph);
-	void extract_resource_info(const OrderedPassGraph &ordered_pass_graph);
-
-	void _extract_passes(const OrderedPassGraph &ordered_pass_graph);
-	void _extract_dependencies_and_resource_validations(const OrderedPassGraph &ordered_pass_graph);
-	void _sort_and_insert_image_dependencies();
-	void _extract_pass_attachments();
-	void extract_passes_and_dependencies(OrderedPassGraph &&ordered_pass_graph);
-	void extract_resource_transient_info();
+	void extract_pass_relation();
+	void extract_resource_relation();
+	void extract_resource_info();
 
 public:
 	void Resolve(const RenderGraphBase *p_render_graph);
 
-	inline uint32_t GetPassCount() const { return m_passes.size(); }
-	inline const PassInfo &GetPassInfo(uint32_t pass_id) const { return m_passes[pass_id]; }
-	inline static uint32_t GetPassID(const PassBase *pass) { return pass->m_internal_info.pass_id; }
-	inline static uint32_t GetSubpassID(const PassBase *pass) { return pass->m_internal_info.subpass_id; }
-	inline static uint32_t GetPassOrder(const PassBase *pass) { return pass->m_internal_info.pass_order; }
-	inline const std::vector<PassInfo> &GetPassInfoVector() const { return m_passes; }
-	// inline const std::vector<const PassDependency *> &GetPostDependencyPtrs() const { return m_post_dependencies; }
-	inline const std::vector<PassDependency> &GetPassDependencyVector() const { return m_pass_dependencies; }
+	inline uint32_t GetPassNodeCount() const { return m_pass_nodes.size(); }
+	inline const PassNode &GetPassNode(uint32_t pass_order) const { return m_pass_nodes[pass_order]; }
+	inline const PassNode &GetPassNode(const PassBase *pass) const { return m_pass_nodes[GetPassOrder(pass)]; }
+	inline static uint32_t GetPassOrder(const PassBase *pass) { return pass->m_resolved_info.pass_order; }
+	inline const std::vector<PassNode> &GetPassNodes() const { return m_pass_nodes; }
+	inline const std::vector<PassEdge> &GetPassEdges() const { return m_pass_edges; }
+	inline const std::vector<const PassEdge *> &GetSrcOutputEdges() const { return m_src_output_edges; }
+	inline const std::vector<const PassEdge *> &GetDstInputEdges() const { return m_dst_input_edges; }
 
 	inline uint32_t GetIntBufferCount() const { return m_internal_buffers.size(); }
 	inline const IntBufferInfo &GetIntBufferInfo(uint32_t buffer_id) const { return m_internal_buffers[buffer_id]; }
-	inline const std::vector<IntBufferInfo> &GetIntBufferInfoVector() const { return m_internal_buffers; }
+	template <typename Buffer> inline const IntBufferInfo &GetIntBufferInfo(const Buffer *buffer) const {
+		return m_internal_buffers[GetIntBufferID(buffer)];
+	}
+	inline const std::vector<IntBufferInfo> &GetIntBufferInfos() const { return m_internal_buffers; }
 
 	inline uint32_t GetIntImageCount() const { return m_internal_images.size(); }
 	inline const IntImageInfo &GetIntImageInfo(uint32_t image_id) const { return m_internal_images[image_id]; }
-	inline const std::vector<IntImageInfo> &GetIntImageInfoVector() const { return m_internal_images; }
+	template <typename Image> inline const IntImageInfo &GetIntImageInfo(const Image *image) const {
+		return m_internal_images[GetIntImageID(image)];
+	}
+	inline const std::vector<IntImageInfo> &GetIntImageInfos() const { return m_internal_images; }
 
 	inline uint32_t GetIntResourceCount() const { return GetIntBufferCount() + GetIntImageCount(); }
 	inline const IntResourceInfo &GetIntResourceInfo(uint32_t resource_id) const {
@@ -117,15 +103,21 @@ public:
 		           ? (const IntResourceInfo &)GetIntImageInfo(resource_id)
 		           : (const IntResourceInfo &)GetIntBufferInfo(resource_id - GetIntImageCount());
 	}
+	template <typename Resource> inline const IntResourceInfo &GetIntResourceInfo(const Resource *resource) const {
+		return GetIntResourceInfo(GetIntResourceID(resource));
+	}
 
 	inline uint32_t GetIntImageViewCount() const { return m_internal_image_views.size(); }
 	inline const IntImageViewInfo &GetIntImageViewInfo(uint32_t image_view_id) const {
 		return m_internal_image_views[image_view_id];
 	}
-	inline const std::vector<IntImageViewInfo> &GetIntImageViewInfoVector() const { return m_internal_image_views; }
+	template <typename Image> inline const IntImageViewInfo &GetIntImageViewInfo(const Image *image) const {
+		return m_internal_image_views[GetIntImageViewID(image)];
+	}
+	inline const std::vector<IntImageViewInfo> &GetIntImageViewInfos() const { return m_internal_image_views; }
 
 	// Get Internal Buffer ID
-	inline static uint32_t GetIntBufferID(const ManagedBuffer *buffer) { return buffer->m_internal_info.buffer_id; }
+	inline static uint32_t GetIntBufferID(const ManagedBuffer *buffer) { return buffer->m_resolved_info.buffer_id; }
 	inline static uint32_t GetIntBufferID(const ExternalBufferBase *) { return -1; }
 	inline static uint32_t GetIntBufferID(const BufferAlias *buffer) {
 		return buffer->GetPointedResource()->Visit(
@@ -137,9 +129,9 @@ public:
 
 	// Get Internal ImageView ID
 	inline static uint32_t GetIntImageViewID(const CombinedImage *image) {
-		return image->m_internal_info.image_view_id;
+		return image->m_resolved_info.image_view_id;
 	}
-	inline static uint32_t GetIntImageViewID(const ManagedImage *image) { return image->m_internal_info.image_view_id; }
+	inline static uint32_t GetIntImageViewID(const ManagedImage *image) { return image->m_resolved_info.image_view_id; }
 	inline static uint32_t GetIntImageViewID(const ExternalImageBase *) { return -1; }
 	inline static uint32_t GetIntImageViewID(const ImageAlias *image) {
 		return image->GetPointedResource()->Visit(
@@ -150,8 +142,8 @@ public:
 	}
 
 	// Get Internal Image ID
-	inline static uint32_t GetIntImageID(const CombinedImage *image) { return image->m_internal_info.image_id; }
-	inline static uint32_t GetIntImageID(const ManagedImage *image) { return image->m_internal_info.image_id; }
+	inline static uint32_t GetIntImageID(const CombinedImage *image) { return image->m_resolved_info.image_id; }
+	inline static uint32_t GetIntImageID(const ManagedImage *image) { return image->m_resolved_info.image_id; }
 	inline static uint32_t GetIntImageID(const ExternalImageBase *image) { return -1; }
 	inline static uint32_t GetIntImageID(const ImageAlias *image) {
 		return image->GetPointedResource()->Visit([](const auto *image) -> uint32_t { return GetIntImageID(image); });

@@ -3,12 +3,14 @@
 #include "RenderGraphAllocator.hpp"
 #include "RenderGraphExecutor.hpp"
 #include "RenderGraphResolver.hpp"
+#include "RenderGraphScheduler.hpp"
 #include "myvk_rg/_details_/RenderGraphBase.hpp"
 
 namespace myvk_rg::_details_ {
 
 struct RenderGraphBase::Compiler {
 	RenderGraphResolver resolver;
+	RenderGraphScheduler scheduler;
 	RenderGraphAllocator allocator;
 	RenderGraphExecutor executor;
 };
@@ -80,20 +82,34 @@ RenderGraphBase::RenderGraphBase() = default;
 RenderGraphBase::~RenderGraphBase() = default;
 
 void RenderGraphBase::Compile() {
-	// RenderGraphResolver2 resolver2;
-	// resolver2.Resolve(this);
-
 	if (m_compile_phrase == 0u)
 		return;
-	switch (m_compile_phrase & -m_compile_phrase) { // Switch with Lowest Bit
-	case CompilePhrase::kResolve:
-		m_compiler->resolver.Resolve(this);
-	case CompilePhrase::kAllocate:
-		m_compiler->allocator.Allocate(this, m_compiler->resolver);
-	case CompilePhrase::kPrepareExecutor:
-		m_compiler->executor.Prepare(this, m_compiler->resolver, m_compiler->allocator);
-	}
+
+	/*
+	 * The RenderGraph Compile Phrases
+	 *
+	 *            /--> Schedule --\
+	 * Resolve --|                 |--> PrepareExecutor
+	 *            \--> Allocate --/
+	 */
+
+	uint8_t exe_compile_phrase = m_compile_phrase;
+	if (m_compile_phrase & CompilePhrase::kResolve)
+		exe_compile_phrase |= CompilePhrase::kSchedule | CompilePhrase::kAllocate | CompilePhrase::kPrepareExecutor;
+	if (m_compile_phrase & CompilePhrase::kAllocate)
+		exe_compile_phrase |= CompilePhrase::kPrepareExecutor;
+	if (m_compile_phrase & CompilePhrase::kSchedule)
+		exe_compile_phrase |= CompilePhrase::kPrepareExecutor;
 	m_compile_phrase = 0u;
+
+	if (exe_compile_phrase & CompilePhrase::kResolve)
+		m_compiler->resolver.Resolve(this);
+	if (exe_compile_phrase & CompilePhrase::kSchedule)
+		m_compiler->scheduler.Schedule(m_compiler->resolver);
+	if (exe_compile_phrase & CompilePhrase::kAllocate)
+		m_compiler->allocator.Allocate(this, m_compiler->resolver);
+	if (exe_compile_phrase & CompilePhrase::kPrepareExecutor)
+		m_compiler->executor.Prepare(this, m_compiler->resolver, m_compiler->scheduler, m_compiler->allocator);
 }
 
 } // namespace myvk_rg::_details_

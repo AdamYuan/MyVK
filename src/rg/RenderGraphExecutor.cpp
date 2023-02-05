@@ -21,30 +21,33 @@ struct RenderGraphExecutor::SubpassDependencies {
 			final_layout = layout;
 		}
 	};
-	const std::vector<RenderGraphResolver::SubpassDependency> *p_subpass_dependencies{};
-	std::vector<RenderGraphResolver::SubpassDependency> extra_subpass_dependencies;
-	std::vector<RenderGraphResolver::SubpassDependency> validation_subpass_dependencies;
+	const std::vector<RenderGraphScheduler::SubpassDependency> *p_subpass_dependencies{};
+	std::vector<RenderGraphScheduler::SubpassDependency> extra_subpass_dependencies;
+	std::vector<RenderGraphScheduler::SubpassDependency> validation_subpass_dependencies;
 	std::vector<AttachmentDependency> attachment_dependencies;
 };
 
 void RenderGraphExecutor::reset_pass_executor_vector() {
 	m_pass_executors.clear();
-	m_pass_executors.resize(m_p_resolved->GetPassCount());
-	for (uint32_t pass_id = 0; pass_id < m_p_resolved->GetPassCount(); ++pass_id)
-		m_pass_executors[pass_id].p_info = &m_p_resolved->GetPassInfo(pass_id);
+	m_pass_executors.resize(m_p_scheduled->GetPassCount());
+	for (uint32_t pass_id = 0; pass_id < m_p_scheduled->GetPassCount(); ++pass_id)
+		m_pass_executors[pass_id].p_info = &m_p_scheduled->GetPassInfo(pass_id);
 
 	m_post_barrier_info.clear();
 }
 
 std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extract_barriers_and_subpass_dependencies() {
-	std::vector<SubpassDependencies> sub_deps(m_p_resolved->GetPassCount());
-	for (uint32_t i = 0; i < m_p_resolved->GetPassCount(); ++i) {
-		sub_deps[i].attachment_dependencies.resize(m_p_resolved->GetPassInfo(i).attachment_id_map.size());
-		sub_deps[i].p_subpass_dependencies = &m_p_resolved->GetPassInfo(i).subpass_dependencies;
+	std::vector<SubpassDependencies> sub_deps(m_p_scheduled->GetPassCount());
+	for (uint32_t i = 0; i < m_p_scheduled->GetPassCount(); ++i) {
+		const auto &pass_info = m_p_scheduled->GetPassInfo(i);
+		if (pass_info.p_render_pass_info == nullptr)
+			continue;
+		sub_deps[i].attachment_dependencies.resize(pass_info.p_render_pass_info->attachment_id_map.size());
+		sub_deps[i].p_subpass_dependencies = &pass_info.p_render_pass_info->subpass_dependencies;
 	}
 
 	// Extract from Pass Dependencies
-	for (const auto &dep : m_p_resolved->GetPassDependencyVector()) {
+	for (const auto &dep : m_p_scheduled->GetPassDependencies()) {
 		bool is_from_attachment = dep.from.front().p_input && UsageIsAttachment(dep.from.front().p_input->GetUsage());
 		bool is_to_attachment = dep.to.front().p_input && UsageIsAttachment(dep.to.front().p_input->GetUsage());
 
@@ -54,7 +57,7 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 		if (!is_from_attachment && !is_to_attachment) {
 			// Not Attachment-related, then Add a Vulkan Barrier
 			BarrierInfo &barrier_info =
-			    dep.to.front().pass ? m_pass_executors[m_p_resolved->GetPassID(dep.to.front().pass)].prior_barrier_info
+			    dep.to.front().pass ? m_pass_executors[m_p_scheduled->GetPassID(dep.to.front().pass)].prior_barrier_info
 			                        : m_post_barrier_info;
 
 			dep.resource->Visit([this, &dep, &barrier_info](const auto *resource) {
@@ -124,23 +127,26 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 				assert(link_from.pass || link_to.pass);
 				VkImageLayout trans_layout = UsageGetImageLayout(link_from.p_input->GetUsage());
 				if (link_from.pass) {
-					uint32_t from_pass_id = m_p_resolved->GetPassID(link_from.pass);
-					uint32_t attachment_id = m_p_resolved->GetPassInfo(from_pass_id).attachment_id_map.at(image);
+					uint32_t from_pass_id = m_p_scheduled->GetPassID(link_from.pass);
+					uint32_t attachment_id =
+					    m_p_scheduled->GetPassInfo(from_pass_id).p_render_pass_info->attachment_id_map.at(image);
 					sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(trans_layout);
 				}
 				if (link_to.pass) {
-					uint32_t to_pass_id = m_p_resolved->GetPassID(link_to.pass);
+					uint32_t to_pass_id = m_p_scheduled->GetPassID(link_to.pass);
 					sub_deps[to_pass_id].extra_subpass_dependencies.push_back(
 					    {dep.resource, {link_from.p_input, link_from.pass}, {link_to.p_input, link_to.pass}});
 
-					uint32_t attachment_id = m_p_resolved->GetPassInfo(to_pass_id).attachment_id_map.at(image);
+					uint32_t attachment_id =
+					    m_p_scheduled->GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
 					sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(trans_layout);
 				}
 			} else if (is_from_attachment) {
 				const auto &link_from = dep.from.front();
 				if (link_from.pass) {
-					uint32_t from_pass_id = m_p_resolved->GetPassID(link_from.pass);
-					uint32_t attachment_id = m_p_resolved->GetPassInfo(from_pass_id).attachment_id_map.at(image);
+					uint32_t from_pass_id = m_p_scheduled->GetPassID(link_from.pass);
+					uint32_t attachment_id =
+					    m_p_scheduled->GetPassInfo(from_pass_id).p_render_pass_info->attachment_id_map.at(image);
 
 					for (const auto &link_to : dep.to) {
 						if (link_to.p_input)
@@ -154,8 +160,9 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 				assert(is_to_attachment);
 				const auto &link_to = dep.to.front();
 				if (link_to.pass) {
-					uint32_t to_pass_id = m_p_resolved->GetPassID(link_to.pass);
-					uint32_t attachment_id = m_p_resolved->GetPassInfo(to_pass_id).attachment_id_map.at(image);
+					uint32_t to_pass_id = m_p_scheduled->GetPassID(link_to.pass);
+					uint32_t attachment_id =
+					    m_p_scheduled->GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
 
 					for (const auto &link_from : dep.from) {
 						if (link_from.p_input)
@@ -174,14 +181,12 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 	for (auto &pass_exec : m_pass_executors) {
 		const auto &pass_info = *pass_exec.p_info;
 
-		bool is_render_pass = pass_info.is_render_pass;
-
 		for (const auto &subpass_info : pass_info.subpasses) {
 			const PassBase *pass = subpass_info.pass;
-			uint32_t pass_id = m_p_resolved->GetPassID(pass);
-			// uint32_t subpass_id = m_p_resolved->GetSubpassID(subpass_info.pass);
+			uint32_t pass_id = m_p_scheduled->GetPassID(pass);
+			// uint32_t subpass_id = m_p_scheduled->GetSubpassID(subpass_info.pass);
 
-			if (is_render_pass) {
+			if (pass_info.p_render_pass_info) {
 				// For RenderPass, insert SubpassDependency
 				auto &sub_dep = sub_deps[pass_id];
 				for (const auto &res_validate : subpass_info.validate_resources) {
@@ -190,7 +195,7 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 						    if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
 							    if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
 								    uint32_t int_res_id = m_p_resolved->GetIntResourceID(resource);
-								    uint32_t att_id = pass_info.attachment_id_map.at(resource);
+								    uint32_t att_id = pass_info.p_render_pass_info->attachment_id_map.at(resource);
 
 								    for (uint32_t dep_int_res_id = 0;
 								         dep_int_res_id < m_p_resolved->GetIntResourceCount(); ++dep_int_res_id) {
@@ -276,25 +281,25 @@ struct SubpassDescription {
 
 void RenderGraphExecutor::create_render_passes_and_framebuffers(
     std::vector<SubpassDependencies> &&subpass_dependencies) {
-	for (uint32_t pass_id = 0; pass_id < m_p_resolved->GetPassCount(); ++pass_id) {
+	for (uint32_t pass_id = 0; pass_id < m_p_scheduled->GetPassCount(); ++pass_id) {
 		auto &pass_exec = m_pass_executors[pass_id];
 		const auto &pass_info = *pass_exec.p_info;
 		const auto &pass_sub_deps = subpass_dependencies[pass_id];
 
-		if (!pass_info.is_render_pass)
+		if (pass_info.p_render_pass_info == nullptr)
 			continue;
 
 		// Subpass Dependencies
 		std::map<SubpassDependencyKey, VkMemoryBarrier2> subpass_dependency_map;
 
 		const auto merge_subpass_dependencies = [this, pass_id, &subpass_dependency_map](
-		                                            const RenderGraphResolver::SubpassDependency &sub_dep,
+		                                            const RenderGraphScheduler::SubpassDependency &sub_dep,
 		                                            bool is_by_region) {
-			uint32_t src_subpass = sub_dep.from.pass && m_p_resolved->GetPassID(sub_dep.from.pass) == pass_id
-			                           ? m_p_resolved->GetSubpassID(sub_dep.from.pass)
+			uint32_t src_subpass = sub_dep.from.pass && m_p_scheduled->GetPassID(sub_dep.from.pass) == pass_id
+			                           ? m_p_scheduled->GetSubpassID(sub_dep.from.pass)
 			                           : VK_SUBPASS_EXTERNAL;
-			uint32_t dst_subpass = sub_dep.to.pass && m_p_resolved->GetPassID(sub_dep.to.pass) == pass_id
-			                           ? m_p_resolved->GetSubpassID(sub_dep.to.pass)
+			uint32_t dst_subpass = sub_dep.to.pass && m_p_scheduled->GetPassID(sub_dep.to.pass) == pass_id
+			                           ? m_p_scheduled->GetSubpassID(sub_dep.to.pass)
 			                           : VK_SUBPASS_EXTERNAL;
 
 			SubpassDependencyKey key{src_subpass, dst_subpass, is_by_region};
@@ -340,7 +345,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 		// Initialize Attachment Info
 		auto &attachments = pass_exec.render_pass_info.attachments;
 		attachments.resize(pass_sub_deps.attachment_dependencies.size());
-		for (const auto &it : pass_info.attachment_id_map)
+		for (const auto &it : pass_info.p_render_pass_info->attachment_id_map)
 			attachments[it.second].image = it.first;
 
 		// Subpass Description (Also Update Attachment Info)
@@ -352,9 +357,9 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 			const auto &get_att_id = [&pass_info](const auto *image) -> uint32_t {
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kType == ResourceType::kImage) {
 					if constexpr (ResourceVisitorTrait<decltype(image)>::kIsAlias)
-						return pass_info.attachment_id_map.at(image->GetPointedResource());
+						return pass_info.p_render_pass_info->attachment_id_map.at(image->GetPointedResource());
 					else
-						return pass_info.attachment_id_map.at(image);
+						return pass_info.p_render_pass_info->attachment_id_map.at(image);
 				} else {
 					assert(false);
 					return -1;
@@ -496,18 +501,35 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 		    myvk::RenderPass::Create(m_p_render_graph->GetDevicePtr(), create_info);
 
 		// Create Framebuffer
+		RenderGraphScheduler::RenderPassArea area = pass_info.p_render_pass_info->area;
+
 		std::vector<VkFramebufferAttachmentImageInfo> attachment_image_infos;
 		attachment_image_infos.reserve(attachments.size());
+		std::vector<VkFormat> attachment_image_formats;
+		attachment_image_formats.reserve(attachments.size());
 		for (const auto &att_info : attachments) {
+			attachment_image_infos.push_back({VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO});
+			auto &image_info = attachment_image_infos.back();
 
+			attachment_image_formats.push_back(att_info.image->GetFormat());
+
+			image_info.usage = m_p_allocated->GetVkImage(att_info.image)->GetUsage();
+			image_info.width = area.extent.width;
+			image_info.height = area.extent.height;
+			image_info.layerCount = area.layers;
+			image_info.viewFormatCount = 1;
+			image_info.pViewFormats = &attachment_image_formats.back();
 		}
+		pass_exec.render_pass_info.myvk_framebuffer = myvk::ImagelessFramebuffer::Create(
+		    pass_exec.render_pass_info.myvk_render_pass, attachment_image_infos, area.extent, area.layers);
 	}
 }
 
 void RenderGraphExecutor::Prepare(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved,
-                                  const RenderGraphAllocator &allocated) {
+                                  const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated) {
 	m_p_render_graph = p_render_graph;
 	m_p_resolved = &resolved;
+	m_p_scheduled = &scheduled;
 	m_p_allocated = &allocated;
 
 	reset_pass_executor_vector();

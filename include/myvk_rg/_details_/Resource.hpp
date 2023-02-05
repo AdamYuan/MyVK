@@ -206,6 +206,11 @@ private:
 		static_assert(std::is_base_of_v<ObjectBase, Derived>);
 		return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
 	}
+	inline void set_size_changed_compile_phrease() const {
+		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
+		if constexpr (std::is_base_of_v<ImageBase, Derived>) // Image Size change might affect RenderPass merging
+			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kSchedule);
+	}
 
 	bool m_persistence{false};
 	mutable SizeType m_size{};
@@ -229,22 +234,24 @@ public:
 		m_size_func = nullptr;
 		if (m_size != size) {
 			m_size = size;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
+			set_size_changed_compile_phrease();
 		}
 	}
 	inline bool HaveSizeFunc() const { return m_size_func; }
 	inline const SizeFunc &GetSizeFunc() const { return m_size_func; }
 	template <typename Func> inline void SetSizeFunc(Func &&func) {
 		m_size_func = func;
-		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
+		set_size_changed_compile_phrease();
 	}
 };
 
 class ManagedBuffer final : public BufferBase, public ManagedResourceInfo<ManagedBuffer, VkDeviceSize> {
 private:
 	mutable struct {
+	private:
 		uint32_t buffer_id{};
-	} m_internal_info{};
+		friend class RenderGraphResolver;
+	} m_resolved_info{};
 
 	friend class RenderGraphResolver;
 	MYVK_RG_OBJECT_FRIENDS
@@ -321,8 +328,10 @@ class ManagedImage final : public ImageBase,
                            public ManagedResourceInfo<ManagedImage, SubImageSize> {
 private:
 	mutable struct {
+	private:
 		uint32_t image_id{}, image_view_id{};
-	} m_internal_info{};
+		friend class RenderGraphResolver;
+	} m_resolved_info{};
 
 	VkImageViewType m_view_type{};
 	VkFormat m_format{};
@@ -371,8 +380,10 @@ public:
 class CombinedImage final : public ImageBase {
 private:
 	mutable struct {
+	private:
 		uint32_t image_id{}, image_view_id{};
-	} m_internal_info{};
+		friend class RenderGraphResolver;
+	} m_resolved_info{};
 
 	VkImageViewType m_view_type;
 	std::vector<const ImageBase *> m_images;

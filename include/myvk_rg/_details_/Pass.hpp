@@ -20,14 +20,23 @@ private:
 	const AttachmentData *m_p_attachment_data{};
 
 	mutable struct {
-		uint32_t pass_order{}, pass_id{}, subpass_id{};
-	} m_internal_info{};
+	private:
+		uint32_t pass_order{};
+		friend class RenderGraphResolver;
+	} m_resolved_info{};
+
+	mutable struct {
+	private:
+		uint32_t pass_id{}, subpass_id{};
+		friend class RenderGraphScheduler;
+	} m_scheduled_info{};
 
 	template <typename, uint8_t> friend class Pass;
 	template <typename> friend class PassGroup;
 	template <typename> friend class GraphicsPass;
 	friend class RenderGraphBase;
 	friend class RenderGraphResolver;
+	friend class RenderGraphScheduler;
 	friend class RenderGraphExecutor;
 
 	template <typename Func> inline void for_each_input(Func &&func) {

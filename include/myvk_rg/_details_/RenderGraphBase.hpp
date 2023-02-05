@@ -32,8 +32,9 @@ private:
 	struct CompilePhrase {
 		enum : uint8_t {
 			kResolve = 1u,
-			kAllocate = 2u,
-			kPrepareExecutor = 4u,
+			kSchedule = 2u,
+			kAllocate = 4u,
+			kPrepareExecutor = 8u,
 		};
 	};
 	uint8_t m_compile_phrase{};
@@ -66,6 +67,7 @@ public:
 		if (canvas_size.width != m_canvas_size.width || canvas_size.height != m_canvas_size.height) {
 			m_canvas_size = canvas_size;
 			set_compile_phrase(CompilePhrase::kAllocate);
+			set_compile_phrase(CompilePhrase::kSchedule);
 		}
 	}
 	inline void SetSrcStages(VkPipelineStageFlags2 src_stages) {
