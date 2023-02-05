@@ -30,9 +30,23 @@ private:
 		VkImageLayout new_layout;
 	};
 
+	struct AttachmentInfo {
+		struct AttachmentReference {
+			const Input *p_input{};
+			uint32_t subpass{};
+		};
+		const ImageBase *image{};
+		std::vector<AttachmentReference> references;
+
+		inline bool is_read_only() const {
+			return std::all_of(references.begin(), references.end(),
+			                   [](const AttachmentReference &ref) { return UsageIsReadOnly(ref.p_input->GetUsage()); });
+		}
+	};
 	struct RenderPassInfo {
 		myvk::Ptr<myvk::RenderPass> myvk_render_pass;
 		myvk::Ptr<myvk::ImagelessFramebuffer> myvk_framebuffer;
+		std::vector<AttachmentInfo> attachments;
 	};
 	struct BarrierInfo {
 		std::vector<BufferMemoryBarrier> buffer_barriers;

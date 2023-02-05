@@ -268,20 +268,6 @@ struct SubpassDependencyKey {
 	}
 };
 
-struct AttachmentInfo {
-	struct AttachmentReference {
-		const Input *p_input{};
-		uint32_t subpass{};
-	};
-	const ImageBase *image{};
-	std::vector<AttachmentReference> references;
-
-	inline bool is_read_only() const {
-		return std::all_of(references.begin(), references.end(),
-		                   [](const AttachmentReference &ref) { return UsageIsReadOnly(ref.p_input->GetUsage()); });
-	}
-};
-
 struct SubpassDescription {
 	std::vector<VkAttachmentReference2> input_attachments, color_attachments;
 	std::vector<uint32_t> preserve_attachments;
@@ -351,12 +337,13 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 			dep.pNext = &it.second;
 		}
 
-		// Attachment Info
-		std::vector<AttachmentInfo> attachments(pass_sub_deps.attachment_dependencies.size());
+		// Initialize Attachment Info
+		auto &attachments = pass_exec.render_pass_info.attachments;
+		attachments.resize(pass_sub_deps.attachment_dependencies.size());
 		for (const auto &it : pass_info.attachment_id_map)
 			attachments[it.second].image = it.first;
 
-		// Subpass Description
+		// Subpass Description (Also Update Attachment Info)
 		std::vector<SubpassDescription> subpass_descriptions(pass_info.subpasses.size());
 		for (uint32_t subpass_id = 0; subpass_id < pass_info.subpasses.size(); ++subpass_id) {
 			const auto &subpass_info = pass_info.subpasses[subpass_id];
@@ -445,7 +432,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 			desc.pDepthStencilAttachment = info.depth_attachment.has_value() ? &info.depth_attachment.value() : nullptr;
 		}
 
-		// Attachment Desriptions
+		// Attachment Descriptions
 		std::vector<VkAttachmentDescription2> vk_attachment_descriptions;
 		vk_attachment_descriptions.reserve(pass_sub_deps.attachment_dependencies.size());
 		for (uint32_t att_id = 0; att_id < attachments.size(); ++att_id) {
@@ -507,6 +494,13 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 
 		pass_exec.render_pass_info.myvk_render_pass =
 		    myvk::RenderPass::Create(m_p_render_graph->GetDevicePtr(), create_info);
+
+		// Create Framebuffer
+		std::vector<VkFramebufferAttachmentImageInfo> attachment_image_infos;
+		attachment_image_infos.reserve(attachments.size());
+		for (const auto &att_info : attachments) {
+
+		}
 	}
 }
 
