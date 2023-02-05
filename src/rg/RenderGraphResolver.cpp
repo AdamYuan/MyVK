@@ -217,7 +217,7 @@ void RenderGraphResolver::extract_ordered_passes_and_edges(OriginGraph &&graph) 
 	}
 
 	m_pass_edges.clear();
-	m_pass_edges.reserve(graph.edges.size() << 1u);
+	m_pass_edges.reserve(graph.edges.size());
 	m_src_output_edges.clear();
 	m_dst_input_edges.clear();
 

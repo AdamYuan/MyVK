@@ -330,12 +330,15 @@ void RenderGraphScheduler::Schedule(const RenderGraphResolver &resolved) {
 			std::cout << subpass_info.pass->GetKey().GetName() << ":" << subpass_info.pass->GetKey().GetID() << ", ";
 		printf("\n");
 		if (pass_info.p_render_pass_info) {
-			printf("PASS_ATTACHMENTS: ");
+			printf("RENDER AREA: {%d x %d, %d}\n", pass_info.p_render_pass_info->area.extent.width,
+			       pass_info.p_render_pass_info->area.extent.height, pass_info.p_render_pass_info->area.layers);
+			printf("PASS ATTACHMENTS: ");
 			for (const auto &attachment : pass_info.p_render_pass_info->attachment_id_map)
 				std::cout << attachment.first->GetKey().GetName() << ":" << attachment.first->GetKey().GetID()
 				          << " id = " << attachment.second << ", ";
 			printf("\n");
 		}
+		printf("\n");
 	}
 	printf("\n");
 }

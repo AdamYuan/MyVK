@@ -537,4 +537,6 @@ void RenderGraphExecutor::Prepare(const RenderGraphBase *p_render_graph, const R
 	create_render_passes_and_framebuffers(std::move(subpass_dependencies));
 }
 
+void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {}
+
 } // namespace myvk_rg::_details_
