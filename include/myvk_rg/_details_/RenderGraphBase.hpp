@@ -1,6 +1,7 @@
 #ifndef MYVK_RG_RENDER_GRAPH_BASE_HPP
 #define MYVK_RG_RENDER_GRAPH_BASE_HPP
 
+#include <myvk/CommandBuffer.hpp>
 #include <myvk/DescriptorSet.hpp>
 #include <myvk/DeviceObjectBase.hpp>
 
@@ -37,7 +38,7 @@ private:
 			kPrepareExecutor = 8u,
 		};
 	};
-	uint8_t m_compile_phrase{};
+	mutable uint8_t m_compile_phrase{};
 	inline void set_compile_phrase(uint8_t phrase) { m_compile_phrase |= phrase; }
 
 	struct Compiler;
@@ -48,6 +49,7 @@ private:
 	template <typename> friend class RenderGraph;
 	template <typename> friend class ImageAttachmentInfo;
 	template <typename, typename> friend class ManagedResourceInfo;
+	friend class ManagedBuffer;
 	friend class ManagedImage;
 	friend class CombinedImage;
 	template <typename> friend class PassPool;
@@ -82,8 +84,10 @@ public:
 		}
 	}
 
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
+
 	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
-	void Compile();
+	void Compile() const;
 };
 
 } // namespace myvk_rg::_details_

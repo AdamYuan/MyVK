@@ -26,7 +26,7 @@ private:
 
 	public:
 		inline myvk_rg::Image *GetTopOutput() { return MakeImageOutput({"top"}); }
-		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	};
 
 	class BodySubPass final
@@ -43,7 +43,7 @@ private:
 
 	public:
 		inline myvk_rg::Image *GetLevelOutput() { return MakeImageOutput({"level"}); }
-		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	};
 
 	uint32_t m_levels{};
@@ -101,7 +101,7 @@ public:
 	inline auto GetNormalOutput() { return MakeImageOutput({"normal"}); }
 	inline auto GetBrightOutput() { return MakeImageOutput({"bright"}); }
 	inline auto GetDepthOutput() { return MakeImageOutput({"depth"}); }
-	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
 class WBOITGenPass final
@@ -124,7 +124,7 @@ private:
 public:
 	inline auto GetRevealOutput() { return MakeImageOutput({"reveal"}); }
 	inline auto GetAccumOutput() { return MakeImageOutput({"accum"}); }
-	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
 class BlurPass final : public myvk_rg::PassGroup<BlurPass> {
@@ -148,7 +148,7 @@ private:
 
 		inline myvk_rg::Image *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
 
-		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	};
 
 	uint32_t m_subpass_count = 10;
@@ -188,7 +188,7 @@ public:
 	~ScreenPass() final = default;
 
 	inline auto GetScreenOutput() { return MakeImageOutput({"screen"}); }
-	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
 class BrightPass final
@@ -205,7 +205,7 @@ public:
 	~BrightPass() final = default;
 
 	inline auto GetScreenOutput() { return MakeImageOutput({"screen_out"}); }
-	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
 class TestPass0 final : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kCompute> {
@@ -257,7 +257,7 @@ private:
 public:
 	~TestPass0() final = default;
 
-	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const override {}
 	myvk_rg::Buffer *GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
 	myvk_rg::Image *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
@@ -282,7 +282,7 @@ private:
 public:
 	~TestPass1() final = default;
 
-	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) override {}
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const override {}
 
 	auto *GetColorOutput() { return MakeImageOutput({"color_attachment"}); }
 };
@@ -411,6 +411,9 @@ int main() {
 			command_buffer->CmdNextSubpass();
 			imgui_renderer->CmdDrawPipeline(command_buffer, current_frame);
 			command_buffer->CmdEndRenderPass();
+
+			// render_graph->CmdExecute(command_buffer);
+
 			command_buffer->End();
 
 			frame_manager->Render();

@@ -5,6 +5,7 @@
 #include "RenderGraphResolver.hpp"
 #include "RenderGraphScheduler.hpp"
 #include "myvk_rg/_details_/RenderGraphBase.hpp"
+#include "myvk_rg/_details_/Resource.hpp"
 
 namespace myvk_rg::_details_ {
 
@@ -81,7 +82,7 @@ void RenderGraphBase::MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &de
 RenderGraphBase::RenderGraphBase() = default;
 RenderGraphBase::~RenderGraphBase() = default;
 
-void RenderGraphBase::Compile() {
+void RenderGraphBase::Compile() const {
 	if (m_compile_phrase == 0u)
 		return;
 
@@ -111,6 +112,22 @@ void RenderGraphBase::Compile() {
 	if (exe_compile_phrase & CompilePhrase::kPrepareExecutor)
 		m_compiler->executor.Prepare(GetDevicePtr(), m_compiler->resolver, m_compiler->scheduler,
 		                             m_compiler->allocator);
+}
+
+void RenderGraphBase::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
+	Compile();
+	m_compiler->executor.CmdExecute(command_buffer);
+}
+
+// Resource GetVk functions
+const myvk::Ptr<myvk::BufferBase> &ManagedBuffer::GetVkBuffer() const {
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkBuffer(this);
+}
+const myvk::Ptr<myvk::ImageView> &ManagedImage::GetVkImageView() const {
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this);
+}
+const myvk::Ptr<myvk::ImageView> &CombinedImage::GetVkImageView() const {
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this);
 }
 
 } // namespace myvk_rg::_details_

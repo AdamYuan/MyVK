@@ -540,6 +540,107 @@ void RenderGraphExecutor::Prepare(const myvk::Ptr<myvk::Device> &device, const R
 	create_render_passes_and_framebuffers(device, std::move(subpass_dependencies), scheduled, allocated);
 }
 
-void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {}
+void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
+	const auto cmd_pipeline_barriers = [&command_buffer](const BarrierInfo &barrier_info) {
+		if (barrier_info.empty())
+			return;
+		std::vector<VkBufferMemoryBarrier2> buffer_barriers;
+		buffer_barriers.reserve(barrier_info.buffer_barriers.size());
+		std::vector<VkImageMemoryBarrier2> image_barriers;
+		image_barriers.reserve(barrier_info.image_barriers.size());
+
+		for (const auto &info : barrier_info.buffer_barriers) {
+			buffer_barriers.push_back({VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2});
+			VkBufferMemoryBarrier2 &barrier = buffer_barriers.back();
+
+			barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.srcAccessMask = info.src_access_mask;
+			barrier.dstAccessMask = info.dst_access_mask;
+			barrier.srcStageMask = info.src_stage_mask;
+			barrier.dstStageMask = info.dst_stage_mask;
+
+			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = info.buffer->GetVkBuffer();
+			barrier.buffer = myvk_buffer->GetHandle();
+			barrier.size = myvk_buffer->GetSize();
+			barrier.offset = 0u;
+		}
+
+		for (const auto &info : barrier_info.image_barriers) {
+			image_barriers.push_back({VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2});
+			VkImageMemoryBarrier2 &barrier = image_barriers.back();
+
+			barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.oldLayout = info.old_layout;
+			barrier.newLayout = info.new_layout;
+			barrier.srcAccessMask = info.src_access_mask;
+			barrier.dstAccessMask = info.dst_access_mask;
+			barrier.srcStageMask = info.src_stage_mask;
+			barrier.dstStageMask = info.dst_stage_mask;
+
+			const myvk::Ptr<myvk::ImageView> &myvk_image_view = info.image->GetVkImageView();
+			barrier.image = myvk_image_view->GetImagePtr()->GetHandle();
+			barrier.subresourceRange = myvk_image_view->GetSubresourceRange();
+		}
+
+		VkDependencyInfo dep_info = {VK_STRUCTURE_TYPE_DEPENDENCY_INFO};
+		dep_info.bufferMemoryBarrierCount = buffer_barriers.size();
+		dep_info.pBufferMemoryBarriers = buffer_barriers.data();
+		dep_info.imageMemoryBarrierCount = image_barriers.size();
+		dep_info.pImageMemoryBarriers = image_barriers.data();
+
+		vkCmdPipelineBarrier2(command_buffer->GetHandle(), &dep_info);
+	};
+
+	for (const auto &pass_exec : m_pass_executors) {
+		cmd_pipeline_barriers(pass_exec.prior_barrier_info);
+		const auto &pass_info = *pass_exec.p_info;
+		if (pass_info.p_render_pass_info) {
+			const auto &attachment_infos = pass_exec.render_pass_info.attachments;
+			// Fetch Attachment Clear Values and Attachment Image Views
+			std::vector<VkClearValue> clear_values;
+			std::vector<VkImageView> attachment_image_views;
+			clear_values.reserve(attachment_infos.size());
+			attachment_image_views.reserve(attachment_infos.size());
+
+			for (const auto &att_info : attachment_infos) {
+				att_info.image->Visit([&clear_values, &attachment_image_views](const auto *image) {
+					if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage ||
+					              ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kExternalImageBase) {
+						clear_values.push_back(image->GetClearValue());
+						attachment_image_views.push_back(image->GetVkImageView()->GetHandle());
+					} else {
+						assert(false);
+					}
+				});
+			}
+
+			VkRenderPassAttachmentBeginInfo attachment_begin_info = {
+			    VK_STRUCTURE_TYPE_RENDER_PASS_ATTACHMENT_BEGIN_INFO};
+			attachment_begin_info.attachmentCount = attachment_image_views.size();
+			attachment_begin_info.pAttachments = attachment_image_views.data();
+
+			VkRenderPassBeginInfo render_begin_info = {VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+			render_begin_info.renderPass = pass_exec.render_pass_info.myvk_render_pass->GetHandle();
+			render_begin_info.framebuffer = pass_exec.render_pass_info.myvk_framebuffer->GetHandle();
+			render_begin_info.renderArea.offset = {0u, 0u};
+			render_begin_info.renderArea.extent = pass_info.p_render_pass_info->area.extent;
+			render_begin_info.clearValueCount = clear_values.size();
+			render_begin_info.pClearValues = clear_values.data();
+			render_begin_info.pNext = &attachment_begin_info;
+
+			vkCmdBeginRenderPass(command_buffer->GetHandle(), &render_begin_info, VK_SUBPASS_CONTENTS_INLINE);
+
+			pass_info.subpasses.front().pass->CmdExecute(command_buffer);
+			for (uint32_t i = 1; i < pass_info.subpasses.size(); ++i) {
+				vkCmdNextSubpass(command_buffer->GetHandle(), VK_SUBPASS_CONTENTS_INLINE);
+				pass_info.subpasses[i].pass->CmdExecute(command_buffer);
+			}
+
+			vkCmdEndRenderPass(command_buffer->GetHandle());
+		} else
+			pass_info.subpasses.front().pass->CmdExecute(command_buffer);
+	}
+	cmd_pipeline_barriers(m_post_barrier_info);
+}
 
 } // namespace myvk_rg::_details_

@@ -55,7 +55,7 @@ public:
 
 	inline bool IsPassGroup() const { return m_p_pass_pool_sequence; }
 
-	virtual void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) = 0;
+	virtual void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const = 0;
 };
 
 template <typename Derived> class PassPool : public Pool<Derived, PassBase> {
@@ -139,7 +139,7 @@ class PassGroup : public PassBase,
                   public PassPool<Derived>,
                   public AliasOutputPool<Derived> {
 public:
-	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &) final {}
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &) const final {}
 
 	inline PassGroup() = default;
 	inline PassGroup(PassGroup &&) noexcept = default;

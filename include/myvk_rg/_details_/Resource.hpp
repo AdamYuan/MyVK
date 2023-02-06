@@ -265,10 +265,7 @@ public:
 	inline ManagedBuffer(ManagedBuffer &&) noexcept = default;
 	~ManagedBuffer() override = default;
 
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
-		static myvk::Ptr<myvk::BufferBase> x;
-		return x;
-	}
+	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
 };
 
 class SubImageSize {
@@ -371,10 +368,7 @@ public:
 		});
 	}
 
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
-		static myvk::Ptr<myvk::ImageView> x;
-		return x;
-	}
+	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
 };
 
 class CombinedImage final : public ImageBase {
@@ -504,6 +498,8 @@ public:
 
 	inline VkImageViewType GetViewType() const { return m_view_type; }
 	inline VkFormat GetFormat() const { return m_images[0]->GetFormat(); }
+
+	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
 
 	inline CombinedImage() : ImageBase(ResourceState::kCombinedImage) {}
 	inline CombinedImage(CombinedImage &&) noexcept = default;
