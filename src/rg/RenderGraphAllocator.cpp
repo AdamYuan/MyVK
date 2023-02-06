@@ -406,19 +406,19 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 		}
 		{
 			VmaAllocationCreateInfo create_info = {};
-			create_info.flags = VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT;
+			create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT | VMA_ALLOCATION_CREATE_CAN_ALIAS_BIT;
 			create_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			_make_optimal_allocation(std::move(device_memory), create_info);
 		}
 		{
 			VmaAllocationCreateInfo create_info = {};
-			// create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 			create_info.requiredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 			_make_naive_allocation(std::move(persistent_device_memory), create_info);
 		}
 		{
 			VmaAllocationCreateInfo create_info = {};
-			// create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			create_info.flags = VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 			create_info.usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
 			_make_naive_allocation(std::move(lazy_memory), create_info);
 		}

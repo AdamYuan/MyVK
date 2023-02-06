@@ -7,6 +7,8 @@
 #include <myvk/ImagelessFramebuffer.hpp>
 #include <myvk/RenderPass.hpp>
 
+#include <algorithm>
+
 namespace myvk_rg::_details_ {
 
 class RenderGraphExecutor {
@@ -38,11 +40,6 @@ private:
 		};
 		const ImageBase *image{};
 		std::vector<AttachmentReference> references;
-
-		inline bool is_read_only() const {
-			return std::all_of(references.begin(), references.end(),
-			                   [](const AttachmentReference &ref) { return UsageIsReadOnly(ref.p_input->GetUsage()); });
-		}
 	};
 	struct RenderPassInfo {
 		myvk::Ptr<myvk::RenderPass> myvk_render_pass;
@@ -73,8 +70,8 @@ private:
 	void create_render_passes_and_framebuffers(std::vector<SubpassDependencies> &&subpass_dependencies);
 
 public:
-	void Prepare(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved, const RenderGraphScheduler &scheduled,
-	             const RenderGraphAllocator &allocated);
+	void Prepare(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved,
+	             const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated);
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
 };

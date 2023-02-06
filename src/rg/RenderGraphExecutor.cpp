@@ -2,6 +2,7 @@
 
 #include "VkHelper.hpp"
 
+#include <algorithm>
 #include <iostream>
 #include <list>
 #include <map>
@@ -476,7 +477,11 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 				                                                                    : VK_ATTACHMENT_STORE_OP_STORE;
 			}
 			// If Attachment is Read-only, use STORE_OP_NONE
-			if (att_info.is_read_only()) {
+			bool is_read_only = std::all_of(att_info.references.begin(), att_info.references.end(),
+			                                [](const AttachmentInfo::AttachmentReference &ref) {
+				                                return UsageIsReadOnly(ref.p_input->GetUsage());
+			                                });
+			if (is_read_only) {
 				desc.storeOp = VK_ATTACHMENT_STORE_OP_NONE;
 				desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE;
 			}

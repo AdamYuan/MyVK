@@ -56,7 +56,6 @@ private:
 	friend class RenderGraphImage;
 
 	friend class RenderGraphResolver;
-	friend class RenderGraphResolver2;
 	friend class RenderGraphExecutor;
 
 public:
