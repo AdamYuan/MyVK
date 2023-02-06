@@ -22,24 +22,29 @@ class ManagedBuffer;
 class CombinedImage;
 
 class RenderGraphAllocation;
+
+enum class CompilePhrase : uint8_t {
+	kResolve = 1u,
+	kSchedule = 2u,
+	kAllocate = 4u,
+	kPrepareExecutor = 8u,
+};
+inline constexpr CompilePhrase operator|(CompilePhrase x, CompilePhrase y) {
+	return static_cast<CompilePhrase>(static_cast<uint8_t>(x) | static_cast<uint8_t>(y));
+}
+
 class RenderGraphBase : public myvk::DeviceObjectBase {
+public:
+	inline void SetCompilePhrases(CompilePhrase phrase) const { m_compile_phrase |= static_cast<uint8_t>(phrase); }
+
 private:
 	myvk::Ptr<myvk::Device> m_device_ptr;
 	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
 	VkExtent2D m_canvas_size{};
-	VkPipelineStageFlags2 m_src_stages{VK_PIPELINE_STAGE_2_NONE}, m_dst_stages{VK_PIPELINE_STAGE_2_NONE};
 	bool m_lazy_allocation_supported{};
 
-	struct CompilePhrase {
-		enum : uint8_t {
-			kResolve = 1u,
-			kSchedule = 2u,
-			kAllocate = 4u,
-			kPrepareExecutor = 8u,
-		};
-	};
 	mutable uint8_t m_compile_phrase{};
-	inline void set_compile_phrase(uint8_t phrase) { m_compile_phrase |= phrase; }
+	inline void SetCompilePhrases(uint8_t phrase) { m_compile_phrase |= phrase; }
 
 	struct Compiler;
 	std::unique_ptr<Compiler> m_compiler{};
@@ -48,12 +53,9 @@ private:
 
 	template <typename> friend class RenderGraph;
 	template <typename> friend class ImageAttachmentInfo;
-	template <typename, typename> friend class ManagedResourceInfo;
 	friend class ManagedBuffer;
 	friend class ManagedImage;
 	friend class CombinedImage;
-	template <typename> friend class PassPool;
-	template <typename> friend class InputPool;
 	friend class RenderGraphBuffer;
 	friend class RenderGraphImage;
 
@@ -67,27 +69,15 @@ public:
 	inline void SetCanvasSize(const VkExtent2D &canvas_size) {
 		if (canvas_size.width != m_canvas_size.width || canvas_size.height != m_canvas_size.height) {
 			m_canvas_size = canvas_size;
-			set_compile_phrase(CompilePhrase::kAllocate);
-			set_compile_phrase(CompilePhrase::kSchedule);
+			SetCompilePhrases(CompilePhrase::kAllocate | CompilePhrase::kSchedule);
 		}
 	}
-	inline void SetSrcStages(VkPipelineStageFlags2 src_stages) {
-		if (m_src_stages != src_stages) {
-			m_src_stages = src_stages;
-			set_compile_phrase(CompilePhrase::kPrepareExecutor);
-		}
-	}
-	inline void SetDstStages(VkPipelineStageFlags2 dst_stages) {
-		if (m_dst_stages != dst_stages) {
-			m_dst_stages = dst_stages;
-			set_compile_phrase(CompilePhrase::kPrepareExecutor);
-		}
-	}
+	inline const VkExtent2D &GetCanvasSize() const { return m_canvas_size; }
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
 
 	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
-	void Compile() const;
+	void compile() const; // TODO: Mark it as private
 };
 
 } // namespace myvk_rg::_details_

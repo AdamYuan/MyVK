@@ -82,7 +82,8 @@ void RenderGraphBase::MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &de
 RenderGraphBase::RenderGraphBase() = default;
 RenderGraphBase::~RenderGraphBase() = default;
 
-void RenderGraphBase::Compile() const {
+void RenderGraphBase::compile() const {
+#define CAST8(x) static_cast<uint8_t>(x)
 	if (m_compile_phrase == 0u)
 		return;
 
@@ -95,28 +96,30 @@ void RenderGraphBase::Compile() const {
 	 */
 
 	uint8_t exe_compile_phrase = m_compile_phrase;
-	if (m_compile_phrase & CompilePhrase::kResolve)
-		exe_compile_phrase |= CompilePhrase::kSchedule | CompilePhrase::kAllocate | CompilePhrase::kPrepareExecutor;
-	if (m_compile_phrase & CompilePhrase::kAllocate)
-		exe_compile_phrase |= CompilePhrase::kPrepareExecutor;
-	if (m_compile_phrase & CompilePhrase::kSchedule)
-		exe_compile_phrase |= CompilePhrase::kPrepareExecutor;
+	if (m_compile_phrase & CAST8(CompilePhrase::kResolve))
+		exe_compile_phrase |=
+		    CAST8(CompilePhrase::kSchedule | CompilePhrase::kAllocate | CompilePhrase::kPrepareExecutor);
+	if (m_compile_phrase & CAST8(CompilePhrase::kAllocate))
+		exe_compile_phrase |= CAST8(CompilePhrase::kPrepareExecutor);
+	if (m_compile_phrase & CAST8(CompilePhrase::kSchedule))
+		exe_compile_phrase |= CAST8(CompilePhrase::kPrepareExecutor);
 	m_compile_phrase = 0u;
 
-	if (exe_compile_phrase & CompilePhrase::kResolve)
+	if (exe_compile_phrase & CAST8(CompilePhrase::kResolve))
 		m_compiler->resolver.Resolve(this);
-	if (exe_compile_phrase & CompilePhrase::kSchedule)
+	if (exe_compile_phrase & CAST8(CompilePhrase::kSchedule))
 		m_compiler->scheduler.Schedule(m_compiler->resolver);
-	if (exe_compile_phrase & CompilePhrase::kAllocate)
+	if (exe_compile_phrase & CAST8(CompilePhrase::kAllocate))
 		m_compiler->allocator.Allocate(GetDevicePtr(), m_compiler->resolver);
-	if (exe_compile_phrase & CompilePhrase::kPrepareExecutor)
+	if (exe_compile_phrase & CAST8(CompilePhrase::kPrepareExecutor))
 		m_compiler->executor.Prepare(GetDevicePtr(), m_compiler->resolver, m_compiler->scheduler,
 		                             m_compiler->allocator);
+#undef CAST8
 }
 
 void RenderGraphBase::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
-	Compile();
-	m_compiler->executor.CmdExecute(command_buffer);
+	compile(); // Check & Compile before every execution
+	m_compiler->executor.CmdExecute(command_buffer, m_compiler->allocator);
 }
 
 // Resource GetVk functions

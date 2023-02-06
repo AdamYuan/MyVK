@@ -18,16 +18,16 @@ private:
 protected:
 	inline bool AddResult(const PoolKey &result_key, ResourceBase *resource) {
 		assert(resource);
-		set_compile_phrase(RenderGraphBase::CompilePhrase::kResolve);
+		SetCompilePhrases(CompilePhrase::kResolve);
 		return _ResultPool::template CreateAndInitializeForce<0, ResourceBase *>(result_key, resource);
 	}
 	inline bool IsResultExist(const PoolKey &result_key) const { return _ResultPool::Exist(result_key); }
 	inline void RemoveResult(const PoolKey &result_key) {
-		set_compile_phrase(RenderGraphBase::CompilePhrase::kResolve);
+		SetCompilePhrases(CompilePhrase::kResolve);
 		_ResultPool::Delete(result_key);
 	}
 	inline void ClearResults() {
-		set_compile_phrase(RenderGraphBase::CompilePhrase::kResolve);
+		SetCompilePhrases(CompilePhrase::kResolve);
 		_ResultPool::Clear();
 	}
 

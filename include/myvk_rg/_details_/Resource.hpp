@@ -69,7 +69,7 @@ public:
 	inline void SetLoadOp(VkAttachmentLoadOp load_op) {
 		if (m_load_op != load_op) {
 			m_load_op = load_op;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kPrepareExecutor);
+			get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kPrepareExecutor);
 		}
 	}
 	inline void SetClearColorValue(const VkClearColorValue &clear_color_value) {
@@ -84,21 +84,86 @@ public:
 };
 
 // External
-// TODO: External barriers (pipeline stage + access + image layout, begin & end)
-class ExternalImageBase : public ImageBase, public ImageAttachmentInfo<ExternalImageBase> {
-public:
-	inline ExternalImageBase() : ImageBase(ResourceState::kExternal) {}
-	inline ExternalImageBase(ExternalImageBase &&) noexcept = default;
-	inline ~ExternalImageBase() override = default;
+// Managed Resources
+template <typename Derived> class ExternalResourceInfo {
+private:
+	inline RenderGraphBase *get_render_graph_ptr() {
+		static_assert(std::is_base_of_v<ObjectBase, Derived>);
+		return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
+	}
+	inline RenderGraphBase *get_render_graph_ptr() const {
+		static_assert(std::is_base_of_v<ObjectBase, Derived>);
+		return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
+	}
 
+	VkPipelineStageFlags2 m_src_stages{VK_PIPELINE_STAGE_2_NONE}, m_dst_stages{VK_PIPELINE_STAGE_2_NONE};
+	VkAccessFlags2 m_src_accesses{VK_ACCESS_2_NONE}, m_dst_accesses{VK_ACCESS_2_NONE};
+
+public:
+	inline VkPipelineStageFlags2 GetSrcPipelineStages() const { return m_src_stages; }
+	inline void SetSrcPipelineStages(VkPipelineStageFlags2 src_stages) {
+		if (m_src_stages != src_stages) {
+			m_src_stages = src_stages;
+			get_render_graph_ptr()->SetCompilePhrase(CompilePhrase::kPrepareExecutor);
+		}
+	}
+	inline VkPipelineStageFlags2 GetDstPipelineStages() const { return m_dst_stages; }
+	inline void SetDstPipelineStages(VkPipelineStageFlags2 dst_stages) {
+		if (m_dst_stages != dst_stages) {
+			m_dst_stages = dst_stages;
+			get_render_graph_ptr()->SetCompilePhrase(CompilePhrase::kPrepareExecutor);
+		}
+	}
+	inline VkAccessFlags2 GetSrcAccessFlags() const { return m_src_accesses; }
+	inline void SetSrcAccessFlags(VkAccessFlags2 src_accesses) {
+		if (m_src_accesses != src_accesses) {
+			m_src_accesses = src_accesses;
+			get_render_graph_ptr()->SetCompilePhrase(CompilePhrase::kPrepareExecutor);
+		}
+	}
+	inline VkAccessFlags2 GetDstAccessFlags() const { return m_dst_accesses; }
+	inline void SetDstAccessFlags(VkAccessFlags2 dst_accesses) {
+		if (m_dst_accesses != dst_accesses) {
+			m_dst_accesses = dst_accesses;
+			get_render_graph_ptr()->SetCompilePhrase(CompilePhrase::kPrepareExecutor);
+		}
+	}
+};
+class ExternalImageBase : public ImageBase,
+                          public ImageAttachmentInfo<ExternalImageBase>,
+                          public ExternalResourceInfo<ExternalImageBase> {
 public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kExternal; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kExternalImageBase; }
 
 	virtual const myvk::Ptr<myvk::ImageView> &GetVkImageView() const = 0;
 	inline VkFormat GetFormat() const { return GetVkImageView()->GetImagePtr()->GetFormat(); }
+
+	inline ExternalImageBase() : ImageBase(ResourceState::kExternal) {}
+	inline ExternalImageBase(ExternalImageBase &&) noexcept = default;
+	inline ~ExternalImageBase() override = default;
+
+private:
+	VkImageLayout m_src_layout{VK_IMAGE_LAYOUT_UNDEFINED}, m_dst_layout{VK_IMAGE_LAYOUT_GENERAL};
+
+public:
+	inline VkImageLayout GetSrcLayout() const { return m_src_layout; }
+	inline void SetSrcLayout(VkImageLayout src_layout) {
+		if (m_src_layout != src_layout) {
+			m_src_layout = src_layout;
+			GetRenderGraphPtr()->SetCompilePhrases(CompilePhrase::kPrepareExecutor);
+		}
+	}
+	inline VkImageLayout GetDstLayout() const { return m_dst_layout; }
+	inline void SetDstLayout(VkImageLayout dst_layout) {
+		if (m_dst_layout != dst_layout) {
+			m_dst_layout = dst_layout;
+			GetRenderGraphPtr()->SetCompilePhrases(CompilePhrase::kPrepareExecutor);
+		}
+	}
 };
-class ExternalBufferBase : public BufferBase {
+
+class ExternalBufferBase : public BufferBase, public ExternalResourceInfo<ExternalBufferBase> {
 public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kExternal; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kExternalBufferBase; }
@@ -115,7 +180,10 @@ private:
 	myvk::Ptr<myvk::FrameManager> m_frame_manager;
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) { m_frame_manager = frame_manager; }
+	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+		m_frame_manager = frame_manager;
+		SetDstLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	}
 
 public:
 	inline SwapchainImage() = default;
@@ -207,9 +275,9 @@ private:
 		return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
 	}
 	inline void set_size_changed_compile_phrease() const {
-		get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
+		get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kAllocate);
 		if constexpr (std::is_base_of_v<ImageBase, Derived>) // Image Size change might affect RenderPass merging
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kSchedule);
+			get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kSchedule);
 	}
 
 	bool m_persistence{false};
@@ -221,12 +289,12 @@ public:
 	inline void SetPersistence(bool persistence = true) {
 		if (m_persistence != persistence) {
 			m_persistence = persistence;
-			get_render_graph_ptr()->set_compile_phrase(RenderGraphBase::CompilePhrase::kAllocate);
+			get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kAllocate);
 		}
 	}
 	inline const SizeType &GetSize() const {
 		if (m_size_func)
-			m_size = m_size_func(get_render_graph_ptr()->m_canvas_size);
+			m_size = m_size_func(get_render_graph_ptr()->GetCanvasSize());
 		return m_size;
 	}
 	template <typename... Args> inline void SetSize(Args &&...args) {

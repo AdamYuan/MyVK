@@ -73,7 +73,7 @@ public:
 	void Prepare(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved,
 	             const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated);
 
-	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const RenderGraphAllocator &allocated) const;
 };
 
 } // namespace myvk_rg::_details_

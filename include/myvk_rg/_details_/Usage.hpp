@@ -5,14 +5,11 @@
 
 namespace myvk_rg {
 enum class Usage {
-	kPreserveImage,
-	kPreserveBuffer,
 	kColorAttachmentW,
 	kColorAttachmentRW,
 	kDepthAttachmentR,
 	kDepthAttachmentRW,
 	kInputAttachment,
-	kPresent,
 	kSampledImage,
 	kStorageImageR,
 	kStorageImageW,
@@ -52,10 +49,6 @@ inline constexpr VkPipelineStageFlags2 __PIPELINE_STAGE_ALL_SHADERS_BIT =
     VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
 
 template <Usage> inline constexpr UsageInfo kUsageInfo{};
-template <>
-inline constexpr UsageInfo kUsageInfo<Usage::kPreserveImage> = {0, 0, ResourceType::kImage, 0, {}, 0, 0, false, {}};
-template <>
-inline constexpr UsageInfo kUsageInfo<Usage::kPreserveBuffer> = {0, 0, ResourceType::kBuffer, 0, {}, 0, 0, false, {}};
 template <>
 inline constexpr UsageInfo kUsageInfo<Usage::kColorAttachmentW> = {0,
                                                                    VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -107,10 +100,6 @@ inline constexpr UsageInfo kUsageInfo<Usage::kInputAttachment> = {VK_ACCESS_2_IN
                                                                   0,
                                                                   true,
                                                                   VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT};
-// TODO: Is it correct?
-template <>
-inline constexpr UsageInfo kUsageInfo<Usage::kPresent> = {
-    0, 0, ResourceType::kImage, 0, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, 0, 0, false, {}};
 template <>
 inline constexpr UsageInfo kUsageInfo<Usage::kSampledImage> = {VK_ACCESS_2_SHADER_SAMPLED_READ_BIT,
                                                                0,

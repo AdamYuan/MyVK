@@ -350,18 +350,18 @@ int main() {
 
 	myvk::Ptr<TestRenderGraph> render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device);
 	render_graph->SetCanvasSize({1000, 1000});
-	render_graph->Compile();
+	render_graph->compile();
 	render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");
 	render_graph->SetCanvasSize({1920, 1080});
-	render_graph->Compile();
+	render_graph->compile();
 	render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");
 	render_graph->SetCanvasSize({1280, 720});
-	render_graph->Compile();
+	render_graph->compile();
 	printf("RESIZE\n");
 	render_graph->SetCanvasSize({1920, 1080});
-	render_graph->Compile();
+	render_graph->compile();
 
 	// object_pool.DeleteBuffer("draw_list");
 

@@ -468,24 +468,26 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(const myvk::Ptr<
 				}
 			});
 
+			VkAttachmentLoadOp load_op =
+			    desc.initialLayout == VK_IMAGE_LAYOUT_UNDEFINED ? initial_load_op : VK_ATTACHMENT_LOAD_OP_LOAD;
+			VkAttachmentStoreOp store_op = desc.finalLayout == VK_IMAGE_LAYOUT_UNDEFINED
+			                                   ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+			                                   : VK_ATTACHMENT_STORE_OP_STORE;
 			if (aspects & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT)) {
-				desc.loadOp =
-				    desc.initialLayout == VK_IMAGE_LAYOUT_UNDEFINED ? initial_load_op : VK_ATTACHMENT_LOAD_OP_LOAD;
-				desc.storeOp = desc.finalLayout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-				                                                             : VK_ATTACHMENT_STORE_OP_STORE;
+				desc.loadOp = load_op;
+				desc.storeOp = store_op;
 			}
 			if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
-				desc.stencilLoadOp =
-				    desc.initialLayout == VK_IMAGE_LAYOUT_UNDEFINED ? initial_load_op : VK_ATTACHMENT_LOAD_OP_LOAD;
-				desc.stencilStoreOp = desc.finalLayout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-				                                                                    : VK_ATTACHMENT_STORE_OP_STORE;
+				desc.stencilLoadOp = load_op;
+				desc.stencilStoreOp = store_op;
 			}
+
 			// If Attachment is Read-only, use STORE_OP_NONE
 			bool is_read_only = std::all_of(att_info.references.begin(), att_info.references.end(),
 			                                [](const AttachmentInfo::AttachmentReference &ref) {
 				                                return UsageIsReadOnly(ref.p_input->GetUsage());
 			                                });
-			if (is_read_only) {
+			if (load_op != VK_ATTACHMENT_LOAD_OP_CLEAR && is_read_only) {
 				desc.storeOp = VK_ATTACHMENT_STORE_OP_NONE;
 				desc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_NONE;
 			}
@@ -540,8 +542,9 @@ void RenderGraphExecutor::Prepare(const myvk::Ptr<myvk::Device> &device, const R
 	create_render_passes_and_framebuffers(device, std::move(subpass_dependencies), scheduled, allocated);
 }
 
-void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
-	const auto cmd_pipeline_barriers = [&command_buffer](const BarrierInfo &barrier_info) {
+void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer,
+                                     const RenderGraphAllocator &allocated) const {
+	const auto cmd_pipeline_barriers = [&command_buffer, &allocated](const BarrierInfo &barrier_info) {
 		if (barrier_info.empty())
 			return;
 		std::vector<VkBufferMemoryBarrier2> buffer_barriers;
@@ -559,7 +562,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = info.buffer->GetVkBuffer();
+			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = allocated.GetVkBuffer(info.buffer);
 			barrier.buffer = myvk_buffer->GetHandle();
 			barrier.size = myvk_buffer->GetSize();
 			barrier.offset = 0u;
@@ -577,7 +580,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::ImageView> &myvk_image_view = info.image->GetVkImageView();
+			const myvk::Ptr<myvk::ImageView> &myvk_image_view = allocated.GetVkImageView(info.image);
 			barrier.image = myvk_image_view->GetImagePtr()->GetHandle();
 			barrier.subresourceRange = myvk_image_view->GetSubresourceRange();
 		}
@@ -603,11 +606,11 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			attachment_image_views.reserve(attachment_infos.size());
 
 			for (const auto &att_info : attachment_infos) {
-				att_info.image->Visit([&clear_values, &attachment_image_views](const auto *image) {
+				att_info.image->Visit([&allocated, &clear_values, &attachment_image_views](const auto *image) {
 					if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage ||
 					              ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kExternalImageBase) {
 						clear_values.push_back(image->GetClearValue());
-						attachment_image_views.push_back(image->GetVkImageView()->GetHandle());
+						attachment_image_views.push_back(allocated.GetVkImageView(image)->GetHandle());
 					} else {
 						assert(false);
 					}
@@ -637,8 +640,10 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			}
 
 			vkCmdEndRenderPass(command_buffer->GetHandle());
-		} else
+		} else {
+			assert(pass_info.subpasses.size() == 1);
 			pass_info.subpasses.front().pass->CmdExecute(command_buffer);
+		}
 	}
 	cmd_pipeline_barriers(m_post_barrier_info);
 }
