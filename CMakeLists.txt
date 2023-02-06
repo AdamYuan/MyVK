@@ -91,7 +91,10 @@ target_link_libraries(MyVK_ImGui PUBLIC MyVK_Vulkan MyVK_GLFW MyVK_Dep_ImGui)
 # Testings
 if (MYVK_TESTING)
     add_executable(MyVK_TestWindow test/window/main.cpp)
-    target_link_libraries(MyVK_TestWindow PRIVATE myvk::vulkan myvk::glfw myvk::imgui myvk::rg)
+    target_link_libraries(MyVK_TestWindow PRIVATE myvk::vulkan myvk::glfw myvk::imgui)
+
+    add_executable(MyVK_TestRenderGraph test/render_graph/main.cpp)
+    target_link_libraries(MyVK_TestRenderGraph PRIVATE myvk::vulkan myvk::glfw myvk::imgui myvk::rg)
 
     add_executable(MyVK_TestOffscreen test/offscreen/main.cpp)
     target_link_libraries(MyVK_TestOffscreen PRIVATE myvk::vulkan)

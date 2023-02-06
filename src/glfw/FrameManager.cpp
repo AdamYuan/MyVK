@@ -79,7 +79,8 @@ void FrameManager::Render() {
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_resized) {
 		m_resized = false;
 		recreate_swapchain();
-		m_resize_func(*this);
+		if (m_resize_func)
+			m_resize_func(*this);
 	}
 
 	m_current_frame = (m_current_frame + 1u) % m_frame_count;
