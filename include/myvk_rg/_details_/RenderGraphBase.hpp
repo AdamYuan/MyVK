@@ -11,6 +11,19 @@
 
 #include "Usage.hpp"
 
+namespace myvk_rg {
+enum class CompilePhrase : uint8_t {
+	kResolve = 1u,
+	kSchedule = 2u,
+	kAllocate = 4u,
+	kPrepareExecutor = 8u,
+};
+
+inline constexpr CompilePhrase operator|(CompilePhrase x, CompilePhrase y) {
+	return static_cast<CompilePhrase>(static_cast<uint8_t>(x) | static_cast<uint8_t>(y));
+}
+} // namespace myvk_rg
+
 namespace myvk_rg::_details_ {
 
 class PassBase;
@@ -22,16 +35,6 @@ class ManagedBuffer;
 class CombinedImage;
 
 class RenderGraphAllocation;
-
-enum class CompilePhrase : uint8_t {
-	kResolve = 1u,
-	kSchedule = 2u,
-	kAllocate = 4u,
-	kPrepareExecutor = 8u,
-};
-inline constexpr CompilePhrase operator|(CompilePhrase x, CompilePhrase y) {
-	return static_cast<CompilePhrase>(static_cast<uint8_t>(x) | static_cast<uint8_t>(y));
-}
 
 class RenderGraphBase : public myvk::DeviceObjectBase {
 public:
