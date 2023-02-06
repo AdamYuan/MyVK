@@ -107,9 +107,10 @@ void RenderGraphBase::Compile() {
 	if (exe_compile_phrase & CompilePhrase::kSchedule)
 		m_compiler->scheduler.Schedule(m_compiler->resolver);
 	if (exe_compile_phrase & CompilePhrase::kAllocate)
-		m_compiler->allocator.Allocate(this, m_compiler->resolver);
+		m_compiler->allocator.Allocate(GetDevicePtr(), m_compiler->resolver);
 	if (exe_compile_phrase & CompilePhrase::kPrepareExecutor)
-		m_compiler->executor.Prepare(this, m_compiler->resolver, m_compiler->scheduler, m_compiler->allocator);
+		m_compiler->executor.Prepare(GetDevicePtr(), m_compiler->resolver, m_compiler->scheduler,
+		                             m_compiler->allocator);
 }
 
 } // namespace myvk_rg::_details_

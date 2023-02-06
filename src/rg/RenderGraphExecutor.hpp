@@ -13,11 +13,6 @@ namespace myvk_rg::_details_ {
 
 class RenderGraphExecutor {
 private:
-	const RenderGraphBase *m_p_render_graph;
-	const RenderGraphResolver *m_p_resolved;
-	const RenderGraphScheduler *m_p_scheduled;
-	const RenderGraphAllocator *m_p_allocated;
-
 	struct MemoryBarrier {
 		VkPipelineStageFlags2 src_stage_mask;
 		VkAccessFlags2 src_access_mask;
@@ -65,12 +60,17 @@ private:
 
 	struct SubpassDependencies;
 
-	void reset_pass_executor_vector();
-	std::vector<SubpassDependencies> extract_barriers_and_subpass_dependencies();
-	void create_render_passes_and_framebuffers(std::vector<SubpassDependencies> &&subpass_dependencies);
+	void reset_pass_executor_vector(const RenderGraphScheduler &scheduled);
+	std::vector<SubpassDependencies> extract_barriers_and_subpass_dependencies(const RenderGraphResolver &resolved,
+	                                                                           const RenderGraphScheduler &scheduled,
+	                                                                           const RenderGraphAllocator &allocated);
+	void create_render_passes_and_framebuffers(const myvk::Ptr<myvk::Device> &device,
+	                                           std::vector<SubpassDependencies> &&subpass_dependencies,
+	                                           const RenderGraphScheduler &scheduled,
+	                                           const RenderGraphAllocator &allocated);
 
 public:
-	void Prepare(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved,
+	void Prepare(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved,
 	             const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated);
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;

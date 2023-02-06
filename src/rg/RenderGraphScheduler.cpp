@@ -1,7 +1,7 @@
 #include "RenderGraphScheduler.hpp"
 
-#include <iostream>
 #include <algorithm>
+#include <iostream>
 
 namespace myvk_rg::_details_ {
 

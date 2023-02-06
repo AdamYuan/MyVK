@@ -58,7 +58,7 @@ public:
 	};
 
 private:
-	const RenderGraphBase *m_p_render_graph;
+	myvk::Ptr<myvk::Device> m_device_ptr;
 	const RenderGraphResolver *m_p_resolved;
 
 	std::vector<IntImageAlloc> m_allocated_images;
@@ -94,7 +94,7 @@ private:
 	void create_and_bind_allocations();
 
 public:
-	void Allocate(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved);
+	void Allocate(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved);
 
 	inline bool IsIntResourceAliased(uint32_t int_resource_id_0, uint32_t int_resource_id_1) const {
 		return m_allocated_resource_aliased_relation.GetRelation(int_resource_id_0, int_resource_id_1);

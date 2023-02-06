@@ -9,11 +9,11 @@ namespace myvk_rg::_details_ {
 
 class RenderGraphImage final : public myvk::ImageBase {
 private:
-	const RenderGraphBase *m_render_graph_ptr;
+	myvk::Ptr<myvk::Device> m_device_ptr;
 
 public:
-	inline RenderGraphImage(const RenderGraphBase *render_graph_ptr, const VkImageCreateInfo &create_info)
-	    : m_render_graph_ptr{render_graph_ptr} {
+	inline RenderGraphImage(const myvk::Ptr<myvk::Device> &device, const VkImageCreateInfo &create_info)
+	    : m_device_ptr{device} {
 		vkCreateImage(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_image);
 		m_extent = create_info.extent;
 		m_mip_levels = create_info.mipLevels;
@@ -26,15 +26,15 @@ public:
 		if (m_image != VK_NULL_HANDLE)
 			vkDestroyImage(GetDevicePtr()->GetHandle(), m_image, nullptr);
 	};
-	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 };
 class RenderGraphBuffer final : public myvk::BufferBase {
 private:
-	const RenderGraphBase *m_render_graph_ptr;
+	myvk::Ptr<myvk::Device> m_device_ptr;
 
 public:
-	inline RenderGraphBuffer(const RenderGraphBase *render_graph_ptr, const VkBufferCreateInfo &create_info)
-	    : m_render_graph_ptr{render_graph_ptr} {
+	inline RenderGraphBuffer(const myvk::Ptr<myvk::Device> &device, const VkBufferCreateInfo &create_info)
+	    : m_device_ptr{device} {
 		vkCreateBuffer(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_buffer);
 		m_size = create_info.size;
 	}
@@ -42,19 +42,18 @@ public:
 		if (m_buffer != VK_NULL_HANDLE)
 			vkDestroyBuffer(GetDevicePtr()->GetHandle(), m_buffer, nullptr);
 	}
-	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 };
 
 class RenderGraphAllocation final : public myvk::DeviceObjectBase {
 private:
-	const RenderGraphBase *m_render_graph_ptr;
+	myvk::Ptr<myvk::Device> m_device_ptr;
 	VmaAllocation m_allocation{VK_NULL_HANDLE};
 
 public:
-	inline RenderGraphAllocation(const RenderGraphBase *render_graph_ptr,
-	                             const VkMemoryRequirements &memory_requirements,
+	inline RenderGraphAllocation(const myvk::Ptr<myvk::Device> &device, const VkMemoryRequirements &memory_requirements,
 	                             const VmaAllocationCreateInfo &create_info)
-	    : m_render_graph_ptr{render_graph_ptr} {
+	    : m_device_ptr{device} {
 		vmaAllocateMemory(GetDevicePtr()->GetAllocatorHandle(), &memory_requirements, &create_info, &m_allocation,
 		                  nullptr);
 	}
@@ -63,7 +62,7 @@ public:
 			vmaFreeMemory(GetDevicePtr()->GetAllocatorHandle(), m_allocation);
 	}
 	inline VmaAllocation GetHandle() const { return m_allocation; }
-	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_render_graph_ptr->GetDevicePtr(); }
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 };
 
 void RenderGraphAllocator::_maintain_combined_image(const CombinedImage *image) {
@@ -154,9 +153,9 @@ void RenderGraphAllocator::create_vk_resources() {
 		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		create_info.size = buffer_info.buffer->GetSize();
 
-		buffer_alloc.myvk_buffer = std::make_shared<RenderGraphBuffer>(m_p_render_graph, create_info);
-		vkGetBufferMemoryRequirements(m_p_render_graph->GetDevicePtr()->GetHandle(),
-		                              buffer_alloc.myvk_buffer->GetHandle(), &buffer_alloc.vk_memory_requirements);
+		buffer_alloc.myvk_buffer = std::make_shared<RenderGraphBuffer>(m_device_ptr, create_info);
+		vkGetBufferMemoryRequirements(m_device_ptr->GetHandle(), buffer_alloc.myvk_buffer->GetHandle(),
+		                              &buffer_alloc.vk_memory_requirements);
 	}
 
 	// Create Images
@@ -202,8 +201,8 @@ void RenderGraphAllocator::create_vk_resources() {
 			}
 		}
 
-		image_alloc.myvk_image = std::make_shared<RenderGraphImage>(m_p_render_graph, create_info);
-		vkGetImageMemoryRequirements(m_p_render_graph->GetDevicePtr()->GetHandle(), image_alloc.myvk_image->GetHandle(),
+		image_alloc.myvk_image = std::make_shared<RenderGraphImage>(m_device_ptr, create_info);
+		vkGetImageMemoryRequirements(m_device_ptr->GetHandle(), image_alloc.myvk_image->GetHandle(),
 		                             &image_alloc.vk_memory_requirements);
 	}
 }
@@ -264,7 +263,7 @@ void RenderGraphAllocator::_make_naive_allocation(MemoryInfo &&memory_info,
 	memory_requirements.size = allocation_blocks * memory_info.alignment;
 
 	allocation_info.myvk_allocation =
-	    std::make_shared<RenderGraphAllocation>(m_p_render_graph, memory_requirements, allocation_create_info);
+	    std::make_shared<RenderGraphAllocation>(m_device_ptr, memory_requirements, allocation_create_info);
 }
 
 // An AABB indicates a placed resource
@@ -368,7 +367,7 @@ void RenderGraphAllocator::_make_optimal_allocation(MemoryInfo &&memory_info,
 	memory_requirements.size = allocation_blocks * memory_info.alignment;
 
 	allocation_info.myvk_allocation =
-	    std::make_shared<RenderGraphAllocation>(m_p_render_graph, memory_requirements, allocation_create_info);
+	    std::make_shared<RenderGraphAllocation>(m_device_ptr, memory_requirements, allocation_create_info);
 }
 
 void RenderGraphAllocator::create_and_bind_allocations() {
@@ -380,10 +379,8 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 		MemoryInfo device_memory{}, persistent_device_memory{}, lazy_memory{}, mapped_memory{};
 
 		device_memory.resources.reserve(m_p_resolved->GetIntResourceCount());
-		uint32_t buffer_image_granularity = m_p_render_graph->GetDevicePtr()
-		                                        ->GetPhysicalDevicePtr()
-		                                        ->GetProperties()
-		                                        .vk10.limits.bufferImageGranularity;
+		uint32_t buffer_image_granularity =
+		    m_device_ptr->GetPhysicalDevicePtr()->GetProperties().vk10.limits.bufferImageGranularity;
 		device_memory.alignment = persistent_device_memory.alignment = buffer_image_granularity;
 
 		for (auto &image_alloc : m_allocated_images) {
@@ -425,12 +422,12 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 	}
 	// Bind Memory
 	for (auto &image_alloc : m_allocated_images) {
-		vmaBindImageMemory2(m_p_render_graph->GetDevicePtr()->GetAllocatorHandle(),
+		vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(),
 		                    m_allocations[image_alloc.allocation_id].myvk_allocation->GetHandle(),
 		                    image_alloc.memory_offset, image_alloc.myvk_image->GetHandle(), nullptr);
 	}
 	for (auto &buffer_alloc : m_allocated_buffers) {
-		vmaBindBufferMemory2(m_p_render_graph->GetDevicePtr()->GetAllocatorHandle(),
+		vmaBindBufferMemory2(m_device_ptr->GetAllocatorHandle(),
 		                     m_allocations[buffer_alloc.allocation_id].myvk_allocation->GetHandle(),
 		                     buffer_alloc.memory_offset, buffer_alloc.myvk_buffer->GetHandle(), nullptr);
 	}
@@ -445,10 +442,9 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 	printf("\nAllocations: \n");
 	for (const auto &allocation_info : m_allocations) {
 		VmaAllocationInfo info;
-		vmaGetAllocationInfo(m_p_render_graph->GetDevicePtr()->GetAllocatorHandle(),
-		                     allocation_info.myvk_allocation->GetHandle(), &info);
+		vmaGetAllocationInfo(m_device_ptr->GetAllocatorHandle(), allocation_info.myvk_allocation->GetHandle(), &info);
 		VkMemoryPropertyFlags flags;
-		vmaGetAllocationMemoryProperties(m_p_render_graph->GetDevicePtr()->GetAllocatorHandle(),
+		vmaGetAllocationMemoryProperties(m_device_ptr->GetAllocatorHandle(),
 		                                 allocation_info.myvk_allocation->GetHandle(), &flags);
 		printf("allocation: size = %lu MB, memory_type = %u\n", info.size >> 20u, flags);
 	}
@@ -480,8 +476,8 @@ void RenderGraphAllocator::reset_resource_vectors() {
 	}
 }
 
-void RenderGraphAllocator::Allocate(const RenderGraphBase *p_render_graph, const RenderGraphResolver &resolved) {
-	m_p_render_graph = p_render_graph;
+void RenderGraphAllocator::Allocate(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved) {
+	m_device_ptr = device;
 	m_p_resolved = &resolved;
 
 	reset_resource_vectors();
