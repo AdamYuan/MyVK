@@ -336,6 +336,29 @@ public:
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
 };
 
+// Internal Image ( the combination of ManagedImage and CombinedImage, used in implementation )
+class InternalImageBase : public ImageBase {
+protected:
+	mutable struct {
+	private:
+		uint32_t image_id{}, image_view_id{};
+		friend class RenderGraphResolver;
+	} m_resolved_info{};
+
+public:
+	inline explicit InternalImageBase(ResourceState state) : ImageBase(state) {}
+
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor);
+	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
+
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
+		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
+	};
+	inline VkFormat GetFormat() const {
+		return Visit([](auto *image) -> VkFormat { return image->GetFormat(); });
+	}
+};
+
 class SubImageSize {
 private:
 	VkExtent3D m_extent{};
@@ -388,16 +411,10 @@ public:
 	// inline bool Merge3D(const ImageSize &r) {}
 };
 
-class ManagedImage final : public ImageBase,
+class ManagedImage final : public InternalImageBase,
                            public ImageAttachmentInfo<ManagedImage>,
                            public ManagedResourceInfo<ManagedImage, SubImageSize> {
 private:
-	mutable struct {
-	private:
-		uint32_t image_id{}, image_view_id{};
-		friend class RenderGraphResolver;
-	} m_resolved_info{};
-
 	VkImageViewType m_view_type{};
 	VkFormat m_format{};
 
@@ -413,7 +430,7 @@ public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kManagedImage; }
 
-	inline ManagedImage() : ImageBase(ResourceState::kManaged) {}
+	inline ManagedImage() : InternalImageBase(ResourceState::kManaged) {}
 	inline ManagedImage(ManagedImage &&) noexcept = default;
 	~ManagedImage() override = default;
 
@@ -439,14 +456,8 @@ public:
 	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
 };
 
-class CombinedImage final : public ImageBase {
+class CombinedImage final : public InternalImageBase {
 private:
-	mutable struct {
-	private:
-		uint32_t image_id{}, image_view_id{};
-		friend class RenderGraphResolver;
-	} m_resolved_info{};
-
 	VkImageViewType m_view_type;
 	std::vector<const ImageBase *> m_images;
 
@@ -569,10 +580,81 @@ public:
 
 	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
 
-	inline CombinedImage() : ImageBase(ResourceState::kCombinedImage) {}
+	inline CombinedImage() : InternalImageBase(ResourceState::kCombinedImage) {}
 	inline CombinedImage(CombinedImage &&) noexcept = default;
 	inline const std::vector<const ImageBase *> &GetImages() const { return m_images; }
 	~CombinedImage() override = default;
+};
+
+// Last Frame Resources
+class LastFrameImage final : public ImageBase {
+private:
+	const InternalImageBase *m_pointed_image{};
+
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(const ImageBase *image) {
+		const auto get_internal_image = [](const auto *image) -> const InternalImageBase * {
+			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal)
+				return image;
+			else {
+				assert(false);
+				return {};
+			}
+		};
+		m_pointed_image = image->Visit([&get_internal_image](auto *image) -> const InternalImageBase * {
+			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
+				return image->GetPointedResource()->Visit(get_internal_image);
+			return image->Visit(get_internal_image);
+		});
+	}
+
+public:
+	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameImage; }
+
+	inline LastFrameImage() : ImageBase(ResourceState::kLastFrame) {}
+	inline LastFrameImage(LastFrameImage &&) noexcept = default;
+	inline ~LastFrameImage() final = default;
+
+	inline const ImageBase *GetPointedResource() const { return m_pointed_image; }
+
+	inline VkFormat GetFormat() const { return m_pointed_image->GetFormat(); }
+	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
+};
+
+class LastFrameBuffer final : public BufferBase {
+private:
+	const ManagedBuffer *m_pointed_buffer{};
+
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(const BufferBase *buffer) {
+		const auto get_managed_buffer = [](const auto *buffer) -> const ManagedBuffer * {
+			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kManaged)
+				return buffer;
+			else {
+				assert(false);
+				return {};
+			}
+		};
+		m_pointed_buffer = buffer->Visit([&get_managed_buffer](auto *buffer) -> const ManagedBuffer * {
+			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
+				return buffer->GetPointedResource()->Visit(get_managed_buffer);
+			else
+				return buffer->Visit(get_managed_buffer);
+		});
+	}
+
+public:
+	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameBuffer; }
+
+	inline LastFrameBuffer() : BufferBase(ResourceState::kLastFrame) {}
+	inline LastFrameBuffer(LastFrameBuffer &&) = default;
+	inline ~LastFrameBuffer() final = default;
+
+	inline const BufferBase *GetPointedResource() const { return m_pointed_buffer; }
+
+	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
 };
 
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) {
@@ -643,6 +725,30 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageB
 	}
 	assert(false);
 	return visitor(static_cast<const ImageAlias *>(nullptr));
+}
+
+template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> InternalImageBase::Visit(Visitor &&visitor) {
+	switch (GetState()) {
+	case ResourceState::kManaged:
+		return visitor(static_cast<ManagedImage *>(this));
+	case ResourceState::kCombinedImage:
+		return visitor(static_cast<CombinedImage *>(this));
+	default:
+		assert(false);
+		return visitor(static_cast<ManagedImage *>(nullptr));
+	}
+}
+template <typename Visitor>
+std::invoke_result_t<Visitor, ManagedImage *> InternalImageBase::Visit(Visitor &&visitor) const {
+	switch (GetState()) {
+	case ResourceState::kManaged:
+		return visitor(static_cast<const ManagedImage *>(this));
+	case ResourceState::kCombinedImage:
+		return visitor(static_cast<const CombinedImage *>(this));
+	default:
+		assert(false);
+		return visitor(static_cast<const ManagedImage *>(nullptr));
+	}
 }
 
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> BufferBase::Visit(Visitor &&visitor) {

@@ -27,11 +27,11 @@ public:
 		const ManagedBuffer *buffer{};
 	};
 	struct IntImageInfo : public IntResourceInfo {
-		const ImageBase *image{};
+		const InternalImageBase *image{};
 		bool is_transient{};
 	};
 	struct IntImageViewInfo {
-		const ImageBase *image{};
+		const InternalImageBase *image{};
 	};
 
 	struct EdgeLink {

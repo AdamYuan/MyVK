@@ -20,7 +20,7 @@ struct RenderGraphResolver::OriginGraph {
 		std::vector<Edge *> input_edges, output_edges;
 		uint32_t in_degree{};
 	};
-	std::unordered_map<const ImageBase *, bool> internal_image_set;
+	std::unordered_map<const InternalImageBase *, bool> internal_image_set;
 	std::unordered_set<const ManagedBuffer *> internal_buffer_set;
 	std::unordered_map<const PassBase *, Node> nodes;
 	std::list<Edge> edges;
@@ -36,7 +36,7 @@ struct RenderGraphResolver::OriginGraph {
 		}
 	}
 	inline void add_internal_buffer(const ManagedBuffer *buffer) { internal_buffer_set.insert(buffer); }
-	inline void add_internal_image(const ImageBase *image, bool set_has_parent = false) {
+	inline void add_internal_image(const InternalImageBase *image, bool set_has_parent = false) {
 		auto it = internal_image_set.find(image);
 		if (it == internal_image_set.end())
 			internal_image_set[image] = set_has_parent;
@@ -72,7 +72,13 @@ struct RenderGraphResolver::OriginGraph {
 						add_internal_image(sub_image, true);
 						add_visitor_edge(sub_image, nullptr, nullptr);
 					} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsAlias) {
-						add_internal_image(sub_image->GetPointedResource(), true);
+						sub_image->GetPointedResource()->Visit([this](const auto *pointed_sub_image) {
+							if constexpr (ResourceVisitorTrait<decltype(pointed_sub_image)>::kIsInternal)
+								add_internal_image(pointed_sub_image, true);
+							else {
+								assert(false);
+							}
+						});
 						add_edge_and_visit_dep_pass(sub_image->GetPointedResource(), sub_image->GetProducerPass(),
 						                            sub_image->GetProducerInput());
 					} else

@@ -9,16 +9,19 @@ namespace myvk_rg::_details_ {
 
 // Resource Base and Types
 enum class ResourceType : uint8_t { kImage, kBuffer };
-enum class ResourceState : uint8_t { kManaged, kCombinedImage, kExternal, kAlias };
+enum class ResourceState : uint8_t { kManaged, kCombinedImage, kExternal, kAlias, kLastFrame };
 #define MAKE_RESOURCE_CLASS_VAL(Type, State) uint8_t(static_cast<uint8_t>(State) << 1u | static_cast<uint8_t>(Type))
 enum class ResourceClass : uint8_t {
 	kManagedImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kManaged),
 	kExternalImageBase = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kExternal),
 	kCombinedImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kCombinedImage),
 	kImageAlias = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kAlias),
+	kLastFrameImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kLastFrame),
+
 	kManagedBuffer = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kManaged),
 	kExternalBufferBase = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kExternal),
-	kBufferAlias = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kAlias)
+	kBufferAlias = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kAlias),
+	kLastFrameBuffer = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kLastFrame)
 };
 inline constexpr ResourceClass MakeResourceClass(ResourceType type, ResourceState state) {
 	return static_cast<ResourceClass>(MAKE_RESOURCE_CLASS_VAL(type, state));
