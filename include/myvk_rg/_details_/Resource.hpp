@@ -298,7 +298,7 @@ public:
 		return m_size;
 	}
 	template <typename... Args> inline void SetSize(Args &&...args) {
-		SizeType size{std::forward<Args>(args)...};
+		SizeType size(std::forward<Args>(args)...);
 		m_size_func = nullptr;
 		if (m_size != size) {
 			m_size = size;
@@ -592,7 +592,21 @@ private:
 	const InternalImageBase *m_pointed_image{};
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(const ImageBase *image) {
+	// Allow setting pointed_image later
+	MYVK_RG_INLINE_INITIALIZER() {}
+	MYVK_RG_INLINE_INITIALIZER(const InternalImageBase *image) { SetCurrentResource(image); }
+	MYVK_RG_INLINE_INITIALIZER(const ImageBase *image) { SetCurrentResource(image); }
+
+public:
+	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameImage; }
+
+	inline LastFrameImage() : ImageBase(ResourceState::kLastFrame) {}
+	inline LastFrameImage(LastFrameImage &&) noexcept = default;
+	inline ~LastFrameImage() final = default;
+
+	inline void SetCurrentResource(const InternalImageBase *image) { m_pointed_image = image; }
+	inline void SetCurrentResource(const ImageBase *image) {
 		const auto get_internal_image = [](const auto *image) -> const InternalImageBase * {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal)
 				return image;
@@ -608,15 +622,7 @@ private:
 		});
 	}
 
-public:
-	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
-	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameImage; }
-
-	inline LastFrameImage() : ImageBase(ResourceState::kLastFrame) {}
-	inline LastFrameImage(LastFrameImage &&) noexcept = default;
-	inline ~LastFrameImage() final = default;
-
-	inline const ImageBase *GetPointedResource() const { return m_pointed_image; }
+	inline const ImageBase *GetCurrentResource() const { return m_pointed_image; }
 
 	inline VkFormat GetFormat() const { return m_pointed_image->GetFormat(); }
 	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
@@ -627,7 +633,21 @@ private:
 	const ManagedBuffer *m_pointed_buffer{};
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(const BufferBase *buffer) {
+	// Allow setting pointed_buffer later
+	MYVK_RG_INLINE_INITIALIZER() {}
+	MYVK_RG_INLINE_INITIALIZER(const ManagedBuffer *buffer) { SetCurrentResource(buffer); }
+	MYVK_RG_INLINE_INITIALIZER(const BufferBase *buffer) { SetCurrentResource(buffer); }
+
+public:
+	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
+	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameBuffer; }
+
+	inline LastFrameBuffer() : BufferBase(ResourceState::kLastFrame) {}
+	inline LastFrameBuffer(LastFrameBuffer &&) = default;
+	inline ~LastFrameBuffer() final = default;
+
+	inline void SetCurrentResource(const ManagedBuffer *buffer) { m_pointed_buffer = buffer; }
+	inline void SetCurrentResource(const BufferBase *buffer) {
 		const auto get_managed_buffer = [](const auto *buffer) -> const ManagedBuffer * {
 			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kManaged)
 				return buffer;
@@ -644,15 +664,7 @@ private:
 		});
 	}
 
-public:
-	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
-	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameBuffer; }
-
-	inline LastFrameBuffer() : BufferBase(ResourceState::kLastFrame) {}
-	inline LastFrameBuffer(LastFrameBuffer &&) = default;
-	inline ~LastFrameBuffer() final = default;
-
-	inline const BufferBase *GetPointedResource() const { return m_pointed_buffer; }
+	inline const ManagedBuffer *GetCurrentResource() const { return m_pointed_buffer; }
 
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
 };
@@ -667,12 +679,17 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Resour
 		return visitor(static_cast<CombinedImage *>(this));
 	case ResourceClass::kImageAlias:
 		return visitor(static_cast<ImageAlias *>(this));
+	case ResourceClass::kLastFrameImage:
+		return visitor(static_cast<LastFrameImage *>(this));
+
 	case ResourceClass::kManagedBuffer:
 		return visitor(static_cast<ManagedBuffer *>(this));
 	case ResourceClass::kExternalBufferBase:
 		return visitor(static_cast<ExternalBufferBase *>(this));
 	case ResourceClass::kBufferAlias:
 		return visitor(static_cast<BufferAlias *>(this));
+	case ResourceClass::kLastFrameBuffer:
+		return visitor(static_cast<LastFrameBuffer *>(this));
 	}
 	assert(false);
 	return visitor(static_cast<BufferAlias *>(nullptr));
@@ -687,12 +704,17 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Resour
 		return visitor(static_cast<const CombinedImage *>(this));
 	case ResourceClass::kImageAlias:
 		return visitor(static_cast<const ImageAlias *>(this));
+	case ResourceClass::kLastFrameImage:
+		return visitor(static_cast<const LastFrameImage *>(this));
+
 	case ResourceClass::kManagedBuffer:
 		return visitor(static_cast<const ManagedBuffer *>(this));
 	case ResourceClass::kExternalBufferBase:
 		return visitor(static_cast<const ExternalBufferBase *>(this));
 	case ResourceClass::kBufferAlias:
 		return visitor(static_cast<const BufferAlias *>(this));
+	case ResourceClass::kLastFrameBuffer:
+		return visitor(static_cast<const LastFrameBuffer *>(this));
 	}
 	assert(false);
 	return visitor(static_cast<const BufferAlias *>(nullptr));
@@ -708,6 +730,8 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageB
 		return visitor(static_cast<CombinedImage *>(this));
 	case ResourceState::kAlias:
 		return visitor(static_cast<ImageAlias *>(this));
+	case ResourceState::kLastFrame:
+		return visitor(static_cast<LastFrameImage *>(this));
 	}
 	assert(false);
 	return visitor(static_cast<ImageAlias *>(nullptr));
@@ -722,6 +746,8 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageB
 		return visitor(static_cast<const CombinedImage *>(this));
 	case ResourceState::kAlias:
 		return visitor(static_cast<const ImageAlias *>(this));
+	case ResourceState::kLastFrame:
+		return visitor(static_cast<const LastFrameImage *>(this));
 	}
 	assert(false);
 	return visitor(static_cast<const ImageAlias *>(nullptr));
@@ -759,6 +785,8 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 		return visitor(static_cast<ExternalBufferBase *>(this));
 	case ResourceState::kAlias:
 		return visitor(static_cast<BufferAlias *>(this));
+	case ResourceState::kLastFrame:
+		return visitor(static_cast<LastFrameBuffer *>(this));
 	default:
 		assert(false);
 	}
@@ -772,6 +800,8 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 		return visitor(static_cast<const ExternalBufferBase *>(this));
 	case ResourceState::kAlias:
 		return visitor(static_cast<const BufferAlias *>(this));
+	case ResourceState::kLastFrame:
+		return visitor(static_cast<const LastFrameBuffer *>(this));
 	default:
 		assert(false);
 	}
@@ -779,12 +809,11 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 }
 
 template <typename Derived>
-class ResourcePool
-    : public Pool<Derived,
-                  PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, CombinedImage, ExternalImageBase>> {
+class ResourcePool : public Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, LastFrameBuffer, ManagedImage,
+                                                      CombinedImage, ExternalImageBase, LastFrameImage>> {
 private:
-	using _ResourcePool =
-	    Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, ManagedImage, CombinedImage, ExternalImageBase>>;
+	using _ResourcePool = Pool<Derived, PoolVariant<ManagedBuffer, ExternalBufferBase, LastFrameBuffer, ManagedImage,
+	                                                CombinedImage, ExternalImageBase, LastFrameImage>>;
 
 public:
 	inline ResourcePool() = default;
@@ -803,8 +832,16 @@ protected:
 		return _ResourcePool::template CreateAndInitializeForce<0, Type, Args...>(resource_key,
 		                                                                          std::forward<Args>(args)...);
 	}
+	// TODO: Don't use typename... Args.
 	template <typename... Args> inline CombinedImage *MakeCombinedImage(const PoolKey &resource_key, Args &&...args) {
 		return CreateResourceForce<CombinedImage, Args...>(resource_key, std::forward<Args>(args)...);
+	}
+	template <typename... Args> inline LastFrameImage *MakeLastFrameImage(const PoolKey &resource_key, Args &&...args) {
+		return CreateResourceForce<LastFrameImage, Args...>(resource_key, std::forward<Args>(args)...);
+	}
+	template <typename... Args>
+	inline LastFrameBuffer *MakeLastFrameBuffer(const PoolKey &resource_key, Args &&...args) {
+		return CreateResourceForce<LastFrameBuffer, Args...>(resource_key, std::forward<Args>(args)...);
 	}
 	inline void DeleteResource(const PoolKey &resource_key) { return _ResourcePool::Delete(resource_key); }
 

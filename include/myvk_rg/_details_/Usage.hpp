@@ -20,6 +20,7 @@ enum class Usage {
 	kStorageBufferRW,
 	kIndexBuffer,
 	kVertexBuffer,
+	kDrawIndirectBuffer,
 	kTransferImageSrc,
 	kTransferImageDst,
 	kTransferBufferSrc,
@@ -200,6 +201,16 @@ inline constexpr UsageInfo kUsageInfo<Usage::kIndexBuffer> = {VK_ACCESS_2_INDEX_
                                                               0,
                                                               false,
                                                               {}};
+template <>
+inline constexpr UsageInfo kUsageInfo<Usage::kDrawIndirectBuffer> = {VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT, //
+                                                                     0,
+                                                                     ResourceType::kBuffer,
+                                                                     VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+                                                                     {},
+                                                                     VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+                                                                     0,
+                                                                     false,
+                                                                     {}};
 template <>
 inline constexpr UsageInfo kUsageInfo<Usage::kTransferImageSrc> = {
     VK_ACCESS_2_TRANSFER_READ_BIT, //

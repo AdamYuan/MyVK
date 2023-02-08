@@ -145,6 +145,7 @@ public:
 	inline static uint32_t GetIntImageID(const CombinedImage *image) { return image->m_resolved_info.image_id; }
 	inline static uint32_t GetIntImageID(const ManagedImage *image) { return image->m_resolved_info.image_id; }
 	inline static uint32_t GetIntImageID(const ExternalImageBase *image) { return -1; }
+	inline static uint32_t GetIntImageID(const LastFrameImage *image) { return -1; }
 	inline static uint32_t GetIntImageID(const ImageAlias *image) {
 		return image->GetPointedResource()->Visit([](const auto *image) -> uint32_t { return GetIntImageID(image); });
 	}
@@ -156,11 +157,12 @@ public:
 	inline uint32_t GetIntResourceID(const ManagedBuffer *buffer) const {
 		return GetIntBufferID(buffer) + GetIntImageCount();
 	}
-	inline static uint32_t GetIntResourceID(const ExternalBufferBase *buffer) { return -1; }
+	inline static uint32_t GetIntResourceID(const ExternalBufferBase *) { return -1; }
 	inline uint32_t GetIntResourceID(const BufferAlias *buffer) const {
 		return buffer->GetPointedResource()->Visit(
 		    [this](const auto *buffer) -> uint32_t { return GetIntResourceID(buffer); });
 	}
+	inline static uint32_t GetIntResourceID(const LastFrameBuffer *) { return -1; }
 	inline uint32_t GetIntResourceID(const BufferBase *buffer) const {
 		return buffer->Visit([this](const auto *buffer) -> uint32_t { return GetIntResourceID(buffer); });
 	}
@@ -168,6 +170,7 @@ public:
 	inline static uint32_t GetIntResourceID(const CombinedImage *image) { return GetIntImageID(image); }
 	inline static uint32_t GetIntResourceID(const ManagedImage *image) { return GetIntImageID(image); }
 	inline static uint32_t GetIntResourceID(const ExternalImageBase *) { return -1; }
+	inline static uint32_t GetIntResourceID(const LastFrameImage *) { return -1; }
 	inline static uint32_t GetIntResourceID(const ImageBase *image) { return GetIntImageID(image); }
 
 	inline uint32_t GetIntResourceID(const ResourceBase *resource) const {

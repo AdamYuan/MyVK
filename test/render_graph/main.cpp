@@ -10,6 +10,23 @@
 
 constexpr uint32_t kFrameCount = 3;
 
+class CullPass final : public myvk_rg::Pass<CullPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kCompute> {
+private:
+	MYVK_RG_OBJECT_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_hierarchy) {
+		auto draw_list = CreateResource<myvk_rg::ManagedBuffer>({"draw_list"});
+		draw_list->SetSize(1024 * 1024);
+		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
+		    {"depth_hierarchy"}, depth_hierarchy, nullptr);
+		AddDescriptorInput<1, myvk_rg::Usage::kStorageBufferW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({"draw_list"},
+		                                                                                               draw_list);
+	}
+
+public:
+	inline myvk_rg::Buffer *GetDrawListOutput() { return MakeBufferOutput({"draw_list"}); }
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+};
+
 class DepthHierarchyPass final : public myvk_rg::PassGroup<DepthHierarchyPass> {
 private:
 	class TopSubPass final
@@ -85,7 +102,7 @@ class GBufferPass final
     : public myvk_rg::Pass<GBufferPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER() {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Buffer *draw_list) {
 		auto depth = CreateResource<myvk_rg::ManagedImage>({"depth"}, VK_FORMAT_D32_SFLOAT);
 		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"}, VK_FORMAT_R8G8B8A8_UNORM);
 		auto normal = CreateResource<myvk_rg::ManagedImage>({"normal"}, VK_FORMAT_R8G8B8A8_SNORM);
@@ -94,6 +111,7 @@ private:
 		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentW>({"normal"}, normal);
 		AddColorAttachmentInput<2, myvk_rg::Usage::kColorAttachmentW>({"bright"}, bright);
 		SetDepthAttachmentInput<myvk_rg::Usage::kDepthAttachmentRW>({"depth"}, depth);
+		AddInput<myvk_rg::Usage::kDrawIndirectBuffer>({"draw_list"}, draw_list);
 	}
 
 public:
@@ -305,7 +323,10 @@ private:
 			// AddResult({"output"}, test_pass_1->GetColorOutput());
 		}
 		{
-			auto gbuffer_pass = CreatePass<GBufferPass>({"gbuffer_pass"});
+			auto last_frame_depth_hierarchy = MakeLastFrameImage({"lf_depth_hierarchy"});
+
+			auto cull_pass = CreatePass<CullPass>({"cull_pass"}, last_frame_depth_hierarchy);
+			auto gbuffer_pass = CreatePass<GBufferPass>({"gbuffer_pass"}, cull_pass->GetDrawListOutput());
 			auto blur_bright_pass = CreatePass<BlurPass>({"blur_bright_pass"}, gbuffer_pass->GetBrightOutput());
 			auto wboit_gen_pass = CreatePass<WBOITGenPass>({"wboit_gen_pass"}, gbuffer_pass->GetDepthOutput());
 			auto screen_pass = CreatePass<ScreenPass>(
@@ -317,6 +338,10 @@ private:
 			    screen_pass->GetScreenOutput(), blur_bright_pass->GetImageDstOutput());
 			auto depth_hierarchy_pass =
 			    CreatePass<DepthHierarchyPass>({"depth_hierarchy_pass"}, gbuffer_pass->GetDepthOutput());
+
+			// Set Next Frame's Depth Hierarchy
+			last_frame_depth_hierarchy->SetCurrentResource(depth_hierarchy_pass->GetDepthHierarchyOutput());
+
 			AddResult({"final"}, bright_pass->GetScreenOutput());
 			AddResult({"depth_hierarchy"}, depth_hierarchy_pass->GetDepthHierarchyOutput());
 		}

@@ -38,9 +38,12 @@ class ManagedImage;
 class ExternalImageBase;
 class CombinedImage;
 class ImageAlias;
+class LastFrameImage;
+
 class ManagedBuffer;
 class ExternalBufferBase;
 class BufferAlias;
+class LastFrameBuffer;
 
 namespace _details_resource_trait_ {
 template <typename T> struct ResourceTrait;
@@ -60,6 +63,11 @@ template <> struct ResourceTrait<ImageAlias> {
 	static constexpr ResourceType kType = ResourceType::kImage;
 	static constexpr ResourceState kState = ResourceState::kAlias;
 };
+template <> struct ResourceTrait<LastFrameImage> {
+	static constexpr ResourceType kType = ResourceType::kImage;
+	static constexpr ResourceState kState = ResourceState::kLastFrame;
+};
+
 template <> struct ResourceTrait<ManagedBuffer> {
 	static constexpr ResourceType kType = ResourceType::kBuffer;
 	static constexpr ResourceState kState = ResourceState::kManaged;
@@ -71,6 +79,10 @@ template <> struct ResourceTrait<ExternalBufferBase> {
 template <> struct ResourceTrait<BufferAlias> {
 	static constexpr ResourceType kType = ResourceType::kBuffer;
 	static constexpr ResourceState kState = ResourceState::kAlias;
+};
+template <> struct ResourceTrait<LastFrameBuffer> {
+	static constexpr ResourceType kType = ResourceType::kBuffer;
+	static constexpr ResourceState kState = ResourceState::kLastFrame;
 };
 } // namespace _details_resource_trait_
 
