@@ -14,12 +14,15 @@ namespace myvk_rg::_details_ {
 
 class RenderGraphResolver {
 public:
+	struct ResourceReference {
+		const Input *p_input;
+		const PassBase *pass;
+	};
+	struct LFResourceInfo {
+		std::vector<ResourceReference> references;
+	};
 	struct IntResourceInfo {
-		struct ResourceReference {
-			const Input *p_input;
-			const PassBase *pass;
-		};
-		bool dependency_persistence{};
+		bool last_frame{};
 		std::vector<ResourceReference> references;
 		std::vector<ResourceReference> last_references;
 	};

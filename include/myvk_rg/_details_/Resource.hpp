@@ -280,18 +280,18 @@ private:
 			get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kSchedule);
 	}
 
-	bool m_persistence{false};
+	// bool m_persistence{false};
 	mutable SizeType m_size{};
 	SizeFunc m_size_func{};
 
 public:
-	inline bool GetPersistence() const { return m_persistence; }
+	/* inline bool GetPersistence() const { return m_persistence; }
 	inline void SetPersistence(bool persistence = true) {
-		if (m_persistence != persistence) {
-			m_persistence = persistence;
-			get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kAllocate);
-		}
-	}
+	    if (m_persistence != persistence) {
+	        m_persistence = persistence;
+	        get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kAllocate);
+	    }
+	} */
 	inline const SizeType &GetSize() const {
 		if (m_size_func)
 			m_size = m_size_func(get_render_graph_ptr()->GetCanvasSize());

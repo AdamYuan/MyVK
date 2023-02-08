@@ -44,6 +44,7 @@ struct RenderGraphResolver::OriginGraph {
 			it->second = true;
 	}
 	inline void visit_resource_dep_passes(const ResourceBase *resource, const PassBase *pass, const Input *p_input) {
+		// TODO: Handle LastFrame Images and Buffers
 		const auto add_visitor_edge = [this, pass, p_input](const ResourceBase *resource, const PassBase *dep_pass,
 		                                                    const Input *p_dep_input) -> void {
 			add_edge(resource, {p_dep_input, dep_pass}, {p_input, pass}, false);
@@ -360,10 +361,10 @@ void RenderGraphResolver::extract_resource_info() {
 			if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
 				if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
 					auto &image_info = m_internal_images[GetIntImageID(resource)];
-					image_info.dependency_persistence = true;
+					image_info.last_frame = true;
 				} else {
 					auto &buffer_info = m_internal_buffers[GetIntBufferID(resource)];
-					buffer_info.dependency_persistence = true;
+					buffer_info.last_frame = true;
 				}
 			}
 		};

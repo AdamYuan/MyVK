@@ -20,6 +20,7 @@ public:
 		VkMemoryRequirements vk_memory_requirements{};
 		VkDeviceSize memory_offset{};
 		uint32_t allocation_id{};
+		bool double_buffering{}; // TODO: Check this
 
 	protected:
 		uint32_t internal_resource_id{};
@@ -32,7 +33,6 @@ public:
 		VkImageUsageFlags vk_image_usages{};
 		VkImageType vk_image_type{VK_IMAGE_TYPE_2D};
 		const SubImageSize *p_size{};
-		bool persistence{};
 
 	protected:
 		const RenderGraphResolver::IntImageInfo &GetImageInfo() const {

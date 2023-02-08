@@ -7,6 +7,7 @@
 
 namespace myvk_rg::_details_ {
 
+// TODO: Alloc Double-Buffering Images
 class RenderGraphImage final : public myvk::ImageBase {
 private:
 	myvk::Ptr<myvk::Device> m_device_ptr;
@@ -106,7 +107,7 @@ void RenderGraphAllocator::update_resource_info() {
 	// Update Image Sizes, Base Layers and VkImageUsage
 	for (auto &image_alloc : m_allocated_images) {
 		const auto &image_info = image_alloc.GetImageInfo();
-		image_alloc.persistence = false;
+		// image_alloc.persistence = false;
 
 		auto &image_view_alloc = m_allocated_image_views[m_p_resolved->GetIntImageViewID(image_info.image)];
 		image_view_alloc.base_layer = 0;
@@ -136,8 +137,6 @@ void RenderGraphAllocator::update_resource_info() {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kIsInternal) {
 				auto &image_alloc = m_allocated_images[m_p_resolved->GetIntImageID(image)];
 				UpdateVkImageTypeFromVkImageViewType(&image_alloc.vk_image_type, image->GetViewType());
-				if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage)
-					image_alloc.persistence |= image->GetPersistence();
 			} else
 				assert(false);
 		});
@@ -387,7 +386,7 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 			const auto &image_info = image_alloc.GetImageInfo();
 			if (image_info.is_transient)
 				lazy_memory.push(&image_alloc); // If the image is Transient and LAZY_ALLOCATION is supported
-			else if (image_info.dependency_persistence || image_alloc.persistence)
+			else if (image_info.last_frame)
 				persistent_device_memory.push(&image_alloc);
 			else
 				device_memory.push(&image_alloc);
@@ -396,7 +395,7 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 			const auto &buffer_info = buffer_alloc.GetBufferInfo();
 			if (false) // TODO: Mapped Buffer Condition
 				mapped_memory.push(&buffer_alloc);
-			else if (buffer_info.dependency_persistence || buffer_info.buffer->GetPersistence())
+			else if (buffer_info.last_frame)
 				persistent_device_memory.push(&buffer_alloc);
 			else
 				device_memory.push(&buffer_alloc);
