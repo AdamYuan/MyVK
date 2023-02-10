@@ -128,9 +128,12 @@ void RenderGraphAllocator::update_resource_info() {
 		image_alloc.vk_image_type = VK_IMAGE_TYPE_2D;
 		for (const auto &ref : image_info.references)
 			image_alloc.vk_image_usages |= UsageGetCreationUsages(ref.p_input->GetUsage());
+		if (image_info.p_last_frame_info)
+			for (const auto &ref : image_info.p_last_frame_info->references)
+				image_alloc.vk_image_usages |= UsageGetCreationUsages(ref.p_input->GetUsage());
 	}
 
-	// Update Image Persistence and VkImageType
+	// Update VkImageType
 	for (uint32_t image_view_id = 0; image_view_id < m_p_resolved->GetIntImageViewCount(); ++image_view_id) {
 		const auto &image_view_info = m_p_resolved->GetIntImageViewInfo(image_view_id);
 		image_view_info.image->Visit([this](const auto *image) {
@@ -141,6 +144,26 @@ void RenderGraphAllocator::update_resource_info() {
 				assert(false);
 		});
 	}
+
+	// Check double_buffering
+	const auto check_double_buffering = [this](const RenderGraphResolver::IntResourceInfo &int_res_info) -> bool {
+		if (int_res_info.p_last_frame_info == nullptr || int_res_info.validation_references.empty())
+			return false;
+
+		const auto last_frame_references = int_res_info.p_last_frame_info->references;
+		for (uint32_t i = last_frame_references.size() - 1; ~i; --i) {
+			for (const auto &validation_ref : int_res_info.validation_references)
+				if (!m_p_resolved->IsPassPrior(last_frame_references[i].pass, validation_ref.pass))
+					return true;
+		}
+		return false;
+	};
+
+	for (auto &buffer_alloc : m_allocated_buffers)
+		buffer_alloc.double_buffering = check_double_buffering(buffer_alloc.GetBufferInfo());
+
+	for (auto &image_alloc : m_allocated_images)
+		image_alloc.double_buffering = check_double_buffering(image_alloc.GetImageInfo());
 }
 
 void RenderGraphAllocator::create_vk_resources() {
@@ -386,7 +409,7 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 			const auto &image_info = image_alloc.GetImageInfo();
 			if (image_info.is_transient)
 				lazy_memory.push(&image_alloc); // If the image is Transient and LAZY_ALLOCATION is supported
-			else if (image_info.last_frame)
+			else if (image_info.p_last_frame_info)
 				persistent_device_memory.push(&image_alloc);
 			else
 				device_memory.push(&image_alloc);
@@ -395,7 +418,7 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 			const auto &buffer_info = buffer_alloc.GetBufferInfo();
 			if (false) // TODO: Mapped Buffer Condition
 				mapped_memory.push(&buffer_alloc);
-			else if (buffer_info.last_frame)
+			else if (buffer_info.p_last_frame_info)
 				persistent_device_memory.push(&buffer_alloc);
 			else
 				device_memory.push(&buffer_alloc);
@@ -495,7 +518,7 @@ void RenderGraphAllocator::Allocate(const myvk::Ptr<myvk::Device> &device, const
 		          << image_alloc.vk_memory_requirements.size << ", " << image_alloc.vk_memory_requirements.alignment
 		          << ", " << image_alloc.vk_memory_requirements.memoryTypeBits << "}"
 		          << " transient = " << image_info.is_transient << " offset = " << image_alloc.memory_offset
-		          << std::endl;
+		          << " double_buffering = " << image_alloc.double_buffering << std::endl;
 	}
 	printf("\n");
 
@@ -507,7 +530,8 @@ void RenderGraphAllocator::Allocate(const myvk::Ptr<myvk::Device> &device, const
 		          << " {size, alignment, flag} = {" << buffer_alloc.vk_memory_requirements.size << ", "
 		          << buffer_alloc.vk_memory_requirements.alignment << ", "
 		          << buffer_alloc.vk_memory_requirements.memoryTypeBits << "}"
-		          << " offset = " << buffer_alloc.memory_offset << std::endl;
+		          << " offset = " << buffer_alloc.memory_offset
+		          << " double_buffering = " << buffer_alloc.double_buffering << std::endl;
 	}
 	printf("\n");
 }

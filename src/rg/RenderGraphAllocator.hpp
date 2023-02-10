@@ -129,6 +129,10 @@ public:
 		return image->GetPointedResource()->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
 	}
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const LastFrameImage *image) const {
+		return image->GetCurrentResource()->Visit(
+		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
+	}
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageBase *image) const {
 		return image->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
@@ -147,6 +151,11 @@ public:
 		return image->GetPointedResource()->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
 	}
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const LastFrameImage *image) const {
+		// TODO: Should have its own image
+		return image->GetCurrentResource()->Visit(
+		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
+	}
 	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageBase *image) const {
 		return image->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
@@ -160,6 +169,11 @@ public:
 	}
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferAlias *buffer) const {
 		return buffer->GetPointedResource()->Visit(
+		    [this](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer); });
+	}
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const LastFrameBuffer *buffer) const {
+		// TODO: Should have its own buffer
+		return buffer->GetCurrentResource()->Visit(
 		    [this](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer); });
 	}
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferBase *buffer) const {

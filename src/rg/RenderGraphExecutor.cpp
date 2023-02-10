@@ -28,20 +28,206 @@ struct RenderGraphExecutor::SubpassDependencies {
 	std::vector<AttachmentDependency> attachment_dependencies;
 };
 
-void RenderGraphExecutor::reset_pass_executor_vector(const RenderGraphScheduler &scheduled) {
+void RenderGraphExecutor::reset_pass_executor_vector() {
 	m_pass_executors.clear();
-	m_pass_executors.resize(scheduled.GetPassCount());
-	for (uint32_t pass_id = 0; pass_id < scheduled.GetPassCount(); ++pass_id)
-		m_pass_executors[pass_id].p_info = &scheduled.GetPassInfo(pass_id);
+	m_pass_executors.resize(m_p_scheduled->GetPassCount());
+	for (uint32_t pass_id = 0; pass_id < m_p_scheduled->GetPassCount(); ++pass_id)
+		m_pass_executors[pass_id].p_info = &m_p_scheduled->GetPassInfo(pass_id);
 
 	m_post_barrier_info.clear();
 }
 
-std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extract_barriers_and_subpass_dependencies(
-    const RenderGraphResolver &resolved, const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated) {
-	std::vector<SubpassDependencies> sub_deps(scheduled.GetPassCount());
-	for (uint32_t i = 0; i < scheduled.GetPassCount(); ++i) {
-		const auto &pass_info = scheduled.GetPassInfo(i);
+void RenderGraphExecutor::_process_validation_dependencies(const RenderGraphScheduler::PassDependency &dependency,
+                                                           std::vector<SubpassDependencies> *p_sub_deps) {
+	assert(dependency.to.size() == 1 && dependency.from.front().pass == nullptr);
+	const auto &ref = dependency.to.front();
+	const auto *pass = ref.pass;
+	uint32_t pass_id = m_p_scheduled->GetPassID(pass), subpass_id = m_p_scheduled->GetSubpassID(pass);
+	const auto &pass_info = m_p_scheduled->GetPassInfo(pass_id);
+	auto &pass_exec = m_pass_executors[pass_id];
+	const auto *resource = dependency.resource;
+
+	bool is_to_attachment = UsageIsAttachment(dependency.to.front().p_input->GetUsage());
+
+	if (is_to_attachment) {
+		// For RenderPass, insert SubpassDependency
+		auto &sub_dep = (*p_sub_deps)[pass_id];
+		resource->Visit([this, pass, &ref, &sub_dep, &pass_info](const auto *resource) {
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
+				if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
+					uint32_t int_res_id = m_p_resolved->GetIntResourceID(resource);
+					uint32_t att_id = pass_info.p_render_pass_info->attachment_id_map.at(resource);
+
+					for (uint32_t dep_int_res_id = 0; dep_int_res_id < m_p_resolved->GetIntResourceCount();
+					     ++dep_int_res_id) {
+						// If resource #i and current is aliased, and #i is used prior than current,
+						// then make dependencies
+						if (m_p_allocated->IsIntResourceAliased(dep_int_res_id, int_res_id) &&
+						    m_p_resolved->IsIntResourcePrior(dep_int_res_id, int_res_id)) {
+							sub_dep.attachment_dependencies[att_id].may_alias = true;
+
+							// Insert Non-by-region SubpassDependency
+							for (const auto &last_ref :
+							     m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
+								assert(m_p_resolved->IsPassPrior(last_ref.pass, pass));
+								sub_dep.validation_subpass_dependencies.push_back(
+								    {resource, {last_ref.p_input, last_ref.pass}, ref});
+							}
+						}
+					}
+				} else {
+					// TODO: External Image
+				}
+			} else
+				assert(false);
+		});
+	} else {
+		// Not RenderPass, then just insert a barrier
+		auto &barrier_info = pass_exec.prior_barrier_info;
+		resource->Visit([this, &barrier_info, &ref](const auto *resource) {
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
+				barrier_info.image_barriers.emplace_back();
+				auto &barrier = barrier_info.image_barriers.back();
+				barrier.image = resource;
+				barrier.new_layout = UsageGetImageLayout(ref.p_input->GetUsage());
+				barrier.dst_access_mask = UsageGetAccessFlags(ref.p_input->GetUsage());
+				barrier.dst_stage_mask = ref.p_input->GetUsagePipelineStages();
+
+				if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
+					uint32_t int_res_id = m_p_resolved->GetIntResourceID(resource);
+					for (uint32_t dep_int_res_id = 0; dep_int_res_id < m_p_resolved->GetIntResourceCount();
+					     ++dep_int_res_id) {
+						// If resource #i and current is aliased, and #i is used prior than current,
+						// then make dependencies
+						if (m_p_allocated->IsIntResourceAliased(dep_int_res_id, int_res_id) &&
+						    m_p_resolved->IsIntResourcePrior(dep_int_res_id, int_res_id)) {
+							for (const auto &last_ref :
+							     m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
+								barrier.src_stage_mask |= last_ref.p_input->GetUsagePipelineStages();
+							}
+						}
+					}
+				} else {
+					// TODO: External Image
+				}
+			}
+		});
+	}
+}
+
+void RenderGraphExecutor::_process_current_frame_dependencies(const RenderGraphScheduler::PassDependency &dep,
+                                                              std::vector<SubpassDependencies> *p_sub_deps) {
+	bool is_from_attachment = UsageIsAttachment(dep.from.front().p_input->GetUsage());
+	bool is_to_attachment = UsageIsAttachment(dep.to.front().p_input->GetUsage());
+
+	auto &sub_deps = *p_sub_deps;
+
+	assert(!is_from_attachment || dep.from.size() == 1);
+	assert(!is_to_attachment || dep.to.size() == 1);
+
+	if (!is_from_attachment && !is_to_attachment) {
+		// Not Attachment-related, then Add a Vulkan Barrier
+		BarrierInfo &barrier_info =
+		    dep.to.front().pass ? m_pass_executors[m_p_scheduled->GetPassID(dep.to.front().pass)].prior_barrier_info
+		                        : m_post_barrier_info;
+
+		dep.resource->Visit([this, &dep, &barrier_info](const auto *resource) {
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kBuffer) {
+				barrier_info.buffer_barriers.emplace_back();
+				BufferMemoryBarrier &barrier = barrier_info.buffer_barriers.back();
+
+				barrier.buffer = resource;
+
+				for (auto &link : dep.from) {
+					barrier.src_stage_mask |= link.p_input->GetUsagePipelineStages();
+					barrier.src_access_mask |= UsageGetWriteAccessFlags(link.p_input->GetUsage());
+				}
+				for (auto &link : dep.to) {
+					barrier.dst_stage_mask |= link.p_input->GetUsagePipelineStages();
+					barrier.dst_access_mask |= UsageGetAccessFlags(link.p_input->GetUsage());
+				}
+			} else {
+				barrier_info.image_barriers.emplace_back();
+				ImageMemoryBarrier &barrier = barrier_info.image_barriers.back();
+
+				barrier.image = resource;
+				for (auto &link : dep.from) {
+					barrier.src_stage_mask |= link.p_input->GetUsagePipelineStages();
+					barrier.src_access_mask |= UsageGetWriteAccessFlags(link.p_input->GetUsage());
+					assert(barrier.old_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
+					       barrier.old_layout == UsageGetImageLayout(link.p_input->GetUsage()));
+					barrier.old_layout = UsageGetImageLayout(link.p_input->GetUsage());
+				}
+				for (auto &link : dep.to) {
+					barrier.dst_stage_mask |= link.p_input->GetUsagePipelineStages();
+					barrier.dst_access_mask |= UsageGetAccessFlags(link.p_input->GetUsage());
+					assert(barrier.new_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
+					       barrier.new_layout == UsageGetImageLayout(link.p_input->GetUsage()));
+					barrier.new_layout = UsageGetImageLayout(link.p_input->GetUsage());
+				}
+			}
+		});
+	} else {
+		// Add Extra Vulkan Subpass Dependencies (External) if a Dependency is Attachment-related
+		assert(dep.resource->GetType() == ResourceType::kImage);
+		auto *image = static_cast<const ImageBase *>(dep.resource);
+
+		if (is_from_attachment && is_to_attachment) {
+			const auto &link_from = dep.from.front(), &link_to = dep.to.front();
+			VkImageLayout trans_layout = UsageGetImageLayout(link_from.p_input->GetUsage());
+
+			{
+				uint32_t from_pass_id = m_p_scheduled->GetPassID(link_from.pass);
+				uint32_t attachment_id =
+				    m_p_scheduled->GetPassInfo(from_pass_id).p_render_pass_info->attachment_id_map.at(image);
+				sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(trans_layout);
+			}
+			{
+				uint32_t to_pass_id = m_p_scheduled->GetPassID(link_to.pass);
+				sub_deps[to_pass_id].extra_subpass_dependencies.push_back(
+				    {dep.resource, {link_from.p_input, link_from.pass}, {link_to.p_input, link_to.pass}});
+
+				uint32_t attachment_id =
+				    m_p_scheduled->GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
+				sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(trans_layout);
+			}
+		} else if (is_from_attachment) {
+			const auto &link_from = dep.from.front();
+
+			uint32_t from_pass_id = m_p_scheduled->GetPassID(link_from.pass);
+			uint32_t attachment_id =
+			    m_p_scheduled->GetPassInfo(from_pass_id).p_render_pass_info->attachment_id_map.at(image);
+
+			for (const auto &link_to : dep.to) {
+				if (link_to.p_input)
+					sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(
+					    UsageGetImageLayout(link_to.p_input->GetUsage()));
+				sub_deps[from_pass_id].extra_subpass_dependencies.push_back(
+				    {dep.resource, {link_from.p_input, link_from.pass}, {link_to.p_input, link_to.pass}});
+			}
+		} else {
+			assert(is_to_attachment);
+			const auto &link_to = dep.to.front();
+
+			uint32_t to_pass_id = m_p_scheduled->GetPassID(link_to.pass);
+			uint32_t attachment_id =
+			    m_p_scheduled->GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
+
+			for (const auto &link_from : dep.from) {
+				if (link_from.p_input)
+					sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(
+					    UsageGetImageLayout(link_from.p_input->GetUsage()));
+				sub_deps[to_pass_id].extra_subpass_dependencies.push_back(
+				    {dep.resource, {link_from.p_input, link_from.pass}, {link_to.p_input, link_to.pass}});
+			}
+		}
+	}
+}
+
+std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extract_barriers_and_subpass_dependencies() {
+	std::vector<SubpassDependencies> sub_deps(m_p_scheduled->GetPassCount());
+	for (uint32_t i = 0; i < m_p_scheduled->GetPassCount(); ++i) {
+		const auto &pass_info = m_p_scheduled->GetPassInfo(i);
 		if (pass_info.p_render_pass_info == nullptr)
 			continue;
 		sub_deps[i].attachment_dependencies.resize(pass_info.p_render_pass_info->attachment_id_map.size());
@@ -49,217 +235,12 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 	}
 
 	// Extract from Pass Dependencies
-	for (const auto &dep : scheduled.GetPassDependencies()) {
-		bool is_from_attachment = dep.from.front().p_input && UsageIsAttachment(dep.from.front().p_input->GetUsage());
-		bool is_to_attachment = dep.to.front().p_input && UsageIsAttachment(dep.to.front().p_input->GetUsage());
-
-		assert(!is_from_attachment || dep.from.size() == 1);
-		assert(!is_to_attachment || dep.to.size() == 1);
-
-		if (!is_from_attachment && !is_to_attachment) {
-			// Not Attachment-related, then Add a Vulkan Barrier
-			BarrierInfo &barrier_info =
-			    dep.to.front().pass ? m_pass_executors[scheduled.GetPassID(dep.to.front().pass)].prior_barrier_info
-			                        : m_post_barrier_info;
-
-			dep.resource->Visit([this, &dep, &barrier_info](const auto *resource) {
-				if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kBuffer) {
-					barrier_info.buffer_barriers.emplace_back();
-					BufferMemoryBarrier &barrier = barrier_info.buffer_barriers.back();
-
-					barrier.buffer = resource;
-
-					for (auto &link : dep.from) {
-						if (link.p_input == nullptr) {
-							assert(false);
-							continue;
-						}
-						barrier.src_stage_mask |= link.p_input->GetUsagePipelineStages();
-						barrier.src_access_mask |= UsageGetWriteAccessFlags(link.p_input->GetUsage());
-					}
-					for (auto &link : dep.to) {
-						if (link.p_input == nullptr) {
-							assert(dep.to.size() == 1);
-							// barrier.dstStageMask |= m_
-							// TODO: Set DST Stage
-							continue;
-						}
-						barrier.dst_stage_mask |= link.p_input->GetUsagePipelineStages();
-						barrier.dst_access_mask |= UsageGetAccessFlags(link.p_input->GetUsage());
-					}
-				} else {
-					barrier_info.image_barriers.emplace_back();
-					ImageMemoryBarrier &barrier = barrier_info.image_barriers.back();
-
-					barrier.image = resource;
-					for (auto &link : dep.from) {
-						if (link.p_input == nullptr) {
-							assert(false);
-							continue;
-						}
-						barrier.src_stage_mask |= link.p_input->GetUsagePipelineStages();
-						barrier.src_access_mask |= UsageGetWriteAccessFlags(link.p_input->GetUsage());
-						assert(barrier.old_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
-						       barrier.old_layout == UsageGetImageLayout(link.p_input->GetUsage()));
-						barrier.old_layout = UsageGetImageLayout(link.p_input->GetUsage());
-					}
-					for (auto &link : dep.to) {
-						if (link.p_input == nullptr) {
-							assert(dep.to.size() == 1);
-							// barrier.dstStageMask |= m_
-							// TODO: Set DST Stage and Layout
-							continue;
-						}
-						barrier.dst_stage_mask |= link.p_input->GetUsagePipelineStages();
-						barrier.dst_access_mask |= UsageGetAccessFlags(link.p_input->GetUsage());
-						assert(barrier.new_layout == VK_IMAGE_LAYOUT_UNDEFINED ||
-						       barrier.new_layout == UsageGetImageLayout(link.p_input->GetUsage()));
-						barrier.new_layout = UsageGetImageLayout(link.p_input->GetUsage());
-					}
-				}
-			});
-
-		} else {
-			// Add Extra Vulkan Subpass Dependencies (External) if a Dependency is Attachment-related
-			assert(dep.resource->GetType() == ResourceType::kImage);
-			auto *image = static_cast<const ImageBase *>(dep.resource);
-
-			if (is_from_attachment && is_to_attachment) {
-				const auto &link_from = dep.from.front(), &link_to = dep.to.front();
-				assert(link_from.pass || link_to.pass);
-				VkImageLayout trans_layout = UsageGetImageLayout(link_from.p_input->GetUsage());
-				if (link_from.pass) {
-					uint32_t from_pass_id = scheduled.GetPassID(link_from.pass);
-					uint32_t attachment_id =
-					    scheduled.GetPassInfo(from_pass_id).p_render_pass_info->attachment_id_map.at(image);
-					sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(trans_layout);
-				}
-				if (link_to.pass) {
-					uint32_t to_pass_id = scheduled.GetPassID(link_to.pass);
-					sub_deps[to_pass_id].extra_subpass_dependencies.push_back(
-					    {dep.resource, {link_from.p_input, link_from.pass}, {link_to.p_input, link_to.pass}});
-
-					uint32_t attachment_id =
-					    scheduled.GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
-					sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(trans_layout);
-				}
-			} else if (is_from_attachment) {
-				const auto &link_from = dep.from.front();
-				if (link_from.pass) {
-					uint32_t from_pass_id = scheduled.GetPassID(link_from.pass);
-					uint32_t attachment_id =
-					    scheduled.GetPassInfo(from_pass_id).p_render_pass_info->attachment_id_map.at(image);
-
-					for (const auto &link_to : dep.to) {
-						if (link_to.p_input)
-							sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(
-							    UsageGetImageLayout(link_to.p_input->GetUsage()));
-						sub_deps[from_pass_id].extra_subpass_dependencies.push_back(
-						    {dep.resource, {link_from.p_input, link_from.pass}, {link_to.p_input, link_to.pass}});
-					}
-				}
-			} else {
-				assert(is_to_attachment);
-				const auto &link_to = dep.to.front();
-				if (link_to.pass) {
-					uint32_t to_pass_id = scheduled.GetPassID(link_to.pass);
-					uint32_t attachment_id =
-					    scheduled.GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
-
-					for (const auto &link_from : dep.from) {
-						if (link_from.p_input)
-							sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(
-							    UsageGetImageLayout(link_from.p_input->GetUsage()));
-						sub_deps[to_pass_id].extra_subpass_dependencies.push_back(
-						    {dep.resource, {link_from.p_input, link_from.pass}, {link_to.p_input, link_to.pass}});
-					}
-				}
-			}
-		}
-	}
-
-	// Extract from Resource Validation
-	// TODO: Src Stages
-	for (auto &pass_exec : m_pass_executors) {
-		const auto &pass_info = *pass_exec.p_info;
-
-		for (const auto &subpass_info : pass_info.subpasses) {
-			const PassBase *pass = subpass_info.pass;
-			uint32_t pass_id = scheduled.GetPassID(pass);
-			// uint32_t subpass_id = scheduled.GetSubpassID(subpass_info.pass);
-
-			if (pass_info.p_render_pass_info) {
-				// For RenderPass, insert SubpassDependency
-				auto &sub_dep = sub_deps[pass_id];
-				for (const auto &res_validate : subpass_info.validate_resources) {
-					res_validate.resource->Visit(
-					    [&resolved, &allocated, pass, &sub_dep, &res_validate, &pass_info](const auto *resource) {
-						    if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
-							    if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
-								    uint32_t int_res_id = resolved.GetIntResourceID(resource);
-								    uint32_t att_id = pass_info.p_render_pass_info->attachment_id_map.at(resource);
-
-								    for (uint32_t dep_int_res_id = 0; dep_int_res_id < resolved.GetIntResourceCount();
-								         ++dep_int_res_id) {
-									    // If resource #i and current is aliased, and #i is used prior than current,
-									    // then make dependencies
-									    if (allocated.IsIntResourceAliased(dep_int_res_id, int_res_id) &&
-									        resolved.IsIntResourcePrior(dep_int_res_id, int_res_id)) {
-										    sub_dep.attachment_dependencies[att_id].may_alias = true;
-
-										    // Insert Non-by-region SubpassDependency
-										    for (const auto &last_ref :
-										         resolved.GetIntResourceInfo(dep_int_res_id).last_references) {
-											    assert(resolved.IsPassPrior(last_ref.pass, pass));
-											    sub_dep.validation_subpass_dependencies.push_back(
-											        {resource,
-											         {last_ref.p_input, last_ref.pass},
-											         {res_validate.p_input, pass}});
-										    }
-									    }
-								    }
-							    } else {
-								    // TODO: External Image
-							    }
-						    } else
-							    assert(false);
-					    });
-				}
-			} else {
-				// Not RenderPass, then just insert a barrier
-				auto &barrier_info = pass_exec.prior_barrier_info;
-				for (const auto &res_validate : subpass_info.validate_resources) {
-					res_validate.resource->Visit(
-					    [&resolved, &allocated, &barrier_info, &res_validate](const auto *resource) {
-						    if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
-							    barrier_info.image_barriers.emplace_back();
-							    auto &barrier = barrier_info.image_barriers.back();
-							    barrier.image = resource;
-							    barrier.new_layout = UsageGetImageLayout(res_validate.p_input->GetUsage());
-							    barrier.dst_access_mask = UsageGetAccessFlags(res_validate.p_input->GetUsage());
-							    barrier.dst_stage_mask = res_validate.p_input->GetUsagePipelineStages();
-
-							    if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
-								    uint32_t int_res_id = resolved.GetIntResourceID(resource);
-								    for (uint32_t dep_int_res_id = 0; dep_int_res_id < resolved.GetIntResourceCount();
-								         ++dep_int_res_id) {
-									    // If resource #i and current is aliased, and #i is used prior than current,
-									    // then make dependencies
-									    if (allocated.IsIntResourceAliased(dep_int_res_id, int_res_id) &&
-									        resolved.IsIntResourcePrior(dep_int_res_id, int_res_id)) {
-										    for (const auto &last_ref :
-										         resolved.GetIntResourceInfo(dep_int_res_id).last_references) {
-											    barrier.src_stage_mask |= last_ref.p_input->GetUsagePipelineStages();
-										    }
-									    }
-								    }
-							    } else {
-								    // TODO: External Image
-							    }
-						    }
-					    });
-				}
-			}
+	for (const auto &dep : m_p_scheduled->GetPassDependencies()) {
+		if (dep.type == RenderGraphScheduler::DependencyType::kValidation)
+			_process_validation_dependencies(dep, &sub_deps);
+		else if (dep.type == RenderGraphScheduler::DependencyType::kCurrentFrame)
+			_process_current_frame_dependencies(dep, &sub_deps);
+		else if (dep.type == RenderGraphScheduler::DependencyType::kLastFrame) {
 		}
 	}
 
@@ -282,11 +263,9 @@ struct SubpassDescription {
 	std::optional<VkAttachmentReference2> depth_attachment;
 };
 
-void RenderGraphExecutor::create_render_passes_and_framebuffers(const myvk::Ptr<myvk::Device> &device,
-                                                                std::vector<SubpassDependencies> &&subpass_dependencies,
-                                                                const RenderGraphScheduler &scheduled,
-                                                                const RenderGraphAllocator &allocated) {
-	for (uint32_t pass_id = 0; pass_id < scheduled.GetPassCount(); ++pass_id) {
+void RenderGraphExecutor::create_render_passes_and_framebuffers(
+    std::vector<SubpassDependencies> &&subpass_dependencies) {
+	for (uint32_t pass_id = 0; pass_id < m_p_scheduled->GetPassCount(); ++pass_id) {
 		auto &pass_exec = m_pass_executors[pass_id];
 		const auto &pass_info = *pass_exec.p_info;
 		const auto &pass_sub_deps = subpass_dependencies[pass_id];
@@ -297,14 +276,14 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(const myvk::Ptr<
 		// Subpass Dependencies
 		std::map<SubpassDependencyKey, VkMemoryBarrier2> subpass_dependency_map;
 
-		const auto merge_subpass_dependencies = [&scheduled, pass_id, &subpass_dependency_map](
+		const auto merge_subpass_dependencies = [this, pass_id, &subpass_dependency_map](
 		                                            const RenderGraphScheduler::SubpassDependency &sub_dep,
 		                                            bool is_by_region) {
-			uint32_t src_subpass = sub_dep.from.pass && scheduled.GetPassID(sub_dep.from.pass) == pass_id
-			                           ? scheduled.GetSubpassID(sub_dep.from.pass)
+			uint32_t src_subpass = sub_dep.from.pass && m_p_scheduled->GetPassID(sub_dep.from.pass) == pass_id
+			                           ? m_p_scheduled->GetSubpassID(sub_dep.from.pass)
 			                           : VK_SUBPASS_EXTERNAL;
-			uint32_t dst_subpass = sub_dep.to.pass && scheduled.GetPassID(sub_dep.to.pass) == pass_id
-			                           ? scheduled.GetSubpassID(sub_dep.to.pass)
+			uint32_t dst_subpass = sub_dep.to.pass && m_p_scheduled->GetPassID(sub_dep.to.pass) == pass_id
+			                           ? m_p_scheduled->GetSubpassID(sub_dep.to.pass)
 			                           : VK_SUBPASS_EXTERNAL;
 
 			SubpassDependencyKey key{src_subpass, dst_subpass, is_by_region};
@@ -462,7 +441,9 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(const myvk::Ptr<
 				if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kExternal ||
 				              ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kManaged)
 					return image->GetLoadOp();
-				else {
+				else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kLastFrameImage) {
+					return VK_ATTACHMENT_LOAD_OP_LOAD;
+				} else {
 					assert(false);
 					return VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 				}
@@ -508,7 +489,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(const myvk::Ptr<
 		create_info.subpassCount = vk_subpass_descriptions.size();
 		create_info.pSubpasses = vk_subpass_descriptions.data();
 
-		pass_exec.render_pass_info.myvk_render_pass = myvk::RenderPass::Create(device, create_info);
+		pass_exec.render_pass_info.myvk_render_pass = myvk::RenderPass::Create(m_device_ptr, create_info);
 
 		// Create Framebuffer
 		RenderGraphScheduler::RenderPassArea area = pass_info.p_render_pass_info->area;
@@ -523,7 +504,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(const myvk::Ptr<
 
 			attachment_image_formats.push_back(att_info.image->GetFormat());
 
-			image_info.usage = allocated.GetVkImage(att_info.image)->GetUsage();
+			image_info.usage = m_p_allocated->GetVkImage(att_info.image)->GetUsage();
 			image_info.width = area.extent.width;
 			image_info.height = area.extent.height;
 			image_info.layerCount = area.layers;
@@ -537,14 +518,18 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(const myvk::Ptr<
 
 void RenderGraphExecutor::Prepare(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved,
                                   const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated) {
-	reset_pass_executor_vector(scheduled);
-	auto subpass_dependencies = extract_barriers_and_subpass_dependencies(resolved, scheduled, allocated);
-	create_render_passes_and_framebuffers(device, std::move(subpass_dependencies), scheduled, allocated);
+	m_device_ptr = device;
+	m_p_resolved = &resolved;
+	m_p_scheduled = &scheduled;
+	m_p_allocated = &allocated;
+
+	reset_pass_executor_vector();
+	auto subpass_dependencies = extract_barriers_and_subpass_dependencies();
+	create_render_passes_and_framebuffers(std::move(subpass_dependencies));
 }
 
-void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer,
-                                     const RenderGraphAllocator &allocated) const {
-	const auto cmd_pipeline_barriers = [&command_buffer, &allocated](const BarrierInfo &barrier_info) {
+void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
+	const auto cmd_pipeline_barriers = [&command_buffer, this](const BarrierInfo &barrier_info) {
 		if (barrier_info.empty())
 			return;
 		std::vector<VkBufferMemoryBarrier2> buffer_barriers;
@@ -562,7 +547,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = allocated.GetVkBuffer(info.buffer);
+			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = m_p_allocated->GetVkBuffer(info.buffer);
 			barrier.buffer = myvk_buffer->GetHandle();
 			barrier.size = myvk_buffer->GetSize();
 			barrier.offset = 0u;
@@ -580,7 +565,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::ImageView> &myvk_image_view = allocated.GetVkImageView(info.image);
+			const myvk::Ptr<myvk::ImageView> &myvk_image_view = m_p_allocated->GetVkImageView(info.image);
 			barrier.image = myvk_image_view->GetImagePtr()->GetHandle();
 			barrier.subresourceRange = myvk_image_view->GetSubresourceRange();
 		}
@@ -606,11 +591,16 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			attachment_image_views.reserve(attachment_infos.size());
 
 			for (const auto &att_info : attachment_infos) {
-				att_info.image->Visit([&allocated, &clear_values, &attachment_image_views](const auto *image) {
+				att_info.image->Visit([this, &clear_values, &attachment_image_views](const auto *image) {
 					if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage ||
 					              ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kExternalImageBase) {
 						clear_values.push_back(image->GetClearValue());
-						attachment_image_views.push_back(allocated.GetVkImageView(image)->GetHandle());
+						attachment_image_views.push_back(m_p_allocated->GetVkImageView(image)->GetHandle());
+					} else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
+					                     ResourceClass::kLastFrameImage) {
+						clear_values.emplace_back();
+						attachment_image_views.push_back(m_p_allocated->GetVkImageView(image->GetCurrentResource())
+						                                     ->GetHandle()); // TODO: just use image
 					} else {
 						assert(false);
 					}

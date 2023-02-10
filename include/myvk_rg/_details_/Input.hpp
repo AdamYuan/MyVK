@@ -18,6 +18,9 @@ private:
 	template <typename Type, typename AliasType>
 	inline Type *make_alias_output(const PoolKey &output_key, Type *resource) {
 		using Pool = Pool<Derived, AliasType>;
+		if (!resource || resource->GetState() == ResourceState::kLastFrame)
+			return nullptr;
+
 		AliasType *alias = Pool ::template Get<0, AliasType>(output_key);
 		auto [producer_pass, producer_input] =
 		    resource->Visit([](auto *resource) -> std::tuple<const PassBase *, const Input *> {
@@ -106,6 +109,7 @@ private:
 
 	template <typename Type, typename... Args>
 	inline Input *add_input(const PoolKey &input_key, Type *resource, Usage usage, Args &&...input_args) {
+		assert(resource);
 		auto ret = _InputPool::template CreateAndInitializeForce<0, Input>(input_key, resource, usage,
 		                                                                   std::forward<Args>(input_args)...);
 		assert(ret);

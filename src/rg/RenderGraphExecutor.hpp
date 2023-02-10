@@ -13,6 +13,11 @@ namespace myvk_rg::_details_ {
 
 class RenderGraphExecutor {
 private:
+	myvk::Ptr<myvk::Device> m_device_ptr;
+	const RenderGraphResolver *m_p_resolved;
+	const RenderGraphScheduler *m_p_scheduled;
+	const RenderGraphAllocator *m_p_allocated;
+
 	struct MemoryBarrier {
 		VkPipelineStageFlags2 src_stage_mask;
 		VkAccessFlags2 src_access_mask;
@@ -60,20 +65,19 @@ private:
 
 	struct SubpassDependencies;
 
-	void reset_pass_executor_vector(const RenderGraphScheduler &scheduled);
-	std::vector<SubpassDependencies> extract_barriers_and_subpass_dependencies(const RenderGraphResolver &resolved,
-	                                                                           const RenderGraphScheduler &scheduled,
-	                                                                           const RenderGraphAllocator &allocated);
-	void create_render_passes_and_framebuffers(const myvk::Ptr<myvk::Device> &device,
-	                                           std::vector<SubpassDependencies> &&subpass_dependencies,
-	                                           const RenderGraphScheduler &scheduled,
-	                                           const RenderGraphAllocator &allocated);
+	void reset_pass_executor_vector();
+	void _process_validation_dependencies(const RenderGraphScheduler::PassDependency &dependency,
+	                                      std::vector<SubpassDependencies> *p_sub_deps);
+	void _process_current_frame_dependencies(const RenderGraphScheduler::PassDependency &dependency,
+	                                         std::vector<SubpassDependencies> *p_sub_deps);
+	std::vector<SubpassDependencies> extract_barriers_and_subpass_dependencies();
+	void create_render_passes_and_framebuffers(std::vector<SubpassDependencies> &&subpass_dependencies);
 
 public:
 	void Prepare(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved,
 	             const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated);
 
-	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const RenderGraphAllocator &allocated) const;
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
 };
 
 } // namespace myvk_rg::_details_

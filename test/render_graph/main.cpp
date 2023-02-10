@@ -107,9 +107,13 @@ private:
 		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"}, VK_FORMAT_R8G8B8A8_UNORM);
 		auto normal = CreateResource<myvk_rg::ManagedImage>({"normal"}, VK_FORMAT_R8G8B8A8_SNORM);
 		auto bright = CreateResource<myvk_rg::ManagedImage>({"bright"}, VK_FORMAT_B10G11R11_UFLOAT_PACK32);
+		auto last_frame_albedo = MakeLastFrameImage({"last_frame_albedo"}, albedo);
+
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"albedo"}, albedo);
 		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentW>({"normal"}, normal);
 		AddColorAttachmentInput<2, myvk_rg::Usage::kColorAttachmentW>({"bright"}, bright);
+
+		AddInputAttachmentInput<0, 0>({"last_frame_albedo"}, last_frame_albedo);
 		SetDepthAttachmentInput<myvk_rg::Usage::kDepthAttachmentRW>({"depth"}, depth);
 		AddInput<myvk_rg::Usage::kDrawIndirectBuffer>({"draw_list"}, draw_list);
 	}

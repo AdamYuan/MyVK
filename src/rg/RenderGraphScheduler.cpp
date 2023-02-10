@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <iostream>
 
+// TODO: Support LastFrameImage (attachments)
+
 namespace myvk_rg::_details_ {
 
 struct RenderGraphScheduler::RenderPassMergeInfo {
@@ -65,6 +67,17 @@ RenderGraphScheduler::_compute_pass_merge_info(const RenderGraphResolver &resolv
 					desired_area = {{std::max(1u, extent.width >> range.baseMipLevel),
 					                 std::max(1u, extent.height >> range.baseMipLevel)},
 					                range.layerCount};
+				} else if constexpr (ResourceVisitorTrait<decltype(resource)>::kClass ==
+				                     ResourceClass::kLastFrameImage) {
+					resource->GetCurrentResource()->Visit([&desired_area](const auto *image) {
+						if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage) {
+							const SubImageSize &size = image->GetSize();
+							desired_area = {{std::max(1u, size.GetExtent().width >> size.GetBaseMipLevel()),
+							                 std::max(1u, size.GetExtent().height >> size.GetBaseMipLevel())},
+							                size.GetArrayLayers()};
+						} else
+							assert(false);
+					});
 				} else
 					assert(false);
 				if (area.layers == 0)
@@ -176,25 +189,32 @@ void RenderGraphScheduler::extract_grouped_passes(const RenderGraphResolver &res
 	}
 }
 
-void RenderGraphScheduler::extract_dependencies_and_resource_validations(const RenderGraphResolver &resolved) {
+inline constexpr RenderGraphScheduler::DependencyType
+DependencyTypeFromEdgeType(RenderGraphResolver::EdgeType edge_type) {
+	switch (edge_type) {
+	case RenderGraphResolver::EdgeType::kDependency:
+		return RenderGraphScheduler::DependencyType::kCurrentFrame;
+	case RenderGraphResolver::EdgeType::kLastFrame:
+		return RenderGraphScheduler::DependencyType::kLastFrame;
+	case RenderGraphResolver::EdgeType::kValidation:
+		return RenderGraphScheduler::DependencyType::kValidation;
+	}
+	return RenderGraphScheduler::DependencyType::kCurrentFrame;
+}
+void RenderGraphScheduler::extract_dependencies(const RenderGraphResolver &resolved) {
 	std::vector<std::unordered_map<const ResourceBase *, PassDependency *>> input_dep_maps(m_passes.size()),
 	    output_dep_maps(m_passes.size());
-	std::unordered_map<const ResourceBase *, PassDependency *> src_output_dep_map, dst_input_dep_map;
+	std::unordered_map<const ResourceBase *, PassDependency *> src_output_dep_map;
 
-	const auto maintain_dependency = [this, &input_dep_maps, &output_dep_maps, &src_output_dep_map,
-	                                  &dst_input_dep_map](const ResourceBase *resource, const DependencyLink &link_from,
-	                                                      const DependencyLink &link_to) {
-		if (link_from.p_input == nullptr) {
-			// Mark as resource validation
-			assert(link_to.pass && link_to.p_input);
-			if (link_to.pass && link_to.p_input)
-				m_passes[GetPassID(link_to.pass)].subpasses[GetSubpassID(link_to.pass)].validate_resources.push_back(
-				    {resource, link_to.p_input});
-			return;
-		}
+	const auto maintain_dependency = [this, &input_dep_maps, &output_dep_maps,
+	                                  &src_output_dep_map](const RenderGraphResolver::PassEdge &edge) {
+		DependencyType type = DependencyTypeFromEdgeType(edge.type);
+
+		const auto &link_from = edge.from, &link_to = edge.to;
+		const auto *resource = edge.resource;
 
 		auto &dep_map_from = link_from.pass ? output_dep_maps[GetPassID(link_from.pass)] : src_output_dep_map,
-		     dep_map_to = link_to.pass ? input_dep_maps[GetPassID(link_to.pass)] : dst_input_dep_map;
+		     dep_map_to = input_dep_maps[GetPassID(link_to.pass)];
 
 		auto it_from = dep_map_from.find(resource), it_to = dep_map_to.find(resource);
 		assert(it_from == dep_map_from.end() || it_to == dep_map_to.end());
@@ -202,26 +222,25 @@ void RenderGraphScheduler::extract_dependencies_and_resource_validations(const R
 		PassDependency *p_dep;
 		if (it_from != dep_map_from.end()) {
 			p_dep = it_from->second;
-			p_dep->to.push_back(link_to);
+			p_dep->to.emplace_back(link_to);
 			dep_map_to[resource] = p_dep;
 		} else if (it_to != dep_map_to.end()) {
 			p_dep = it_to->second;
-			p_dep->from.push_back(link_from);
+			p_dep->from.emplace_back(link_from);
 			dep_map_from[resource] = p_dep;
 		} else {
-			m_pass_dependencies.push_back({resource, {link_from}, {link_to}});
+			m_pass_dependencies.push_back({resource, {DependencyLink{link_from}}, {DependencyLink{link_to}}, type});
 			p_dep = &m_pass_dependencies.back();
 			dep_map_from[resource] = p_dep;
 			dep_map_to[resource] = p_dep;
 		}
+		assert(p_dep->type == type);
 	};
 
 	m_pass_dependencies.clear();
 	m_pass_dependencies.reserve(resolved.GetPassEdges().size()); // Ensure the pointers are valid
 
 	for (auto &edge : resolved.GetPassEdges()) {
-		if (edge.is_image_read_to_write)
-			continue;
 		// Add Dependencies
 		const PassBase *pass_from = edge.from.pass;
 		const PassBase *pass_to = edge.to.pass;
@@ -232,7 +251,7 @@ void RenderGraphScheduler::extract_dependencies_and_resource_validations(const R
 			m_passes[GetPassID(pass_to)].p_render_pass_info->subpass_dependencies.push_back(
 			    {edge.resource, DependencyLink{edge.from}, DependencyLink{edge.to}});
 		} else
-			maintain_dependency(edge.resource, DependencyLink{edge.from}, DependencyLink{edge.to});
+			maintain_dependency(edge);
 	}
 }
 
@@ -249,12 +268,8 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 
 		// Sort the outputs and cull the useless ones
 		std::sort(dep.to.begin(), dep.to.end(), [](const DependencyLink &l, const DependencyLink &r) {
-			uint32_t l_pass_id = l.pass ? GetPassID(l.pass) : -1;
-			uint32_t r_pass_id = r.pass ? GetPassID(r.pass) : -1;
-			return !r.p_input || l_pass_id < r_pass_id;
+			return GetPassID(l.pass) < GetPassID(r.pass);
 		});
-		while (!dep.to.empty() && dep.to.back().p_input == nullptr)
-			dep.to.pop_back();
 
 		if (dep.resource->GetType() == ResourceType::kImage) {
 			std::vector<DependencyLink> links = std::move(dep.to);
@@ -271,7 +286,7 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 					bool is_write_or_result = !UsageIsReadOnly(link.p_input->GetUsage());
 					assert(!is_write_or_result || link.pass == links.back().pass);
 					if (prev_is_attachment || image_layout_changed || is_write_or_result) {
-						m_pass_dependencies.push_back({p_cur_dep->resource, p_cur_dep->to});
+						m_pass_dependencies.push_back({p_cur_dep->resource, p_cur_dep->to, {}, p_cur_dep->type});
 						p_cur_dep = &m_pass_dependencies.back();
 					}
 				}
@@ -319,7 +334,7 @@ void RenderGraphScheduler::extract_resource_transient_info() {
 
 void RenderGraphScheduler::Schedule(const RenderGraphResolver &resolved) {
 	extract_grouped_passes(resolved);
-	extract_dependencies_and_resource_validations(resolved);
+	extract_dependencies(resolved);
 	sort_and_insert_image_dependencies();
 	extract_pass_attachments();
 

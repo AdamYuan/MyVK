@@ -209,6 +209,8 @@ private:
 		m_pointed_image = image->Visit([](auto *image) -> const ImageBase * {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
 				return image->GetPointedResource();
+			else if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kLastFrame)
+				return image->GetCurrentResource();
 			return image;
 		});
 	}
@@ -241,6 +243,8 @@ private:
 		m_pointed_buffer = buffer->Visit([](auto *buffer) -> const BufferBase * {
 			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
 				return buffer->GetPointedResource();
+			else if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kLastFrame)
+				return buffer->GetCurrentResource();
 			return buffer;
 		});
 	}
@@ -344,6 +348,8 @@ protected:
 		uint32_t image_id{}, image_view_id{};
 		friend class RenderGraphResolver;
 	} m_resolved_info{};
+
+	friend class RenderGraphResolver;
 
 public:
 	inline explicit InternalImageBase(ResourceState state) : ImageBase(state) {}
@@ -622,7 +628,7 @@ public:
 		});
 	}
 
-	inline const ImageBase *GetCurrentResource() const { return m_pointed_image; }
+	inline const InternalImageBase *GetCurrentResource() const { return m_pointed_image; }
 
 	inline VkFormat GetFormat() const { return m_pointed_image->GetFormat(); }
 	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;

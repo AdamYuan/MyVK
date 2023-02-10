@@ -20,16 +20,13 @@ public:
 		DependencyLink from{}, to{};
 	};
 	struct SubpassInfo {
-		struct ResourceValidation {
-			const ResourceBase *resource;
-			const Input *p_input;
-		};
 		const PassBase *pass{};
-		std::vector<ResourceValidation> validate_resources;
 	};
+	enum class DependencyType { kCurrentFrame, kValidation, kLastFrame };
 	struct PassDependency {
 		const ResourceBase *resource{};
 		std::vector<DependencyLink> from, to;
+		DependencyType type{};
 	};
 	struct RenderPassArea {
 		VkExtent2D extent{};
@@ -57,7 +54,7 @@ private:
 	static std::vector<RenderPassMergeInfo> _compute_pass_merge_info(const RenderGraphResolver &resolved);
 
 	void extract_grouped_passes(const RenderGraphResolver &resolved);
-	void extract_dependencies_and_resource_validations(const RenderGraphResolver &resolved);
+	void extract_dependencies(const RenderGraphResolver &resolved);
 	void sort_and_insert_image_dependencies();
 	void extract_pass_attachments();
 	void extract_resource_transient_info();
