@@ -189,32 +189,18 @@ void RenderGraphScheduler::extract_grouped_passes(const RenderGraphResolver &res
 	}
 }
 
-inline constexpr RenderGraphScheduler::DependencyType
-DependencyTypeFromEdgeType(RenderGraphResolver::EdgeType edge_type) {
-	switch (edge_type) {
-	case RenderGraphResolver::EdgeType::kDependency:
-		return RenderGraphScheduler::DependencyType::kCurrentFrame;
-	case RenderGraphResolver::EdgeType::kLastFrame:
-		return RenderGraphScheduler::DependencyType::kLastFrame;
-	case RenderGraphResolver::EdgeType::kValidation:
-		return RenderGraphScheduler::DependencyType::kValidation;
-	}
-	return RenderGraphScheduler::DependencyType::kCurrentFrame;
-}
 void RenderGraphScheduler::extract_dependencies(const RenderGraphResolver &resolved) {
 	std::vector<std::unordered_map<const ResourceBase *, PassDependency *>> input_dep_maps(m_passes.size()),
 	    output_dep_maps(m_passes.size());
-	std::unordered_map<const ResourceBase *, PassDependency *> src_output_dep_map;
+	std::unordered_map<const ResourceBase *, PassDependency *> src_output_dep_map, dst_input_dep_map;
 
-	const auto maintain_dependency = [this, &input_dep_maps, &output_dep_maps,
+	const auto maintain_dependency = [this, &input_dep_maps, &output_dep_maps, &dst_input_dep_map,
 	                                  &src_output_dep_map](const RenderGraphResolver::PassEdge &edge) {
-		DependencyType type = DependencyTypeFromEdgeType(edge.type);
-
 		const auto &link_from = edge.from, &link_to = edge.to;
 		const auto *resource = edge.resource;
 
 		auto &dep_map_from = link_from.pass ? output_dep_maps[GetPassID(link_from.pass)] : src_output_dep_map,
-		     dep_map_to = input_dep_maps[GetPassID(link_to.pass)];
+		     dep_map_to = link_to.pass ? input_dep_maps[GetPassID(link_to.pass)] : dst_input_dep_map;
 
 		auto it_from = dep_map_from.find(resource), it_to = dep_map_to.find(resource);
 		assert(it_from == dep_map_from.end() || it_to == dep_map_to.end());
@@ -229,12 +215,13 @@ void RenderGraphScheduler::extract_dependencies(const RenderGraphResolver &resol
 			p_dep->from.emplace_back(link_from);
 			dep_map_from[resource] = p_dep;
 		} else {
-			m_pass_dependencies.push_back({resource, {DependencyLink{link_from}}, {DependencyLink{link_to}}, type});
+			m_pass_dependencies.push_back(
+			    {resource, {DependencyLink{link_from}}, {DependencyLink{link_to}}, edge.type});
 			p_dep = &m_pass_dependencies.back();
 			dep_map_from[resource] = p_dep;
 			dep_map_to[resource] = p_dep;
 		}
-		assert(p_dep->type == type);
+		assert(p_dep->type == edge.type);
 	};
 
 	m_pass_dependencies.clear();
@@ -263,9 +250,6 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 
 		assert(dep.from.size() == 1 && !dep.to.empty());
 
-		if (dep.to.size() == 1)
-			continue;
-
 		// Sort the outputs and cull the useless ones
 		std::sort(dep.to.begin(), dep.to.end(), [](const DependencyLink &l, const DependencyLink &r) {
 			return GetPassID(l.pass) < GetPassID(r.pass);
@@ -286,7 +270,8 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 					bool is_write_or_result = !UsageIsReadOnly(link.p_input->GetUsage());
 					assert(!is_write_or_result || link.pass == links.back().pass);
 					if (prev_is_attachment || image_layout_changed || is_write_or_result) {
-						m_pass_dependencies.push_back({p_cur_dep->resource, p_cur_dep->to, {}, p_cur_dep->type});
+						m_pass_dependencies.push_back(
+						    {p_cur_dep->resource, p_cur_dep->to, {}, DependencyType::kDependency});
 						p_cur_dep = &m_pass_dependencies.back();
 					}
 				}
@@ -295,6 +280,10 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 					assert(link.pass == nullptr && links.size() == 1);
 					break;
 				}
+			}
+			if (UsageIsReadOnly(p_cur_dep->to.back().p_input->GetUsage()) &&
+			    p_cur_dep->resource->GetState() == ResourceState::kExternal) {
+				m_pass_dependencies.push_back({p_cur_dep->resource, p_cur_dep->to, {{}}, DependencyType::kExternal});
 			}
 		}
 	}

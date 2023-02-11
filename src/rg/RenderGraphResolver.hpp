@@ -12,6 +12,8 @@
 
 namespace myvk_rg::_details_ {
 
+enum class DependencyType : uint8_t { kDependency, kValidation, kExternal, kLastFrame };
+
 class RenderGraphResolver {
 public:
 	struct ResourceReference {
@@ -42,11 +44,10 @@ public:
 		const Input *p_input{};
 		const PassBase *pass{};
 	};
-	enum class EdgeType : uint8_t { kDependency, kValidation, kLastFrame };
 	struct PassEdge {
 		const ResourceBase *resource{};
 		EdgeLink from{}, to{};
-		EdgeType type{};
+		DependencyType type{};
 	};
 	struct PassNode {
 		const PassBase *pass;

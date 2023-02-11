@@ -18,7 +18,7 @@ class RenderGraphAllocator {
 public:
 	struct IntResourceAlloc {
 		VkMemoryRequirements vk_memory_requirements{};
-		VkDeviceSize memory_offset{};
+		VkDeviceSize memory_offset{}, db_memory_offset{};
 		uint32_t allocation_id{};
 		bool double_buffering{}; // TODO: Check this
 
@@ -28,7 +28,7 @@ public:
 		friend class RenderGraphAllocator;
 	};
 	struct IntImageAlloc final : public IntResourceAlloc {
-		myvk::Ptr<myvk::ImageBase> myvk_image{};
+		myvk::Ptr<myvk::ImageBase> myvk_image{}, myvk_db_image{};
 
 		VkImageUsageFlags vk_image_usages{};
 		VkImageType vk_image_type{VK_IMAGE_TYPE_2D};
@@ -41,7 +41,7 @@ public:
 		friend class RenderGraphAllocator;
 	};
 	struct IntBufferAlloc final : public IntResourceAlloc {
-		myvk::Ptr<myvk::BufferBase> myvk_buffer{};
+		myvk::Ptr<myvk::BufferBase> myvk_buffer{}, myvk_db_buffer{};
 
 		VkBufferUsageFlags vk_buffer_usages{};
 

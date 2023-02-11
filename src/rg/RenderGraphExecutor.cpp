@@ -37,12 +37,12 @@ void RenderGraphExecutor::reset_pass_executor_vector() {
 	m_post_barrier_info.clear();
 }
 
-void RenderGraphExecutor::_process_validation_dependencies(const RenderGraphScheduler::PassDependency &dependency,
-                                                           std::vector<SubpassDependencies> *p_sub_deps) {
+void RenderGraphExecutor::_process_validation_dependency(const RenderGraphScheduler::PassDependency &dependency,
+                                                         std::vector<SubpassDependencies> *p_sub_deps) {
 	assert(dependency.to.size() == 1 && dependency.from.front().pass == nullptr);
 	const auto &ref = dependency.to.front();
 	const auto *pass = ref.pass;
-	uint32_t pass_id = m_p_scheduled->GetPassID(pass), subpass_id = m_p_scheduled->GetSubpassID(pass);
+	uint32_t pass_id = m_p_scheduled->GetPassID(pass);
 	const auto &pass_info = m_p_scheduled->GetPassInfo(pass_id);
 	auto &pass_exec = m_pass_executors[pass_id];
 	const auto *resource = dependency.resource;
@@ -53,30 +53,26 @@ void RenderGraphExecutor::_process_validation_dependencies(const RenderGraphSche
 		// For RenderPass, insert SubpassDependency
 		auto &sub_dep = (*p_sub_deps)[pass_id];
 		resource->Visit([this, pass, &ref, &sub_dep, &pass_info](const auto *resource) {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
-				if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
-					uint32_t int_res_id = m_p_resolved->GetIntResourceID(resource);
-					uint32_t att_id = pass_info.p_render_pass_info->attachment_id_map.at(resource);
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage &&
+			              ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
+				uint32_t int_res_id = m_p_resolved->GetIntResourceID(resource);
+				uint32_t att_id = pass_info.p_render_pass_info->attachment_id_map.at(resource);
 
-					for (uint32_t dep_int_res_id = 0; dep_int_res_id < m_p_resolved->GetIntResourceCount();
-					     ++dep_int_res_id) {
-						// If resource #i and current is aliased, and #i is used prior than current,
-						// then make dependencies
-						if (m_p_allocated->IsIntResourceAliased(dep_int_res_id, int_res_id) &&
-						    m_p_resolved->IsIntResourcePrior(dep_int_res_id, int_res_id)) {
-							sub_dep.attachment_dependencies[att_id].may_alias = true;
+				for (uint32_t dep_int_res_id = 0; dep_int_res_id < m_p_resolved->GetIntResourceCount();
+				     ++dep_int_res_id) {
+					// If resource #i and current is aliased, and #i is used prior than current,
+					// then make dependencies
+					if (m_p_allocated->IsIntResourceAliased(dep_int_res_id, int_res_id) &&
+					    m_p_resolved->IsIntResourcePrior(dep_int_res_id, int_res_id)) {
+						sub_dep.attachment_dependencies[att_id].may_alias = true;
 
-							// Insert Non-by-region SubpassDependency
-							for (const auto &last_ref :
-							     m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
-								assert(m_p_resolved->IsPassPrior(last_ref.pass, pass));
-								sub_dep.validation_subpass_dependencies.push_back(
-								    {resource, {last_ref.p_input, last_ref.pass}, ref});
-							}
+						// Insert Non-by-region SubpassDependency
+						for (const auto &last_ref : m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
+							assert(m_p_resolved->IsPassPrior(last_ref.pass, pass));
+							sub_dep.validation_subpass_dependencies.push_back(
+							    {resource, {last_ref.p_input, last_ref.pass}, ref});
 						}
 					}
-				} else {
-					// TODO: External Image
 				}
 			} else
 				assert(false);
@@ -85,7 +81,9 @@ void RenderGraphExecutor::_process_validation_dependencies(const RenderGraphSche
 		// Not RenderPass, then just insert a barrier
 		auto &barrier_info = pass_exec.prior_barrier_info;
 		resource->Visit([this, &barrier_info, &ref](const auto *resource) {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage) {
+			// TODO: Internal Buffers
+			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kImage &&
+			              ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
 				barrier_info.image_barriers.emplace_back();
 				auto &barrier = barrier_info.image_barriers.back();
 				barrier.image = resource;
@@ -93,30 +91,25 @@ void RenderGraphExecutor::_process_validation_dependencies(const RenderGraphSche
 				barrier.dst_access_mask = UsageGetAccessFlags(ref.p_input->GetUsage());
 				barrier.dst_stage_mask = ref.p_input->GetUsagePipelineStages();
 
-				if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
-					uint32_t int_res_id = m_p_resolved->GetIntResourceID(resource);
-					for (uint32_t dep_int_res_id = 0; dep_int_res_id < m_p_resolved->GetIntResourceCount();
-					     ++dep_int_res_id) {
-						// If resource #i and current is aliased, and #i is used prior than current,
-						// then make dependencies
-						if (m_p_allocated->IsIntResourceAliased(dep_int_res_id, int_res_id) &&
-						    m_p_resolved->IsIntResourcePrior(dep_int_res_id, int_res_id)) {
-							for (const auto &last_ref :
-							     m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
-								barrier.src_stage_mask |= last_ref.p_input->GetUsagePipelineStages();
-							}
+				uint32_t int_res_id = m_p_resolved->GetIntResourceID(resource);
+				for (uint32_t dep_int_res_id = 0; dep_int_res_id < m_p_resolved->GetIntResourceCount();
+				     ++dep_int_res_id) {
+					// If resource #i and current is aliased, and #i is used prior than current,
+					// then make dependencies
+					if (m_p_allocated->IsIntResourceAliased(dep_int_res_id, int_res_id) &&
+					    m_p_resolved->IsIntResourcePrior(dep_int_res_id, int_res_id)) {
+						for (const auto &last_ref : m_p_resolved->GetIntResourceInfo(dep_int_res_id).last_references) {
+							barrier.src_stage_mask |= last_ref.p_input->GetUsagePipelineStages();
 						}
 					}
-				} else {
-					// TODO: External Image
 				}
 			}
 		});
 	}
 }
 
-void RenderGraphExecutor::_process_current_frame_dependencies(const RenderGraphScheduler::PassDependency &dep,
-                                                              std::vector<SubpassDependencies> *p_sub_deps) {
+void RenderGraphExecutor::_process_generic_dependency(const RenderGraphScheduler::PassDependency &dep,
+                                                      std::vector<SubpassDependencies> *p_sub_deps) {
 	bool is_from_attachment = UsageIsAttachment(dep.from.front().p_input->GetUsage());
 	bool is_to_attachment = UsageIsAttachment(dep.to.front().p_input->GetUsage());
 
@@ -236,11 +229,12 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 
 	// Extract from Pass Dependencies
 	for (const auto &dep : m_p_scheduled->GetPassDependencies()) {
-		if (dep.type == RenderGraphScheduler::DependencyType::kValidation)
-			_process_validation_dependencies(dep, &sub_deps);
-		else if (dep.type == RenderGraphScheduler::DependencyType::kCurrentFrame)
-			_process_current_frame_dependencies(dep, &sub_deps);
-		else if (dep.type == RenderGraphScheduler::DependencyType::kLastFrame) {
+		if (dep.type == DependencyType::kValidation)
+			_process_validation_dependency(dep, &sub_deps);
+		else if (dep.type == DependencyType::kDependency)
+			_process_generic_dependency(dep, &sub_deps);
+		else if (dep.type == DependencyType::kLastFrame) {
+		} else if (dep.type == DependencyType::kExternal) {
 		}
 	}
 

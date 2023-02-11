@@ -22,7 +22,6 @@ public:
 	struct SubpassInfo {
 		const PassBase *pass{};
 	};
-	enum class DependencyType { kCurrentFrame, kValidation, kLastFrame };
 	struct PassDependency {
 		const ResourceBase *resource{};
 		std::vector<DependencyLink> from, to;

@@ -11,11 +11,12 @@
 namespace myvk_rg::_details_ {
 
 struct RenderGraphResolver::OriginGraph {
-	enum class EdgeType : uint8_t { kDependency, kValidation, kLastFrame, kDeleted };
+	enum class ExtraEdgeType : uint8_t { kNone, kWriteAfterRead, kExternalOutput, kDeleted };
 	struct Edge {
 		const ResourceBase *resource{};
 		EdgeLink from{}, to{};
-		EdgeType type{};
+		DependencyType type{};
+		ExtraEdgeType extra_type{};
 	};
 	struct Node {
 		std::vector<Edge *> input_edges, output_edges;
@@ -26,16 +27,17 @@ struct RenderGraphResolver::OriginGraph {
 	std::unordered_map<const PassBase *, Node> nodes;
 	std::list<Edge> edges;
 
-	inline void add_edge(const ResourceBase *resource, const EdgeLink &from, const EdgeLink &to, EdgeType type) {
+	inline void add_edge(const ResourceBase *resource, const EdgeLink &from, const EdgeLink &to, DependencyType type,
+	                     ExtraEdgeType extra_type = ExtraEdgeType::kNone) {
 		assert(bool(from.pass) == bool(from.p_input));
 		assert(bool(to.pass) == bool(to.p_input));
-		if (!to.pass)
-			return;
-		edges.push_back({resource, from, to, type});
+		edges.push_back({resource, from, to, type, extra_type});
 		auto *edge = &edges.back();
 		nodes[from.pass].output_edges.push_back(edge);
-		nodes[to.pass].input_edges.push_back(edge);
-		++nodes[to.pass].in_degree;
+		if (to.pass) {
+			nodes[to.pass].input_edges.push_back(edge);
+			++nodes[to.pass].in_degree;
+		}
 	}
 	inline void add_internal_buffer(const ManagedBuffer *buffer) { internal_buffer_set.insert(buffer); }
 	inline void add_internal_image(const InternalImageBase *image, bool set_has_parent = false) {
@@ -48,7 +50,7 @@ struct RenderGraphResolver::OriginGraph {
 	inline void visit_resource_dep_passes(const ResourceBase *resource, const PassBase *pass, const Input *p_input) {
 		// TODO: Handle LastFrame Images and Buffers
 		const auto add_visitor_edge = [this, pass, p_input](const ResourceBase *resource, const PassBase *dep_pass,
-		                                                    const Input *p_dep_input, EdgeType type) -> void {
+		                                                    const Input *p_dep_input, DependencyType type) -> void {
 			if (!pass || !p_input)
 				return;
 			add_edge(resource, {p_dep_input, dep_pass}, {p_input, pass}, type);
@@ -60,7 +62,7 @@ struct RenderGraphResolver::OriginGraph {
 			assert(dep_pass);
 			if (dep_pass) { // TODO: Remove these ifs'
 				assert(p_dep_input);
-				add_visitor_edge(resource, dep_pass, p_dep_input, EdgeType::kDependency);
+				add_visitor_edge(resource, dep_pass, p_dep_input, DependencyType::kDependency);
 				if (not_visited) {
 					// Further Traverse dep_pass's dependent Resources
 					dep_pass->for_each_input([this, dep_pass](const Input *p_input) {
@@ -79,7 +81,7 @@ struct RenderGraphResolver::OriginGraph {
 				                        &add_visitor_edge](auto *sub_image) -> void {
 					if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
 						add_internal_image(sub_image, true);
-						add_visitor_edge(sub_image, nullptr, nullptr, EdgeType::kValidation);
+						add_visitor_edge(sub_image, nullptr, nullptr, DependencyType::kValidation);
 					} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsAlias) {
 						sub_image->GetPointedResource()->Visit([this](const auto *pointed_sub_image) {
 							if constexpr (ResourceVisitorTrait<decltype(pointed_sub_image)>::kIsInternal)
@@ -96,18 +98,21 @@ struct RenderGraphResolver::OriginGraph {
 			} else {
 				if constexpr (kClass == ResourceClass::kManagedImage) {
 					add_internal_image(resource);
-					add_visitor_edge(resource, nullptr, nullptr, EdgeType::kValidation);
+					add_visitor_edge(resource, nullptr, nullptr, DependencyType::kValidation);
 				} else if constexpr (kClass == ResourceClass::kManagedBuffer) {
 					add_internal_buffer(resource);
-					add_visitor_edge(resource, nullptr, nullptr, EdgeType::kValidation);
+					add_visitor_edge(resource, nullptr, nullptr, DependencyType::kValidation);
 				} else if constexpr (kClass == ResourceClass::kLastFrameImage) {
 					add_internal_image(resource->GetCurrentResource());
 					add_visitor_edge(resource, nullptr, nullptr,
-					                 EdgeType::kLastFrame); // Last Frame Edge
+					                 DependencyType::kLastFrame); // Last Frame Edge
 				} else if constexpr (kClass == ResourceClass::kLastFrameBuffer) {
 					add_internal_buffer(resource->GetCurrentResource());
 					add_visitor_edge(resource, nullptr, nullptr,
-					                 EdgeType::kLastFrame); // Last Frame Edge
+					                 DependencyType::kLastFrame); // Last Frame Edge
+				} else if constexpr (kClass == ResourceClass::kExternalImageBase ||
+				                     kClass == ResourceClass::kExternalBufferBase) {
+					add_visitor_edge(resource, nullptr, nullptr, DependencyType::kExternal);
 				} else if constexpr (GetResourceState(kClass) == ResourceState::kAlias) {
 					add_edge_and_visit_dep_pass(resource->GetPointedResource(), resource->GetProducerPass(),
 					                            resource->GetProducerInput());
@@ -119,31 +124,35 @@ struct RenderGraphResolver::OriginGraph {
 		// Dependency Edges
 		// TODO: Last Frame Images should not overlap [CHECK]
 		for (auto &pair : nodes) {
-			EdgeType target_type = pair.first == nullptr ? EdgeType::kLastFrame : EdgeType::kDependency;
-
 			std::unordered_map<const ResourceBase *, Edge *> write_outputs;
 			auto &node = pair.second;
 
 			for (auto *p_edge : node.output_edges) {
 				if (UsageIsReadOnly(p_edge->to.p_input->GetUsage()))
 					continue;
-				if (p_edge->type == target_type) {
+				if (p_edge->extra_type == ExtraEdgeType::kNone) {
 					assert(write_outputs.find(p_edge->resource) ==
 					       write_outputs.end()); // An output can only be written once
 					write_outputs[p_edge->resource] = p_edge;
 				}
 			}
 			for (const auto *p_edge : node.output_edges) {
-				if (p_edge->type == target_type && UsageIsReadOnly(p_edge->to.p_input->GetUsage())) {
+				if (p_edge->extra_type == ExtraEdgeType::kNone && UsageIsReadOnly(p_edge->to.p_input->GetUsage())) {
 					auto it = write_outputs.find(p_edge->resource);
 					if (it != write_outputs.end()) {
 						if (p_edge->resource->GetType() == ResourceType::kBuffer) {
-							add_edge(p_edge->resource, p_edge->to, it->second->to, target_type);
-							it->second->type = EdgeType::kDeleted;
+							add_edge(p_edge->resource, p_edge->to, it->second->to, DependencyType::kDependency,
+							         ExtraEdgeType::kWriteAfterRead);
+							it->second->extra_type = ExtraEdgeType::kDeleted;
 							// Delete the direct write edge if a Write-After-Read edge exists (Buffer)
 						} else {
-							add_edge(p_edge->resource, p_edge->to, it->second->to, EdgeType::kDeleted);
+							add_edge(p_edge->resource, p_edge->to, it->second->to, DependencyType::kDependency,
+							         ExtraEdgeType::kDeleted);
 						}
+					} else if (p_edge->resource->GetClass() == ResourceClass::kExternalBufferBase) {
+						// For External Buffers, if no writes, then add external edges
+						add_edge(p_edge->resource, p_edge->to, {nullptr, nullptr}, DependencyType::kExternal,
+						         ExtraEdgeType::kExternalOutput);
 					}
 				}
 			}
@@ -260,7 +269,7 @@ void RenderGraphResolver::extract_ordered_passes_and_edges(OriginGraph &&graph) 
 	m_src_output_edges.clear();
 
 	const auto add_edge = [this](const ResourceBase *resource, const EdgeLink &from, const EdgeLink &to,
-	                             EdgeType type) {
+	                             DependencyType type) {
 		m_pass_edges.push_back({resource, from, to, type});
 		const PassEdge *p_edge = &m_pass_edges.back();
 		(from.pass ? m_pass_nodes[GetPassOrder(from.pass)].output_edges : m_src_output_edges).push_back(p_edge);
@@ -268,21 +277,10 @@ void RenderGraphResolver::extract_ordered_passes_and_edges(OriginGraph &&graph) 
 	};
 
 	for (const auto &edge : graph.edges) {
-		if (edge.type == OriginGraph::EdgeType::kDeleted)
+		if (edge.extra_type == OriginGraph::ExtraEdgeType::kDeleted)
 			continue;
 
-		EdgeType type;
-		switch (edge.type) {
-		case OriginGraph::EdgeType::kLastFrame:
-			type = EdgeType::kLastFrame;
-			break;
-		case OriginGraph::EdgeType::kValidation:
-			type = EdgeType::kValidation;
-			break;
-		default:
-			type = EdgeType::kDependency;
-		}
-		add_edge(edge.resource, edge.from, edge.to, type);
+		add_edge(edge.resource, edge.from, edge.to, edge.type);
 	}
 
 	// Sort Output (for RenderGraphScheduler)

@@ -66,10 +66,14 @@ private:
 	struct SubpassDependencies;
 
 	void reset_pass_executor_vector();
-	void _process_validation_dependencies(const RenderGraphScheduler::PassDependency &dependency,
-	                                      std::vector<SubpassDependencies> *p_sub_deps);
-	void _process_current_frame_dependencies(const RenderGraphScheduler::PassDependency &dependency,
-	                                         std::vector<SubpassDependencies> *p_sub_deps);
+	void _process_validation_dependency(const RenderGraphScheduler::PassDependency &dependency,
+	                                    std::vector<SubpassDependencies> *p_sub_deps);
+	void _process_generic_dependency(const RenderGraphScheduler::PassDependency &dep,
+	                                 std::vector<SubpassDependencies> *p_sub_deps);
+	void _process_external_dependency(const RenderGraphScheduler::PassDependency &dep,
+	                                  std::vector<SubpassDependencies> *p_sub_deps);
+	void _process_last_frame_dependency(const RenderGraphScheduler::PassDependency &dep,
+	                                    std::vector<SubpassDependencies> *p_sub_deps);
 	std::vector<SubpassDependencies> extract_barriers_and_subpass_dependencies();
 	void create_render_passes_and_framebuffers(std::vector<SubpassDependencies> &&subpass_dependencies);
 
