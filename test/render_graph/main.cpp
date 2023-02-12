@@ -113,7 +113,7 @@ private:
 		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentW>({"normal"}, normal);
 		AddColorAttachmentInput<2, myvk_rg::Usage::kColorAttachmentW>({"bright"}, bright);
 
-		// AddInputAttachmentInput<0, 0>({"last_frame_albedo"}, last_frame_albedo);
+		AddInputAttachmentInput<0, 0>({"last_frame_albedo"}, last_frame_albedo);
 		SetDepthAttachmentInput<myvk_rg::Usage::kDepthAttachmentRW>({"depth"}, depth);
 		AddInput<myvk_rg::Usage::kDrawIndirectBuffer>({"draw_list"}, draw_list);
 	}
@@ -162,7 +162,7 @@ private:
 			    {"image_src"}, image_src, nullptr);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"image_dst"}, image_dst);
 
-			auto descriptor_set_layout = GetDescriptorSetLayout();
+			// auto descriptor_set_layout = GetDescriptorSetLayout();
 		}
 
 	public:
@@ -395,9 +395,7 @@ int main() {
 	render_graph->SetCanvasSize({1920, 1080});
 	render_graph->compile(); */
 
-	frame_manager->SetResizeFunc([render_graph](const VkExtent2D &extent) {
-		render_graph->SetCanvasSize(extent);
-	});
+	frame_manager->SetResizeFunc([render_graph](const VkExtent2D &extent) { render_graph->SetCanvasSize(extent); });
 
 	// object_pool.DeleteBuffer("draw_list");
 

@@ -77,6 +77,8 @@ private:
 	std::vector<SubpassDependencies> extract_barriers_and_subpass_dependencies();
 	void create_render_passes_and_framebuffers(std::vector<SubpassDependencies> &&subpass_dependencies);
 
+	mutable bool m_flip = false;
+
 public:
 	void Prepare(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved,
 	             const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated);

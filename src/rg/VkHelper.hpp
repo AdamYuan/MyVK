@@ -74,4 +74,21 @@ inline static constexpr VkAccessFlags2 VkAttachmentLoadAccessFromVkFormat(VkForm
 	return ret;
 }
 
+inline static constexpr VkShaderStageFlags VkShaderStagesFromVkPipelineStages(VkPipelineStageFlags2 pipeline_stages) {
+	VkShaderStageFlags ret = 0;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_VERTEX_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_GEOMETRY_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_FRAGMENT_BIT;
+	if (pipeline_stages & VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT)
+		ret |= VK_SHADER_STAGE_COMPUTE_BIT;
+	return ret;
+}
+
 #endif

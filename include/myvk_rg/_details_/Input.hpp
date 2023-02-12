@@ -213,29 +213,19 @@ class DescriptorSetData {
 private:
 	std::unordered_map<uint32_t, DescriptorBinding> m_bindings;
 
-	mutable myvk::Ptr<myvk::DescriptorSetLayout> m_descriptor_set_layout;
-	mutable std::vector<myvk::Ptr<myvk::DescriptorSet>> m_descriptor_sets;
-
-	mutable bool m_modified = true;
-
 	template <typename> friend class DescriptorInputSlot;
+
+	friend class RenderGraphDescriptor;
 
 public:
 	inline bool IsBindingExist(uint32_t binding) const { return m_bindings.find(binding) != m_bindings.end(); }
 	inline void AddBinding(uint32_t binding, const Input *input, const myvk::Ptr<myvk::Sampler> &sampler = nullptr) {
 		m_bindings.insert({binding, DescriptorBinding{input, sampler}});
-		m_modified = true;
 	}
-	inline void RemoveBinding(uint32_t binding) {
-		m_bindings.erase(binding);
-		m_modified = true;
-	}
-	inline void ClearBindings() {
-		m_bindings.clear();
-		m_modified = true;
-	}
+	inline void RemoveBinding(uint32_t binding) { m_bindings.erase(binding); }
+	inline void ClearBindings() { m_bindings.clear(); }
 
-	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout(const myvk::Ptr<myvk::Device> &device) const;
+	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet(const myvk::Ptr<myvk::Device> &device) const;
 };
 
 class AttachmentData {
@@ -389,9 +379,9 @@ protected:
 	                               const myvk::Ptr<myvk::Sampler> &sampler) {
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
 	}
-	inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetDescriptorSetLayout() const {
+	/* inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetDescriptorSetLayout() const {
 		return m_descriptor_set_data.GetVkDescriptorSetLayout(get_render_graph_ptr()->GetDevicePtr());
-	}
+	} */
 };
 
 template <typename Derived> class AttachmentInputSlot {

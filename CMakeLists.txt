@@ -50,6 +50,7 @@ add_library(MyVK_RenderGraph STATIC
         src/rg/RenderGraphAllocator.cpp
         src/rg/RenderGraphExecutor.cpp
         src/rg/RenderGraphScheduler.cpp
+        src/rg/RenderGraphDescriptor.cpp
         src/rg/RenderGraph.cpp
         )
 add_library(myvk::rg ALIAS MyVK_RenderGraph)

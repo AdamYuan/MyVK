@@ -14,9 +14,11 @@
 namespace myvk_rg {
 enum class CompilePhrase : uint8_t {
 	kResolve = 1u,
-	kSchedule = 2u,
-	kAllocate = 4u,
-	kPrepareExecutor = 8u,
+	kCreateDescriptor = 2u,
+	kSchedule = 4u,
+	kAllocate = 8u,
+	kPrepareExecutor = 16u,
+	kPreBindDescriptor = 32u
 };
 
 inline constexpr CompilePhrase operator|(CompilePhrase x, CompilePhrase y) {

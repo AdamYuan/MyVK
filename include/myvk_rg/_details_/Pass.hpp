@@ -38,6 +38,7 @@ private:
 	friend class RenderGraphResolver;
 	friend class RenderGraphScheduler;
 	friend class RenderGraphExecutor;
+	friend class RenderGraphDescriptor;
 
 	template <typename Func> inline void for_each_input(Func &&func) {
 		for (auto it = m_p_input_pool_data->pool.begin(); it != m_p_input_pool_data->pool.end(); ++it)

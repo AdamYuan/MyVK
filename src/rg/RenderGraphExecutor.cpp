@@ -181,7 +181,7 @@ void RenderGraphExecutor::_process_generic_dependency(const RenderGraphScheduler
 		    dep.to.front().pass ? m_pass_executors[m_p_scheduled->GetPassID(dep.to.front().pass)].prior_barrier_info
 		                        : m_post_barrier_info;
 
-		dep.resource->Visit([this, &dep, &barrier_info](const auto *resource) {
+		dep.resource->Visit([&dep, &barrier_info](const auto *resource) {
 			if constexpr (ResourceVisitorTrait<decltype(resource)>::kType == ResourceType::kBuffer) {
 				barrier_info.buffer_barriers.emplace_back();
 				BufferMemoryBarrier &barrier = barrier_info.buffer_barriers.back();
@@ -368,6 +368,9 @@ void RenderGraphExecutor::_process_external_dependency(const RenderGraphSchedule
 	});
 }
 
+void RenderGraphExecutor::_process_last_frame_dependency(const RenderGraphScheduler::PassDependency &dep,
+                                                         std::vector<SubpassDependencies> *p_sub_deps) {}
+
 std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extract_barriers_and_subpass_dependencies() {
 	std::vector<SubpassDependencies> sub_deps(m_p_scheduled->GetPassCount());
 	for (uint32_t i = 0; i < m_p_scheduled->GetPassCount(); ++i) {
@@ -386,8 +389,9 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 			_process_validation_dependency(dep, &sub_deps);
 		else if (dep.type == DependencyType::kDependency)
 			_process_generic_dependency(dep, &sub_deps);
-		else if (dep.type == DependencyType::kLastFrame) {
-		} else if (dep.type == DependencyType::kExternal)
+		else if (dep.type == DependencyType::kLastFrame)
+			_process_last_frame_dependency(dep, &sub_deps);
+		else if (dep.type == DependencyType::kExternal)
 			_process_external_dependency(dep, &sub_deps);
 	}
 
@@ -638,6 +642,8 @@ void RenderGraphExecutor::Prepare(const myvk::Ptr<myvk::Device> &device, const R
 }
 
 void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
+	m_flip ^= 1u;
+
 	const auto cmd_pipeline_barriers = [&command_buffer, this](const BarrierInfo &barrier_info) {
 		if (barrier_info.empty())
 			return;
@@ -656,7 +662,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = m_p_allocated->GetVkBuffer(info.buffer);
+			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = m_p_allocated->GetVkBuffer(info.buffer, m_flip);
 			barrier.buffer = myvk_buffer->GetHandle();
 			barrier.size = myvk_buffer->GetSize();
 			barrier.offset = 0u;
@@ -674,7 +680,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::ImageView> &myvk_image_view = m_p_allocated->GetVkImageView(info.image);
+			const myvk::Ptr<myvk::ImageView> &myvk_image_view = m_p_allocated->GetVkImageView(info.image, m_flip);
 			barrier.image = myvk_image_view->GetImagePtr()->GetHandle();
 			barrier.subresourceRange = myvk_image_view->GetSubresourceRange();
 		}
@@ -704,12 +710,12 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 					if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage ||
 					              ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kExternalImageBase) {
 						clear_values.push_back(image->GetClearValue());
-						attachment_image_views.push_back(m_p_allocated->GetVkImageView(image)->GetHandle());
+						attachment_image_views.push_back(m_p_allocated->GetVkImageView(image, m_flip)->GetHandle());
 					} else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
 					                     ResourceClass::kLastFrameImage) {
 						clear_values.emplace_back();
-						attachment_image_views.push_back(m_p_allocated->GetVkImageView(image->GetCurrentResource())
-						                                     ->GetHandle()); // TODO: just use image
+						attachment_image_views.push_back(
+						    m_p_allocated->GetVkImageView(image, m_flip)->GetHandle()); // TODO: just use image
 					} else {
 						assert(false);
 					}
