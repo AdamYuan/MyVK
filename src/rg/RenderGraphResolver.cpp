@@ -124,18 +124,42 @@ struct RenderGraphResolver::OriginGraph {
 		// Dependency Edges
 		// TODO: Last Frame Images should not overlap [CHECK]
 		for (auto &pair : nodes) {
+			std::unordered_map<const ResourceBase *, const Input *> inputs;
 			std::unordered_map<const ResourceBase *, Edge *> write_outputs;
+			const PassBase *pass = pair.first;
 			auto &node = pair.second;
 
-			for (auto *p_edge : node.output_edges) {
-				if (UsageIsReadOnly(p_edge->to.p_input->GetUsage()))
-					continue;
+			for (auto *p_edge : node.input_edges) {
 				if (p_edge->extra_type == ExtraEdgeType::kNone) {
+					if (UsageIsReadOnly(p_edge->to.p_input->GetUsage())) {
+						assert(false);
+						continue;
+					}
+					assert(inputs.find(p_edge->resource) == inputs.end());
+					inputs[p_edge->resource] = p_edge->to.p_input;
+				}
+			}
+			for (auto *p_edge : node.output_edges) {
+				if (p_edge->extra_type == ExtraEdgeType::kNone) {
+					inputs.erase(p_edge->resource);
+
+					if (UsageIsReadOnly(p_edge->to.p_input->GetUsage()))
+						continue;
 					assert(write_outputs.find(p_edge->resource) ==
 					       write_outputs.end()); // An output can only be written once
 					write_outputs[p_edge->resource] = p_edge;
 				}
 			}
+
+			// inputs contains all the input-only resources, should be their last use
+			for (const auto &it : inputs) {
+				const auto *resource = it.first;
+				const auto *p_input = it.second;
+				if (resource->GetState() == ResourceState::kExternal)
+					add_edge(resource, {p_input, pass}, {nullptr, nullptr}, DependencyType::kExternal,
+					         ExtraEdgeType::kExternalOutput);
+			}
+
 			for (const auto *p_edge : node.output_edges) {
 				if (p_edge->extra_type == ExtraEdgeType::kNone && UsageIsReadOnly(p_edge->to.p_input->GetUsage())) {
 					auto it = write_outputs.find(p_edge->resource);

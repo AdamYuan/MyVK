@@ -217,6 +217,13 @@ void RenderGraphExecutor::_process_generic_dependency(const RenderGraphScheduler
 	}
 }
 
+void RenderGraphExecutor::_process_external_dependency(const RenderGraphScheduler::PassDependency &dep,
+                                                       std::vector<SubpassDependencies> *p_sub_deps) {
+	bool is_from = dep.from.front().pass == nullptr;
+	BarrierInfo &barrier_info = is_from ? m_pass_executors[0].prior_barrier_info : m_post_barrier_info;
+	const auto &links = is_from ? dep.to : dep.from;
+}
+
 std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extract_barriers_and_subpass_dependencies() {
 	std::vector<SubpassDependencies> sub_deps(m_p_scheduled->GetPassCount());
 	for (uint32_t i = 0; i < m_p_scheduled->GetPassCount(); ++i) {
@@ -234,8 +241,8 @@ std::vector<RenderGraphExecutor::SubpassDependencies> RenderGraphExecutor::extra
 		else if (dep.type == DependencyType::kDependency)
 			_process_generic_dependency(dep, &sub_deps);
 		else if (dep.type == DependencyType::kLastFrame) {
-		} else if (dep.type == DependencyType::kExternal) {
-		}
+		} else if (dep.type == DependencyType::kExternal)
+			_process_external_dependency(dep, &sub_deps);
 	}
 
 	return sub_deps;

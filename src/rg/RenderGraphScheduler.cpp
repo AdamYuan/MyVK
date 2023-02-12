@@ -248,6 +248,11 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 		auto &dep = m_pass_dependencies[i];
 		// WARNING: dep might be invalid after push_back()
 
+		if (dep.type == DependencyType::kExternal) {
+			assert(dep.to.size() == 1 && dep.to.front().pass == nullptr);
+			continue;
+		}
+
 		assert(dep.from.size() == 1 && !dep.to.empty());
 
 		// Sort the outputs and cull the useless ones

@@ -175,12 +175,14 @@ void RenderGraphAllocator::create_vk_resources() {
 		create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		create_info.size = buffer_info.buffer->GetSize();
 
-		buffer_alloc.myvk_buffer = std::make_shared<RenderGraphBuffer>(m_device_ptr, create_info);
-		if (buffer_alloc.double_buffering)
-			buffer_alloc.myvk_db_buffer = std::make_shared<RenderGraphBuffer>(m_device_ptr, create_info);
-
-		vkGetBufferMemoryRequirements(m_device_ptr->GetHandle(), buffer_alloc.myvk_buffer->GetHandle(),
+		buffer_alloc.myvk_buffers[0] = std::make_shared<RenderGraphBuffer>(m_device_ptr, create_info);
+		vkGetBufferMemoryRequirements(m_device_ptr->GetHandle(), buffer_alloc.myvk_buffers[0]->GetHandle(),
 		                              &buffer_alloc.vk_memory_requirements);
+
+		if (buffer_alloc.double_buffering)
+			buffer_alloc.myvk_buffers[1] = std::make_shared<RenderGraphBuffer>(m_device_ptr, create_info);
+		else
+			buffer_alloc.myvk_buffers[1] = buffer_alloc.myvk_buffers[0];
 	}
 
 	// Create Images
@@ -226,12 +228,14 @@ void RenderGraphAllocator::create_vk_resources() {
 			}
 		}
 
-		image_alloc.myvk_image = std::make_shared<RenderGraphImage>(m_device_ptr, create_info);
-		if (image_alloc.double_buffering)
-			image_alloc.myvk_db_image = std::make_shared<RenderGraphImage>(m_device_ptr, create_info);
-
-		vkGetImageMemoryRequirements(m_device_ptr->GetHandle(), image_alloc.myvk_image->GetHandle(),
+		image_alloc.myvk_images[0] = std::make_shared<RenderGraphImage>(m_device_ptr, create_info);
+		vkGetImageMemoryRequirements(m_device_ptr->GetHandle(), image_alloc.myvk_images[0]->GetHandle(),
 		                             &image_alloc.vk_memory_requirements);
+
+		if (image_alloc.double_buffering)
+			image_alloc.myvk_images[1] = std::make_shared<RenderGraphImage>(m_device_ptr, create_info);
+		else
+			image_alloc.myvk_images[1] = image_alloc.myvk_images[0];
 	}
 }
 
@@ -253,8 +257,14 @@ void RenderGraphAllocator::create_vk_image_views() {
 
 				uint32_t image_id = m_p_resolved->GetIntImageID(image);
 
-				image_view_alloc.myvk_image_view =
-				    myvk::ImageView::Create(m_allocated_images[image_id].myvk_image, create_info);
+				image_view_alloc.myvk_image_views[0] =
+				    myvk::ImageView::Create(m_allocated_images[image_id].myvk_images[0], create_info);
+
+				if (m_allocated_images[image_id].double_buffering)
+					image_view_alloc.myvk_image_views[1] =
+					    myvk::ImageView::Create(m_allocated_images[image_id].myvk_images[1], create_info);
+				else
+					image_view_alloc.myvk_image_views[1] = image_view_alloc.myvk_image_views[0];
 
 				std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID();
 				printf(" {baseArrayLayer, layerCount, baseMipLevel, levelCount} = {%u, %u, %u, %u}\n",
@@ -457,20 +467,20 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 	for (auto &image_alloc : m_allocated_images) {
 		vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(),
 		                    m_allocations[image_alloc.allocation_id].myvk_allocation->GetHandle(),
-		                    image_alloc.memory_offset, image_alloc.myvk_image->GetHandle(), nullptr);
+		                    image_alloc.memory_offset, image_alloc.myvk_images[0]->GetHandle(), nullptr);
 		if (image_alloc.double_buffering)
 			vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(),
 			                    m_allocations[image_alloc.allocation_id].myvk_allocation->GetHandle(),
-			                    image_alloc.db_memory_offset, image_alloc.myvk_db_image->GetHandle(), nullptr);
+			                    image_alloc.db_memory_offset, image_alloc.myvk_images[1]->GetHandle(), nullptr);
 	}
 	for (auto &buffer_alloc : m_allocated_buffers) {
 		vmaBindBufferMemory2(m_device_ptr->GetAllocatorHandle(),
 		                     m_allocations[buffer_alloc.allocation_id].myvk_allocation->GetHandle(),
-		                     buffer_alloc.memory_offset, buffer_alloc.myvk_buffer->GetHandle(), nullptr);
+		                     buffer_alloc.memory_offset, buffer_alloc.myvk_buffers[0]->GetHandle(), nullptr);
 		if (buffer_alloc.double_buffering)
 			vmaBindBufferMemory2(m_device_ptr->GetAllocatorHandle(),
 			                     m_allocations[buffer_alloc.allocation_id].myvk_allocation->GetHandle(),
-			                     buffer_alloc.db_memory_offset, buffer_alloc.myvk_db_buffer->GetHandle(), nullptr);
+			                     buffer_alloc.db_memory_offset, buffer_alloc.myvk_buffers[1]->GetHandle(), nullptr);
 	}
 
 	printf("Aliased:\n");

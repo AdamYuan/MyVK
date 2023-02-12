@@ -28,7 +28,7 @@ public:
 		friend class RenderGraphAllocator;
 	};
 	struct IntImageAlloc final : public IntResourceAlloc {
-		myvk::Ptr<myvk::ImageBase> myvk_image{}, myvk_db_image{};
+		myvk::Ptr<myvk::ImageBase> myvk_images[2]{};
 
 		VkImageUsageFlags vk_image_usages{};
 		VkImageType vk_image_type{VK_IMAGE_TYPE_2D};
@@ -41,7 +41,7 @@ public:
 		friend class RenderGraphAllocator;
 	};
 	struct IntBufferAlloc final : public IntResourceAlloc {
-		myvk::Ptr<myvk::BufferBase> myvk_buffer{}, myvk_db_buffer{};
+		myvk::Ptr<myvk::BufferBase> myvk_buffers[2]{};
 
 		VkBufferUsageFlags vk_buffer_usages{};
 
@@ -52,7 +52,7 @@ public:
 		friend class RenderGraphAllocator;
 	};
 	struct IntImageViewAlloc {
-		myvk::Ptr<myvk::ImageView> myvk_image_view{};
+		myvk::Ptr<myvk::ImageView> myvk_image_views[2]{};
 		SubImageSize size{};
 		uint32_t base_layer{};
 	};
@@ -116,67 +116,57 @@ public:
 	}
 	inline const std::vector<IntImageViewAlloc> &GetIntImageViewAllocVector() const { return m_allocated_image_views; }
 
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ManagedImage *image) const {
-		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image)].myvk_image_view;
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const InternalImageBase *image, bool db = false) const {
+		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image)].myvk_image_views[db];
 	}
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const CombinedImage *image) const {
-		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image)].myvk_image_view;
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const LastFrameImage *image, bool db = false) const {
+		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image->GetCurrentResource())]
+		    .myvk_image_views[!db];
 	}
-	inline static const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ExternalImageBase *image) {
+	inline static const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ExternalImageBase *image, bool db = false) {
 		return image->GetVkImageView();
 	}
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageAlias *image) const {
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageAlias *image, bool db = false) const {
 		return image->GetPointedResource()->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
 	}
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const LastFrameImage *image) const {
-		return image->GetCurrentResource()->Visit(
-		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
-	}
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageBase *image) const {
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageBase *image, bool db = false) const {
 		return image->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image); });
 	}
 
-	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ManagedImage *image) const {
-		return m_allocated_images[m_p_resolved->GetIntImageID(image)].myvk_image;
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const InternalImageBase *image, bool db = false) const {
+		return m_allocated_images[m_p_resolved->GetIntImageID(image)].myvk_images[db];
 	}
-	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const CombinedImage *image) const {
-		return m_allocated_images[m_p_resolved->GetIntImageID(image)].myvk_image;
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const LastFrameImage *image, bool db = false) const {
+		return m_allocated_images[m_p_resolved->GetIntImageID(image->GetCurrentResource())].myvk_images[!db];
 	}
-	inline static const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ExternalImageBase *image) {
+	inline static const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ExternalImageBase *image, bool db = false) {
 		return image->GetVkImageView()->GetImagePtr();
 	}
-	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageAlias *image) const {
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageAlias *image, bool db = false) const {
 		return image->GetPointedResource()->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
 	}
-	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const LastFrameImage *image) const {
-		// TODO: Should have its own image
-		return image->GetCurrentResource()->Visit(
-		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
-	}
-	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageBase *image) const {
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageBase *image, bool db = false) const {
 		return image->Visit(
 		    [this](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image); });
 	}
 
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ManagedBuffer *buffer) const {
-		return m_allocated_buffers[m_p_resolved->GetIntBufferID(buffer)].myvk_buffer;
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ManagedBuffer *buffer, bool db = false) const {
+		return m_allocated_buffers[m_p_resolved->GetIntBufferID(buffer)].myvk_buffers[db];
 	}
-	inline static const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ExternalBufferBase *buffer) {
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const LastFrameBuffer *buffer, bool db = false) const {
+		return m_allocated_buffers[m_p_resolved->GetIntBufferID(buffer->GetCurrentResource())].myvk_buffers[!db];
+	}
+	inline static const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ExternalBufferBase *buffer, bool db = false) {
 		return buffer->GetVkBuffer();
 	}
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferAlias *buffer) const {
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferAlias *buffer, bool db = false) const {
 		return buffer->GetPointedResource()->Visit(
 		    [this](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer); });
 	}
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const LastFrameBuffer *buffer) const {
-		// TODO: Should have its own buffer
-		return buffer->GetCurrentResource()->Visit(
-		    [this](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer); });
-	}
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferBase *buffer) const {
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferBase *buffer, bool db = false) const {
 		return buffer->Visit(
 		    [this](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer); });
 	}
