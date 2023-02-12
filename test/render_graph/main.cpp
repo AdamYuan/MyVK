@@ -113,7 +113,7 @@ private:
 		AddColorAttachmentInput<1, myvk_rg::Usage::kColorAttachmentW>({"normal"}, normal);
 		AddColorAttachmentInput<2, myvk_rg::Usage::kColorAttachmentW>({"bright"}, bright);
 
-		AddInputAttachmentInput<0, 0>({"last_frame_albedo"}, last_frame_albedo);
+		// AddInputAttachmentInput<0, 0>({"last_frame_albedo"}, last_frame_albedo);
 		SetDepthAttachmentInput<myvk_rg::Usage::kDepthAttachmentRW>({"depth"}, depth);
 		AddInput<myvk_rg::Usage::kDrawIndirectBuffer>({"draw_list"}, draw_list);
 	}
@@ -312,7 +312,7 @@ public:
 class TestRenderGraph final : public myvk_rg::RenderGraph<TestRenderGraph> {
 private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER() {
+	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
 		{
 			auto test_pass_0 = CreatePass<TestPass0>({"test_pass_0"});
 			auto test_blur_pass = CreatePass<BlurPass>({"test_blur_pass"}, test_pass_0->GetNoiseTexOutput());
@@ -327,6 +327,8 @@ private:
 			// AddResult({"output"}, test_pass_1->GetColorOutput());
 		}
 		{
+			auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
+
 			auto last_frame_depth_hierarchy = MakeLastFrameImage({"lf_depth_hierarchy"});
 
 			auto cull_pass = CreatePass<CullPass>({"cull_pass"}, last_frame_depth_hierarchy);
@@ -337,9 +339,8 @@ private:
 			    {"screen_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen1"}, VK_FORMAT_R8G8B8A8_UNORM),
 			    gbuffer_pass->GetAlbedoOutput(), gbuffer_pass->GetNormalOutput(), wboit_gen_pass->GetRevealOutput(),
 			    wboit_gen_pass->GetAccumOutput());
-			auto bright_pass = CreatePass<BrightPass>(
-			    {"bright_pass"}, CreateResource<myvk_rg::ManagedImage>({"screen2"}, VK_FORMAT_R8G8B8A8_UNORM),
-			    screen_pass->GetScreenOutput(), blur_bright_pass->GetImageDstOutput());
+			auto bright_pass = CreatePass<BrightPass>({"bright_pass"}, swapchain_image, screen_pass->GetScreenOutput(),
+			                                          blur_bright_pass->GetImageDstOutput());
 			auto depth_hierarchy_pass =
 			    CreatePass<DepthHierarchyPass>({"depth_hierarchy_pass"}, gbuffer_pass->GetDepthOutput());
 
@@ -377,12 +378,14 @@ int main() {
 		    physical_device->GetDefaultFeatures(), {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 	}
 
-	myvk::Ptr<TestRenderGraph> render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device);
-	render_graph->SetCanvasSize({1000, 1000});
+	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
+
+	myvk::Ptr<TestRenderGraph> render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device, frame_manager);
+	render_graph->SetCanvasSize(frame_manager->GetExtent());
 	render_graph->compile();
-	render_graph->ToggleResult1();
+	/* render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");
-	render_graph->SetCanvasSize({1920, 1080});
+	render_graph->SetCanvasSize(frame_manager->GetExtent());
 	render_graph->compile();
 	render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");
@@ -390,11 +393,13 @@ int main() {
 	render_graph->compile();
 	printf("RESIZE\n");
 	render_graph->SetCanvasSize({1920, 1080});
-	render_graph->compile();
+	render_graph->compile(); */
+
+	frame_manager->SetResizeFunc([render_graph](const VkExtent2D &extent) {
+		render_graph->SetCanvasSize(extent);
+	});
 
 	// object_pool.DeleteBuffer("draw_list");
-
-	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();

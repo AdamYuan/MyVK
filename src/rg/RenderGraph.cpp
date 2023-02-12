@@ -119,7 +119,7 @@ void RenderGraphBase::compile() const {
 
 void RenderGraphBase::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
 	compile(); // Check & Compile before every execution
-	           // m_compiler->executor.CmdExecute(command_buffer);
+	m_compiler->executor.CmdExecute(command_buffer);
 }
 
 // Resource GetVk functions

@@ -44,4 +44,34 @@ inline static constexpr VkImageAspectFlags VkImageAspectFlagsFromVkFormat(VkForm
 	}
 }
 
+inline static constexpr VkPipelineStageFlags2 VkAttachmentInitialStagesFromVkFormat(VkFormat format) {
+	VkImageAspectFlags aspects = VkImageAspectFlagsFromVkFormat(format);
+	VkPipelineStageFlags2 ret{};
+	if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
+		ret |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+	if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+		ret |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
+	return ret;
+}
+
+inline static constexpr VkAccessFlags2 VkAttachmentInitAccessFromVkFormat(VkFormat format) {
+	VkImageAspectFlags aspects = VkImageAspectFlagsFromVkFormat(format);
+	VkAccessFlags2 ret{};
+	if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
+		ret |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+	if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+		ret |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	return ret;
+}
+
+inline static constexpr VkAccessFlags2 VkAttachmentLoadAccessFromVkFormat(VkFormat format) {
+	VkImageAspectFlags aspects = VkImageAspectFlagsFromVkFormat(format);
+	VkAccessFlags2 ret{};
+	if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
+		ret |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+	if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+		ret |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+	return ret;
+}
+
 #endif

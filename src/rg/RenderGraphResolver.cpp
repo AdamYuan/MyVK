@@ -124,24 +124,22 @@ struct RenderGraphResolver::OriginGraph {
 		// Dependency Edges
 		// TODO: Last Frame Images should not overlap [CHECK]
 		for (auto &pair : nodes) {
-			std::unordered_map<const ResourceBase *, const Input *> inputs;
+			std::unordered_map<const ResourceBase *, const Input *> write_inputs;
 			std::unordered_map<const ResourceBase *, Edge *> write_outputs;
 			const PassBase *pass = pair.first;
 			auto &node = pair.second;
 
 			for (auto *p_edge : node.input_edges) {
 				if (p_edge->extra_type == ExtraEdgeType::kNone) {
-					if (UsageIsReadOnly(p_edge->to.p_input->GetUsage())) {
-						assert(false);
+					if (UsageIsReadOnly(p_edge->to.p_input->GetUsage()))
 						continue;
-					}
-					assert(inputs.find(p_edge->resource) == inputs.end());
-					inputs[p_edge->resource] = p_edge->to.p_input;
+					assert(write_inputs.find(p_edge->resource) == write_inputs.end());
+					write_inputs[p_edge->resource] = p_edge->to.p_input;
 				}
 			}
 			for (auto *p_edge : node.output_edges) {
 				if (p_edge->extra_type == ExtraEdgeType::kNone) {
-					inputs.erase(p_edge->resource);
+					write_inputs.erase(p_edge->resource);
 
 					if (UsageIsReadOnly(p_edge->to.p_input->GetUsage()))
 						continue;
@@ -152,7 +150,7 @@ struct RenderGraphResolver::OriginGraph {
 			}
 
 			// inputs contains all the input-only resources, should be their last use
-			for (const auto &it : inputs) {
+			for (const auto &it : write_inputs) {
 				const auto *resource = it.first;
 				const auto *p_input = it.second;
 				if (resource->GetState() == ResourceState::kExternal)
@@ -297,7 +295,8 @@ void RenderGraphResolver::extract_ordered_passes_and_edges(OriginGraph &&graph) 
 		m_pass_edges.push_back({resource, from, to, type});
 		const PassEdge *p_edge = &m_pass_edges.back();
 		(from.pass ? m_pass_nodes[GetPassOrder(from.pass)].output_edges : m_src_output_edges).push_back(p_edge);
-		m_pass_nodes[GetPassOrder(to.pass)].input_edges.push_back(p_edge);
+		if (to.pass)
+			m_pass_nodes[GetPassOrder(to.pass)].input_edges.push_back(p_edge);
 	};
 
 	for (const auto &edge : graph.edges) {

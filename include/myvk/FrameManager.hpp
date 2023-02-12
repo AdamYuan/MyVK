@@ -15,7 +15,7 @@
 namespace myvk {
 class FrameManager : public DeviceObjectBase {
 public:
-	using ResizeFunc = std::function<void(const FrameManager &)>;
+	using ResizeFunc = std::function<void(const VkExtent2D &)>;
 
 private:
 	bool m_resized{false};
