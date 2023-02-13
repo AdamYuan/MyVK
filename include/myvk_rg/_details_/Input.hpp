@@ -311,6 +311,7 @@ private:
 		if (!input)
 			return nullptr;
 		m_descriptor_set_data.AddBinding(binding, input, sampler);
+		get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kCreateDescriptor);
 		return input;
 	}
 
@@ -318,9 +319,13 @@ private:
 		if (UsageIsDescriptor(input->GetUsage())) {
 			assert(~(input->GetDescriptorBinding()));
 			m_descriptor_set_data.RemoveBinding(input->GetDescriptorBinding());
+			get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kCreateDescriptor);
 		}
 	}
-	inline void pre_clear_inputs() { m_descriptor_set_data.ClearBindings(); }
+	inline void pre_clear_inputs() {
+		m_descriptor_set_data.ClearBindings();
+		get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kCreateDescriptor);
+	}
 
 	template <typename> friend class InputPool;
 	template <typename> friend class AttachmentInputSlot;
@@ -380,7 +385,7 @@ protected:
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
 	}
 	/* inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetDescriptorSetLayout() const {
-		return m_descriptor_set_data.GetVkDescriptorSetLayout(get_render_graph_ptr()->GetDevicePtr());
+	    return m_descriptor_set_data.GetVkDescriptorSetLayout(get_render_graph_ptr()->GetDevicePtr());
 	} */
 };
 

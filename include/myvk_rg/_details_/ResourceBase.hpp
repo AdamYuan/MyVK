@@ -103,6 +103,7 @@ public:
 	static constexpr bool kIsAlias = kState == ResourceState::kAlias;
 	static constexpr bool kIsLastFrame = kState == ResourceState::kLastFrame;
 	static constexpr bool kIsInternal = kState == ResourceState::kManaged || kState == ResourceState::kCombinedImage;
+	static constexpr bool kIsExternal = kState == ResourceState::kExternal;
 };
 
 class ResourceBase : public ObjectBase {

@@ -5,8 +5,6 @@
 namespace myvk_rg::_details_ {
 
 void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved) {
-	m_p_resolved = &resolved;
-
 	m_pass_descriptors.clear();
 	m_pass_descriptors.resize(resolved.GetPassNodeCount());
 
@@ -16,6 +14,7 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 
 	for (uint32_t i = 0; i < resolved.GetPassNodeCount(); ++i) {
 		const PassBase *pass = resolved.GetPassNode(i).pass;
+		PassDescriptor &pass_desc = m_pass_descriptors[i];
 
 		if (pass->m_p_descriptor_set_data == nullptr || pass->m_p_descriptor_set_data->m_bindings.empty())
 			continue;
@@ -40,6 +39,37 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 				info.pImmutableSamplers = &immutable_samplers.back();
 			}
 
+			const auto set_resource_binding = [&pass_desc, binding = info.binding,
+			                                   type = info.descriptorType](const auto *resource) {
+				using Trait = ResourceVisitorTrait<decltype(resource)>;
+				if constexpr (Trait::kType == ResourceType::kImage) {
+					if constexpr (Trait::kIsInternal)
+						pass_desc.int_image_bindings[binding] = {resource, type};
+					else if constexpr (Trait::kIsLastFrame)
+						pass_desc.lf_image_bindings[binding] = {resource, type};
+					else if constexpr (Trait::kIsExternal)
+						pass_desc.ext_image_bindings[binding] = {resource, type};
+					else
+						assert(false);
+				} else {
+					if constexpr (Trait::kIsInternal)
+						pass_desc.int_buffer_bindings[binding] = {resource, type};
+					else if constexpr (Trait::kIsLastFrame)
+						pass_desc.lf_buffer_bindings[binding] = {resource, type};
+					else if constexpr (Trait::kIsExternal)
+						pass_desc.ext_buffer_bindings[binding] = {resource, type};
+					else
+						assert(false);
+				}
+			};
+
+			binding_data.second.GetInputPtr()->GetResource()->Visit([&set_resource_binding](const auto *resource) {
+				if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias)
+					resource->GetPointedResource()->Visit(set_resource_binding);
+				else
+					set_resource_binding(resource);
+			});
+
 			++descriptor_type_counts[info.descriptorType];
 		}
 		descriptor_set_layouts.emplace_back(myvk::DescriptorSetLayout::Create(device, bindings));
@@ -54,9 +84,9 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 			pool_sizes.emplace_back();
 			VkDescriptorPoolSize &size = pool_sizes.back();
 			size.type = it.first;
-			size.descriptorCount = it.second;
+			size.descriptorCount = it.second << 1u;
 		}
-		descriptor_pool = myvk::DescriptorPool::Create(device, descriptor_set_layouts.size(), pool_sizes);
+		descriptor_pool = myvk::DescriptorPool::Create(device, descriptor_set_layouts.size() << 1u, pool_sizes);
 	}
 
 	std::vector<myvk::Ptr<myvk::DescriptorSet>> descriptor_sets =
@@ -68,10 +98,15 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 		if (pass->m_p_descriptor_set_data == nullptr || pass->m_p_descriptor_set_data->m_bindings.empty())
 			continue;
 
-		m_pass_descriptors[i].set = descriptor_sets[s++];
+		m_pass_descriptors[i].sets[0] = descriptor_sets[s++];
 	}
 
 	printf("Descriptor Created\n");
+}
+
+void RenderGraphDescriptor::PreBind(const RenderGraphAllocator &allocated) {
+	for (const auto &pass_desc : m_pass_descriptors) {
+	}
 }
 
 } // namespace myvk_rg::_details_
