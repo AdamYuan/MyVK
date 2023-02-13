@@ -17,7 +17,9 @@ private:
 		auto draw_list = CreateResource<myvk_rg::ManagedBuffer>({"draw_list"});
 		draw_list->SetSize(1024 * 1024);
 		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
-		    {"depth_hierarchy"}, depth_hierarchy, nullptr);
+		    {"depth_hierarchy"}, depth_hierarchy,
+		    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR,
+		                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 		AddDescriptorInput<1, myvk_rg::Usage::kStorageBufferW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({"draw_list"},
 		                                                                                               draw_list);
 	}
@@ -38,7 +40,9 @@ private:
 			top_level_img->SetCanvasSize(0, 1);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"top"}, top_level_img);
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
-			    {"depth"}, depth_img, nullptr);
+			    {"depth"}, depth_img,
+			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_NEAREST,
+			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 		}
 
 	public:
@@ -55,7 +59,9 @@ private:
 			level_img->SetCanvasSize(level, 1);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"level"}, level_img);
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
-			    {"prev_level"}, prev_level_img, nullptr);
+			    {"prev_level"}, prev_level_img,
+			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_NEAREST,
+			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 		}
 
 	public:
@@ -159,7 +165,9 @@ private:
 
 			auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"}, image_src->GetFormat());
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
-			    {"image_src"}, image_src, nullptr);
+			    {"image_src"}, image_src,
+			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR,
+			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"image_dst"}, image_dst);
 
 			// auto descriptor_set_layout = GetDescriptorSetLayout();

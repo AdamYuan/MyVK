@@ -11,7 +11,7 @@ Ptr<Sampler> Sampler::Create(const Ptr<Device> &device, const VkSamplerCreateInf
 }
 
 Ptr<Sampler> Sampler::Create(const Ptr<Device> &device, VkFilter filter, VkSamplerAddressMode address_mode,
-                             VkSamplerMipmapMode mipmap_mode, uint32_t mipmap_level, bool request_anisotropy,
+                             VkSamplerMipmapMode mipmap_mode, float max_lod, bool request_anisotropy,
                              float max_anisotropy) {
 	VkSamplerCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -24,7 +24,7 @@ Ptr<Sampler> Sampler::Create(const Ptr<Device> &device, VkFilter filter, VkSampl
 	create_info.mipLodBias = 0.0f;
 	create_info.compareOp = VK_COMPARE_OP_NEVER;
 	create_info.minLod = 0.0f;
-	create_info.maxLod = (float)mipmap_level;
+	create_info.maxLod = max_lod;
 	if (device->GetEnabledFeatures().vk10.samplerAnisotropy) {
 		create_info.anisotropyEnable = request_anisotropy ? VK_TRUE : VK_FALSE;
 		create_info.maxAnisotropy = max_anisotropy;
@@ -43,8 +43,8 @@ Sampler::~Sampler() {
 }
 
 Ptr<Sampler> Sampler::CreateClampToBorder(const Ptr<Device> &device, VkFilter filter, VkBorderColor border_color,
-                                          VkSamplerMipmapMode mipmap_mode, uint32_t mipmap_level,
-                                          bool request_anisotropy, float max_anisotropy) {
+                                          VkSamplerMipmapMode mipmap_mode, float max_lod, bool request_anisotropy,
+                                          float max_anisotropy) {
 	VkSamplerCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
 	create_info.magFilter = filter;
@@ -57,7 +57,7 @@ Ptr<Sampler> Sampler::CreateClampToBorder(const Ptr<Device> &device, VkFilter fi
 	create_info.mipLodBias = 0.0f;
 	create_info.compareOp = VK_COMPARE_OP_NEVER;
 	create_info.minLod = 0.0f;
-	create_info.maxLod = (float)mipmap_level;
+	create_info.maxLod = max_lod;
 	if (device->GetEnabledFeatures().vk10.samplerAnisotropy) {
 		create_info.anisotropyEnable = request_anisotropy ? VK_TRUE : VK_FALSE;
 		create_info.maxAnisotropy = max_anisotropy;
