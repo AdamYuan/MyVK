@@ -22,13 +22,13 @@ struct RenderGraphBase::Compiler {
 void RenderGraphBase::MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &device) {
 	m_device_ptr = device;
 	// Check Lazy Allocation Support
-	for (uint32_t i = 0; i < GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypeCount; i++) {
-		if (GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypes[i].propertyFlags &
-		    VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
-			m_lazy_allocation_supported = true;
-			break;
-		}
-	}
+	/* for (uint32_t i = 0; i < GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypeCount; i++) {
+	    if (GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypes[i].propertyFlags &
+	        VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
+	        m_lazy_allocation_supported = true;
+	        break;
+	    }
+	} */
 	// Create Compiler
 	m_compiler = std::make_unique<Compiler>();
 }
@@ -75,12 +75,16 @@ void RenderGraphBase::compile() const {
 	if (exe_compile_phrase & CAST8(CompilePhrase::kPrepareExecutor))
 		m_compiler->executor.Prepare(GetDevicePtr(), m_compiler->resolver, m_compiler->scheduler,
 		                             m_compiler->allocator);
+	if (exe_compile_phrase & CAST8(CompilePhrase::kPreBindDescriptor))
+		m_compiler->descriptor.PreBind(m_compiler->allocator);
 #undef CAST8
 }
 
 void RenderGraphBase::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
 	compile(); // Check & Compile before every execution
-	m_compiler->executor.CmdExecute(command_buffer);
+	m_compiler->descriptor.ExecutionBind(m_exe_flip);
+	m_compiler->executor.CmdExecute(command_buffer, m_exe_flip);
+	m_exe_flip ^= 1u;
 }
 
 // Resource GetVk functions
@@ -93,5 +97,7 @@ const myvk::Ptr<myvk::ImageView> &ManagedImage::GetVkImageView() const {
 const myvk::Ptr<myvk::ImageView> &CombinedImage::GetVkImageView() const {
 	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this);
 }
+
+// Descriptor GetVk functions
 
 } // namespace myvk_rg::_details_

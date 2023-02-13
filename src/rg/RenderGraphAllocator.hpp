@@ -20,7 +20,7 @@ public:
 		VkMemoryRequirements vk_memory_requirements{};
 		VkDeviceSize memory_offset{}, db_memory_offset{};
 		uint32_t allocation_id{};
-		bool double_buffering{}; // TODO: Check this
+		bool double_buffering{};
 
 	protected:
 		uint32_t internal_resource_id{};
@@ -105,22 +105,31 @@ public:
 		                                                         m_p_resolved->GetIntResourceID(resource_1));
 	}
 
+	template <typename Image> inline const IntImageAlloc &GetIntImageAlloc(const Image *image) const {
+		return m_allocated_images[RenderGraphResolver::GetIntImageID(image)];
+	}
 	inline const IntImageAlloc &GetIntImageAlloc(uint32_t image_id) const { return m_allocated_images[image_id]; }
 	inline const std::vector<IntImageAlloc> &GetIntImageAllocVector() const { return m_allocated_images; }
 
+	template <typename Buffer> inline const IntBufferAlloc &GetIntBufferAlloc(const Buffer *buffer) const {
+		return m_allocated_buffers[RenderGraphResolver::GetIntBufferID(buffer)];
+	}
 	inline const IntBufferAlloc &GetIntBufferAlloc(uint32_t buffer_id) const { return m_allocated_buffers[buffer_id]; }
 	inline const std::vector<IntBufferAlloc> &GetIntBufferAllocVector() const { return m_allocated_buffers; }
 
+	template <typename Image> inline const IntImageViewAlloc &GetIntImageViewAlloc(const Image *image) const {
+		return m_allocated_image_views[RenderGraphResolver::GetIntImageViewID(image)];
+	}
 	inline const IntImageViewAlloc &GetIntImageViewAlloc(uint32_t image_view_id) const {
 		return m_allocated_image_views[image_view_id];
 	}
 	inline const std::vector<IntImageViewAlloc> &GetIntImageViewAllocVector() const { return m_allocated_image_views; }
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const InternalImageBase *image, bool db = false) const {
-		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image)].myvk_image_views[db];
+		return m_allocated_image_views[RenderGraphResolver::GetIntImageViewID(image)].myvk_image_views[db];
 	}
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const LastFrameImage *image, bool db = false) const {
-		return m_allocated_image_views[m_p_resolved->GetIntImageViewID(image->GetCurrentResource())]
+		return m_allocated_image_views[RenderGraphResolver::GetIntImageViewID(image->GetCurrentResource())]
 		    .myvk_image_views[!db];
 	}
 	inline static const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ExternalImageBase *image, bool db = false) {
@@ -136,10 +145,10 @@ public:
 	}
 
 	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const InternalImageBase *image, bool db = false) const {
-		return m_allocated_images[m_p_resolved->GetIntImageID(image)].myvk_images[db];
+		return m_allocated_images[RenderGraphResolver::GetIntImageID(image)].myvk_images[db];
 	}
 	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const LastFrameImage *image, bool db = false) const {
-		return m_allocated_images[m_p_resolved->GetIntImageID(image->GetCurrentResource())].myvk_images[!db];
+		return m_allocated_images[RenderGraphResolver::GetIntImageID(image->GetCurrentResource())].myvk_images[!db];
 	}
 	inline static const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ExternalImageBase *image, bool db = false) {
 		return image->GetVkImageView()->GetImagePtr();
@@ -154,10 +163,10 @@ public:
 	}
 
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ManagedBuffer *buffer, bool db = false) const {
-		return m_allocated_buffers[m_p_resolved->GetIntBufferID(buffer)].myvk_buffers[db];
+		return m_allocated_buffers[RenderGraphResolver::GetIntBufferID(buffer)].myvk_buffers[db];
 	}
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const LastFrameBuffer *buffer, bool db = false) const {
-		return m_allocated_buffers[m_p_resolved->GetIntBufferID(buffer->GetCurrentResource())].myvk_buffers[!db];
+		return m_allocated_buffers[RenderGraphResolver::GetIntBufferID(buffer->GetCurrentResource())].myvk_buffers[!db];
 	}
 	inline static const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ExternalBufferBase *buffer, bool db = false) {
 		return buffer->GetVkBuffer();

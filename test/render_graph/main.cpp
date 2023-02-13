@@ -382,7 +382,6 @@ int main() {
 
 	myvk::Ptr<TestRenderGraph> render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device, frame_manager);
 	render_graph->SetCanvasSize(frame_manager->GetExtent());
-	render_graph->compile();
 	/* render_graph->ToggleResult1();
 	printf("TOGGLE_RESULT_1\n");
 	render_graph->SetCanvasSize(frame_manager->GetExtent());

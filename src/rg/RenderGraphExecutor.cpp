@@ -641,10 +641,8 @@ void RenderGraphExecutor::Prepare(const myvk::Ptr<myvk::Device> &device, const R
 	create_render_passes_and_framebuffers(std::move(subpass_dependencies));
 }
 
-void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {
-	m_flip ^= 1u;
-
-	const auto cmd_pipeline_barriers = [&command_buffer, this](const BarrierInfo &barrier_info) {
+void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, bool flip) const {
+	const auto cmd_pipeline_barriers = [&command_buffer, this, flip](const BarrierInfo &barrier_info) {
 		if (barrier_info.empty())
 			return;
 		std::vector<VkBufferMemoryBarrier2> buffer_barriers;
@@ -662,7 +660,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = m_p_allocated->GetVkBuffer(info.buffer, m_flip);
+			const myvk::Ptr<myvk::BufferBase> &myvk_buffer = m_p_allocated->GetVkBuffer(info.buffer, flip);
 			barrier.buffer = myvk_buffer->GetHandle();
 			barrier.size = myvk_buffer->GetSize();
 			barrier.offset = 0u;
@@ -680,7 +678,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			barrier.srcStageMask = info.src_stage_mask;
 			barrier.dstStageMask = info.dst_stage_mask;
 
-			const myvk::Ptr<myvk::ImageView> &myvk_image_view = m_p_allocated->GetVkImageView(info.image, m_flip);
+			const myvk::Ptr<myvk::ImageView> &myvk_image_view = m_p_allocated->GetVkImageView(info.image, flip);
 			barrier.image = myvk_image_view->GetImagePtr()->GetHandle();
 			barrier.subresourceRange = myvk_image_view->GetSubresourceRange();
 		}
@@ -706,16 +704,16 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 			attachment_image_views.reserve(attachment_infos.size());
 
 			for (const auto &att_info : attachment_infos) {
-				att_info.image->Visit([this, &clear_values, &attachment_image_views](const auto *image) {
+				att_info.image->Visit([this, flip, &clear_values, &attachment_image_views](const auto *image) {
 					if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kManagedImage ||
 					              ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kExternalImageBase) {
 						clear_values.push_back(image->GetClearValue());
-						attachment_image_views.push_back(m_p_allocated->GetVkImageView(image, m_flip)->GetHandle());
+						attachment_image_views.push_back(m_p_allocated->GetVkImageView(image, flip)->GetHandle());
 					} else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
 					                     ResourceClass::kLastFrameImage) {
 						clear_values.emplace_back();
 						attachment_image_views.push_back(
-						    m_p_allocated->GetVkImageView(image, m_flip)->GetHandle()); // TODO: just use image
+						    m_p_allocated->GetVkImageView(image, flip)->GetHandle()); // TODO: just use image
 					} else {
 						assert(false);
 					}

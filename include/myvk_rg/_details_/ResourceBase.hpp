@@ -135,6 +135,20 @@ public:
 	// inline PassBase *GetProducerPassPtr() const { return m_producer_pass_ptr; }
 };
 
+class ImageBase;
+class BufferBase;
+template <typename RawType> class ResourceTrait {
+private:
+	using Type = std::decay_t<std::remove_pointer_t<std::decay_t<RawType>>>;
+	template <typename Base>
+	static constexpr bool kIsBaseOf = std::is_same_v<Base, RawType> || std::is_base_of_v<Base, RawType>;
+
+public:
+	static constexpr bool kIsResource = kIsBaseOf<ResourceBase>;
+	static constexpr bool kIsImage = kIsBaseOf<ImageBase>;
+	static constexpr bool kIsBuffer = kIsBaseOf<BufferBase>;
+};
+
 } // namespace myvk_rg::_details_
 
 #endif

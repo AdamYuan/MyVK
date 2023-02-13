@@ -40,24 +40,24 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 			}
 
 			const auto set_resource_binding = [&pass_desc, binding = info.binding,
-			                                   type = info.descriptorType](const auto *resource) {
+			                                   p_input = binding_data.second.GetInputPtr()](const auto *resource) {
 				using Trait = ResourceVisitorTrait<decltype(resource)>;
 				if constexpr (Trait::kType == ResourceType::kImage) {
 					if constexpr (Trait::kIsInternal)
-						pass_desc.int_image_bindings[binding] = {resource, type};
+						pass_desc.int_image_bindings[binding] = {resource, p_input};
 					else if constexpr (Trait::kIsLastFrame)
-						pass_desc.lf_image_bindings[binding] = {resource, type};
+						pass_desc.lf_image_bindings[binding] = {resource, p_input};
 					else if constexpr (Trait::kIsExternal)
-						pass_desc.ext_image_bindings[binding] = {resource, type};
+						pass_desc.ext_image_bindings[binding] = {resource, p_input};
 					else
 						assert(false);
 				} else {
 					if constexpr (Trait::kIsInternal)
-						pass_desc.int_buffer_bindings[binding] = {resource, type};
+						pass_desc.int_buffer_bindings[binding] = {resource, p_input};
 					else if constexpr (Trait::kIsLastFrame)
-						pass_desc.lf_buffer_bindings[binding] = {resource, type};
+						pass_desc.lf_buffer_bindings[binding] = {resource, p_input};
 					else if constexpr (Trait::kIsExternal)
-						pass_desc.ext_buffer_bindings[binding] = {resource, type};
+						pass_desc.ext_buffer_bindings[binding] = {resource, p_input};
 					else
 						assert(false);
 				}
@@ -104,9 +104,119 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 	printf("Descriptor Created\n");
 }
 
-void RenderGraphDescriptor::PreBind(const RenderGraphAllocator &allocated) {
-	for (const auto &pass_desc : m_pass_descriptors) {
+struct DescriptorWriter {
+	std::vector<VkWriteDescriptorSet> writes;
+	std::list<VkDescriptorImageInfo> image_infos;
+	std::list<VkDescriptorBufferInfo> buffer_infos;
+
+	inline void push_buffer_write(const myvk::Ptr<myvk::DescriptorSet> &set, uint32_t binding,
+	                              const myvk::Ptr<myvk::BufferBase> &buffer, const Input *p_input) {
+		writes.push_back({VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
+		VkWriteDescriptorSet &write = writes.back();
+
+		write.descriptorCount = 1u;
+		write.descriptorType = UsageGetDescriptorType(p_input->GetUsage());
+		write.dstBinding = binding;
+		write.dstSet = set->GetHandle();
+
+		buffer_infos.emplace_back();
+		VkDescriptorBufferInfo &buffer_info = buffer_infos.back();
+		buffer_info.buffer = buffer->GetHandle();
+		buffer_info.offset = 0;
+		buffer_info.range = buffer->GetSize();
+
+		write.pBufferInfo = &buffer_info;
 	}
+
+	inline void push_image_write(const myvk::Ptr<myvk::DescriptorSet> &set, uint32_t binding,
+	                             const myvk::Ptr<myvk::ImageView> &image_view, const Input *p_input) {
+		writes.push_back({VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET});
+		VkWriteDescriptorSet &write = writes.back();
+
+		write.descriptorCount = 1u;
+		write.descriptorType = UsageGetDescriptorType(p_input->GetUsage());
+		write.dstBinding = binding;
+		write.dstSet = set->GetHandle();
+
+		image_infos.emplace_back();
+		VkDescriptorImageInfo &image_info = image_infos.back();
+		image_info.imageLayout = UsageGetImageLayout(p_input->GetUsage());
+		image_info.imageView = image_view->GetHandle();
+
+		write.pImageInfo = &image_info;
+	}
+};
+
+void RenderGraphDescriptor::PreBind(const RenderGraphAllocator &allocated) {
+	DescriptorWriter writer{};
+
+	for (auto &pass_desc : m_pass_descriptors) {
+		if (pass_desc.sets[1] == nullptr) {
+			// Query double_set
+			const auto query_double_set = [&allocated](const auto &binding_map) {
+				return std::any_of(binding_map.begin(), binding_map.end(), [allocated](const auto &b) {
+					if constexpr (ResourceTrait<decltype(b.second.resource)>::kIsImage)
+						return allocated.GetIntImageAlloc(b.second.resource).double_buffering;
+					else if constexpr (ResourceTrait<decltype(b.second.resource)>::kIsBuffer)
+						return allocated.GetIntBufferAlloc(b.second.resource).double_buffering;
+					return false;
+				});
+			};
+			bool double_set =
+			    query_double_set(pass_desc.int_image_bindings) || query_double_set(pass_desc.int_buffer_bindings) ||
+			    query_double_set(pass_desc.lf_image_bindings) || query_double_set(pass_desc.lf_buffer_bindings);
+
+			if (double_set) {
+				pass_desc.sets[1] = myvk::DescriptorSet::Create(pass_desc.sets[0]->GetDescriptorPoolPtr(),
+				                                                pass_desc.sets[0]->GetDescriptorSetLayoutPtr());
+			} else
+				pass_desc.sets[1] = pass_desc.sets[0];
+		}
+
+		const auto write_int_lf_descriptors = [&writer, &pass_desc, &allocated](bool flip = false) {
+			for (const auto &b : pass_desc.int_image_bindings)
+				writer.push_image_write(pass_desc.sets[flip], b.first,
+				                        allocated.GetVkImageView(b.second.resource, flip), b.second.p_input);
+			for (const auto &b : pass_desc.lf_image_bindings)
+				writer.push_image_write(pass_desc.sets[flip], b.first,
+				                        allocated.GetVkImageView(b.second.resource, flip), b.second.p_input);
+			for (const auto &b : pass_desc.int_buffer_bindings)
+				writer.push_buffer_write(pass_desc.sets[flip], b.first, allocated.GetVkBuffer(b.second.resource, flip),
+				                         b.second.p_input);
+			for (const auto &b : pass_desc.lf_buffer_bindings)
+				writer.push_buffer_write(pass_desc.sets[flip], b.first, allocated.GetVkBuffer(b.second.resource, flip),
+				                         b.second.p_input);
+		};
+
+		write_int_lf_descriptors();
+		if (pass_desc.sets[1] != pass_desc.sets[0])
+			write_int_lf_descriptors(true);
+	}
+	printf("Pre-bind descriptors with %zu writes\n", writer.writes.size());
+	vkUpdateDescriptorSets(m_pass_descriptors.front().sets[0]->GetDevicePtr()->GetHandle(), writer.writes.size(),
+	                       writer.writes.data(), 0, nullptr);
+}
+
+void RenderGraphDescriptor::ExecutionBind(bool flip) {
+	DescriptorWriter writer{};
+
+	for (auto &pass_desc : m_pass_descriptors) {
+		const auto write_ext_descriptors = [&writer, &pass_desc](bool flip = false) {
+			for (const auto &b : pass_desc.ext_image_bindings)
+				writer.push_image_write(pass_desc.sets[flip], b.first, b.second.resource->GetVkImageView(),
+				                        b.second.p_input);
+			for (const auto &b : pass_desc.ext_buffer_bindings)
+				writer.push_buffer_write(pass_desc.sets[flip], b.first, b.second.resource->GetVkBuffer(),
+				                         b.second.p_input);
+		};
+		write_ext_descriptors(flip);
+	}
+	if (writer.writes.empty())
+		return;
+
+	printf("Bind execution descriptors with %zu writes\n", writer.writes.size());
+	vkUpdateDescriptorSets(m_pass_descriptors.front().sets[0]->GetDevicePtr()->GetHandle(), writer.writes.size(),
+	                       writer.writes.data(), 0, nullptr);
 }
 
 } // namespace myvk_rg::_details_

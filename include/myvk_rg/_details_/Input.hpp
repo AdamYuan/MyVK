@@ -373,6 +373,7 @@ protected:
 	                                      kUsageForImage<Usage>>>
 	inline bool AddDescriptorInput(const PoolKey &input_key, ImageBase *image,
 	                               const myvk::Ptr<myvk::Sampler> &sampler) {
+		assert(sampler);
 		return add_input_descriptor(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>, Binding, sampler);
 	}
 	template <uint32_t Binding, Usage Usage, VkPipelineStageFlags2 PipelineStageFlags,
@@ -382,6 +383,7 @@ protected:
 	                                      kUsageForImage<Usage>>>
 	inline bool AddDescriptorInput(const PoolKey &input_key, ImageBase *image,
 	                               const myvk::Ptr<myvk::Sampler> &sampler) {
+		assert(sampler);
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
 	}
 	/* inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetDescriptorSetLayout() const {

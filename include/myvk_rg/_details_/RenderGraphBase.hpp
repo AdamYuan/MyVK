@@ -45,16 +45,20 @@ public:
 private:
 	myvk::Ptr<myvk::Device> m_device_ptr;
 	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
+
 	VkExtent2D m_canvas_size{};
-	bool m_lazy_allocation_supported{};
+	// bool m_lazy_allocation_supported{};
 
 	mutable uint8_t m_compile_phrase{};
 	inline void SetCompilePhrases(uint8_t phrase) { m_compile_phrase |= phrase; }
 
 	struct Compiler;
 	std::unique_ptr<Compiler> m_compiler{};
+	mutable bool m_exe_flip{};
 
 	void MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &device);
+
+	void compile() const;
 
 	template <typename> friend class RenderGraph;
 	template <typename> friend class ImageAttachmentInfo;
@@ -82,7 +86,6 @@ public:
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
 
 	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
-	void compile() const; // TODO: Mark it as private
 };
 
 } // namespace myvk_rg::_details_

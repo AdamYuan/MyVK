@@ -13,7 +13,7 @@ class RenderGraphDescriptor {
 private:
 	template <typename Resource> struct DescriptorBinding {
 		const Resource *resource{};
-		VkDescriptorType type{};
+		const Input *p_input{};
 	};
 	template <typename Resource> using DescriptorBindingMap = std::unordered_map<uint32_t, DescriptorBinding<Resource>>;
 	struct PassDescriptor {
@@ -31,7 +31,8 @@ private:
 
 public:
 	void Create(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved);
-	void PreBind(const RenderGraphAllocator &allocated);
+	void PreBind(const RenderGraphAllocator &flip);
+	void ExecutionBind(bool flip);
 };
 
 } // namespace myvk_rg::_details_
