@@ -1,5 +1,7 @@
 #include "RenderGraphDescriptor.hpp"
 
+#include <algorithm>
+
 #include "VkHelper.hpp"
 
 namespace myvk_rg::_details_ {
