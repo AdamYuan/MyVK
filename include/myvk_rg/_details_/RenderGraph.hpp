@@ -11,15 +11,20 @@ template <typename Derived>
 class RenderGraph : public RenderGraphBase,
                     public PassPool<Derived>,
                     public ResourcePool<Derived>,
-                    public Pool<Derived, ResourceBase *> {
+                    public Pool<Derived, const ResourceBase *> {
 private:
-	using _ResultPool = Pool<Derived, ResourceBase *>;
+	using _ResultPool = Pool<Derived, const ResourceBase *>;
 
 protected:
-	inline bool AddResult(const PoolKey &result_key, ResourceBase *resource) {
+	inline bool AddResult(const PoolKey &result_key, const ImageAlias *resource) {
 		assert(resource);
 		SetCompilePhrases(CompilePhrase::kResolve);
-		return _ResultPool::template CreateAndInitializeForce<0, ResourceBase *>(result_key, resource);
+		return _ResultPool::template CreateAndInitializeForce<0, const ResourceBase *>(result_key, resource);
+	}
+	inline bool AddResult(const PoolKey &result_key, const BufferAlias *resource) {
+		assert(resource);
+		SetCompilePhrases(CompilePhrase::kResolve);
+		return _ResultPool::template CreateAndInitializeForce<0, const ResourceBase *>(result_key, resource);
 	}
 	inline bool IsResultExist(const PoolKey &result_key) const { return _ResultPool::Exist(result_key); }
 	inline void RemoveResult(const PoolKey &result_key) {

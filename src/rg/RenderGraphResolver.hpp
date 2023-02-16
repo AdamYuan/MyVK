@@ -63,7 +63,7 @@ private:
 	std::vector<IntImageViewInfo> m_internal_image_views;
 	std::vector<IntBufferInfo> m_internal_buffers;
 
-	RelationMatrix m_image_view_contain_relation, m_resource_conflict_relation, m_resource_not_prior_relation,
+	RelationMatrix /*m_image_view_contain_relation, */ m_resource_conflict_relation, m_resource_not_prior_relation,
 	    m_pass_prior_relation, m_pass_prior_relation_transpose;
 
 	std::vector<PassNode> m_pass_nodes;
@@ -235,14 +235,14 @@ public:
 		return m_pass_prior_relation.GetRelation(GetPassOrder(pass_0), GetPassOrder(pass_1));
 	}
 
-	inline bool IsIntImageViewContain(uint32_t image_view_0, uint32_t image_view_1) const {
-		return m_image_view_contain_relation.GetRelation(image_view_0, image_view_1);
+	/*inline bool IsIntImageViewContain(uint32_t image_view_0, uint32_t image_view_1) const {
+	    return m_image_view_contain_relation.GetRelation(image_view_0, image_view_1);
 	}
 	template <typename ImageView0, typename ImageView1>
 	inline bool IsIntImageViewContain(const ImageView0 *image_view_0, const ImageView1 *image_view_1) const {
-		return m_image_view_contain_relation.GetRelation(GetIntImageViewID(image_view_0),
-		                                                 GetIntImageViewID(image_view_1));
-	}
+	    return m_image_view_contain_relation.GetRelation(GetIntImageViewID(image_view_0),
+	                                                     GetIntImageViewID(image_view_1));
+	}*/
 };
 
 } // namespace myvk_rg::_details_

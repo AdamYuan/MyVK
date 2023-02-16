@@ -13,14 +13,16 @@ using PassFlag = _details_::PassFlag;
 template <typename Derived, uint8_t Flags> using Pass = _details_::Pass<Derived, Flags>;
 template <typename Derived> using PassGroup = _details_::PassGroup<Derived>;
 
-using Image = _details_::ImageBase;
+using ImageInput = const _details_::ImageBase *;
+using ImageOutput = const _details_::ImageAlias *;
 using ManagedImage = _details_::ManagedImage;
 using ExternalImageBase = _details_::ExternalImageBase;
 #ifdef MYVK_ENABLE_GLFW
 using SwapchainImage = _details_::SwapchainImage;
 #endif
 
-using Buffer = _details_::BufferBase;
+using BufferInput = const _details_::BufferBase *;
+using BufferOutput = const _details_::BufferAlias *;
 using ManagedBuffer = _details_::ManagedBuffer;
 using ExternalBufferBase = _details_::ExternalBufferBase;
 

@@ -77,23 +77,15 @@ struct RenderGraphResolver::OriginGraph {
 			if constexpr (kClass == ResourceClass::kCombinedImage) {
 				add_internal_image(resource);
 				// Visit Each SubImage
-				resource->ForEachImage([this, &add_edge_and_visit_dep_pass,
-				                        &add_visitor_edge](auto *sub_image) -> void {
-					if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kClass == ResourceClass::kManagedImage) {
-						add_internal_image(sub_image, true);
-						add_visitor_edge(sub_image, nullptr, nullptr, DependencyType::kValidation);
-					} else if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsAlias) {
-						sub_image->GetPointedResource()->Visit([this](const auto *pointed_sub_image) {
-							if constexpr (ResourceVisitorTrait<decltype(pointed_sub_image)>::kIsInternal)
-								add_internal_image(pointed_sub_image, true);
-							else {
-								assert(false);
-							}
-						});
-						add_edge_and_visit_dep_pass(sub_image->GetPointedResource(), sub_image->GetProducerPass(),
-						                            sub_image->GetProducerInput());
-					} else
-						assert(false);
+				resource->ForEachImage([this, &add_edge_and_visit_dep_pass](auto *sub_image) -> void {
+					sub_image->GetPointedResource()->Visit([this](const auto *pointed_sub_image) {
+						if constexpr (ResourceVisitorTrait<decltype(pointed_sub_image)>::kIsInternal)
+							add_internal_image(pointed_sub_image, true);
+						else
+							assert(false);
+					});
+					add_edge_and_visit_dep_pass(sub_image->GetPointedResource(), sub_image->GetProducerPass(),
+					                            sub_image->GetProducerInput());
 				});
 			} else {
 				if constexpr (kClass == ResourceClass::kManagedImage) {
@@ -186,8 +178,8 @@ RenderGraphResolver::OriginGraph RenderGraphResolver::make_origin_graph(const Re
 	OriginGraph graph = {};
 	for (auto it = p_render_graph->m_p_result_pool_data->pool.begin();
 	     it != p_render_graph->m_p_result_pool_data->pool.end(); ++it)
-		graph.visit_resource_dep_passes(*p_render_graph->m_p_result_pool_data->ValueGet<0, ResourceBase *>(it), nullptr,
-		                                nullptr);
+		graph.visit_resource_dep_passes(*p_render_graph->m_p_result_pool_data->ValueGet<0, const ResourceBase *>(it),
+		                                nullptr, nullptr);
 	return graph;
 }
 
@@ -242,17 +234,17 @@ void RenderGraphResolver::extract_resources(const OriginGraph &graph) {
 	}
 	// Compute Image View Relation
 	// TODO: Optimize this with ApplyRelations, or REMOVE it
-	m_image_view_contain_relation.Reset(GetIntImageViewCount(), GetIntImageViewCount());
+	/*m_image_view_contain_relation.Reset(GetIntImageViewCount(), GetIntImageViewCount());
 	for (uint32_t image_view_id = 0; image_view_id < GetIntImageViewCount(); ++image_view_id) {
-		m_image_view_contain_relation.SetRelation(image_view_id, image_view_id);
-		m_internal_image_views[image_view_id].image->Visit([this, image_view_id](const auto *image) -> void {
-			if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
-				image->ForAllImages([this, image_view_id](const auto *sub_image) -> void {
-					if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsInternal)
-						m_image_view_contain_relation.SetRelation(image_view_id, GetIntImageViewID(sub_image));
-				});
-		});
-	}
+	    m_image_view_contain_relation.SetRelation(image_view_id, image_view_id);
+	    m_internal_image_views[image_view_id].image->Visit([this, image_view_id](const auto *image) -> void {
+	        if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
+	            image->ForAllImages([this, image_view_id](const auto *sub_image) -> void {
+	                if constexpr (ResourceVisitorTrait<decltype(sub_image)>::kIsInternal)
+	                    m_image_view_contain_relation.SetRelation(image_view_id, GetIntImageViewID(sub_image));
+	            });
+	    });
+	}*/
 }
 
 void RenderGraphResolver::extract_ordered_passes_and_edges(OriginGraph &&graph) {

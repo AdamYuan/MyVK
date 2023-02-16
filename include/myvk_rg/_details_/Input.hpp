@@ -15,8 +15,8 @@ namespace myvk_rg::_details_ {
 template <typename Derived>
 class AliasOutputPool : public Pool<Derived, BufferAlias>, public Pool<Derived, ImageAlias> {
 private:
-	template <typename Type, typename AliasType>
-	inline Type *make_alias_output(const PoolKey &output_key, Type *resource) {
+	template <typename AliasType>
+	inline AliasType *make_alias_output(const PoolKey &output_key, const AliasType *resource) {
 		using Pool = Pool<Derived, AliasType>;
 		if (!resource || resource->GetState() == ResourceState::kLastFrame)
 			return nullptr;
@@ -45,11 +45,12 @@ public:
 	inline virtual ~AliasOutputPool() = default;
 
 protected:
-	inline BufferBase *MakeBufferAliasOutput(const PoolKey &buffer_alias_output_key, BufferBase *buffer_output) {
-		return make_alias_output<BufferBase, BufferAlias>(buffer_alias_output_key, buffer_output);
+	inline BufferAlias *MakeBufferAliasOutput(const PoolKey &buffer_alias_output_key,
+	                                          const BufferAlias *buffer_output) {
+		return make_alias_output<BufferAlias>(buffer_alias_output_key, buffer_output);
 	}
-	inline ImageBase *MakeImageAliasOutput(const PoolKey &image_alias_output_key, ImageBase *image_output) {
-		return make_alias_output<ImageBase, ImageAlias>(image_alias_output_key, image_output);
+	inline ImageAlias *MakeImageAliasOutput(const PoolKey &image_alias_output_key, const ImageAlias *image_output) {
+		return make_alias_output<ImageAlias>(image_alias_output_key, image_output);
 	}
 	inline void RemoveBufferAliasOutput(const PoolKey &buffer_alias_output_key) {
 		Pool<Derived, BufferAlias>::Delete(buffer_alias_output_key);
@@ -64,7 +65,7 @@ protected:
 // Resource Input
 class Input {
 private:
-	ResourceBase *m_resource_ptr{};
+	const ResourceBase *m_resource_ptr{};
 	Usage m_usage{};
 	VkPipelineStageFlags2 m_usage_pipeline_stages{};
 	uint32_t m_descriptor_binding{UINT32_MAX};
@@ -73,12 +74,12 @@ private:
 public:
 	inline Input() = default;
 	template <typename Type>
-	Input(Type *resource_ptr, Usage usage, VkPipelineStageFlags2 usage_pipeline_stages,
+	Input(const Type *resource_ptr, Usage usage, VkPipelineStageFlags2 usage_pipeline_stages,
 	      uint32_t descriptor_binding = UINT32_MAX, uint32_t attachment_index = UINT32_MAX)
 	    : m_resource_ptr{resource_ptr}, m_usage{usage}, m_usage_pipeline_stages{usage_pipeline_stages},
 	      m_descriptor_binding{descriptor_binding}, m_attachment_index{attachment_index} {}
-	template <typename Type = ResourceBase> inline Type *GetResource() const {
-		return m_resource_ptr->Visit([](auto *resource) -> Type * {
+	template <typename Type = ResourceBase> inline const Type *GetResource() const {
+		return m_resource_ptr->Visit([](const auto *resource) -> const Type * {
 			using CURType = std::decay_t<decltype(*resource)>;
 			if constexpr (std::is_same_v<Type, CURType> || std::is_base_of_v<Type, CURType>)
 				return resource;
@@ -108,7 +109,7 @@ private:
 	}
 
 	template <typename Type, typename... Args>
-	inline Input *add_input(const PoolKey &input_key, Type *resource, Usage usage, Args &&...input_args) {
+	inline Input *add_input(const PoolKey &input_key, const Type *resource, Usage usage, Args &&...input_args) {
 		assert(resource);
 		auto ret = _InputPool::template CreateAndInitializeForce<0, Input>(input_key, resource, usage,
 		                                                                   std::forward<Args>(input_args)...);
@@ -122,7 +123,7 @@ private:
 		assert(p_input && !UsageIsReadOnly(p_input->GetUsage()));
 		if (!p_input || UsageIsReadOnly(p_input->GetUsage())) // Read-Only input should not produce an output
 			return nullptr;
-		Type *resource = p_input->GetResource<Type>();
+		const Type *resource = p_input->GetResource<Type>();
 		static_assert(std::is_base_of_v<PassBase, Derived>);
 		auto *const producer_pass = static_cast<const PassBase *>(static_cast<Derived *>(this));
 		assert(resource);
@@ -149,7 +150,7 @@ protected:
 	template <Usage Usage,
 	          typename = std::enable_if_t<!kUsageIsAttachment<Usage> && !kUsageIsDescriptor<Usage> &&
 	                                      kUsageHasSpecifiedPipelineStages<Usage> && kUsageForBuffer<Usage>>>
-	inline bool AddInput(const PoolKey &input_key, BufferBase *buffer) {
+	inline bool AddInput(const PoolKey &input_key, const BufferBase *buffer) {
 		return add_input(input_key, buffer, Usage, kUsageGetSpecifiedPipelineStages<Usage>);
 	}
 	template <
@@ -158,13 +159,13 @@ protected:
 	        !kUsageIsAttachment<Usage> && !kUsageIsDescriptor<Usage> && !kUsageHasSpecifiedPipelineStages<Usage> &&
 	        (PipelineStageFlags & kUsageGetOptionalPipelineStages<Usage>) == PipelineStageFlags &&
 	        kUsageForBuffer<Usage>>>
-	inline bool AddInput(const PoolKey &input_key, BufferBase *buffer) {
+	inline bool AddInput(const PoolKey &input_key, const BufferBase *buffer) {
 		return add_input(input_key, buffer, Usage, PipelineStageFlags);
 	}
 	template <Usage Usage,
 	          typename = std::enable_if_t<!kUsageIsAttachment<Usage> && !kUsageIsDescriptor<Usage> &&
 	                                      kUsageHasSpecifiedPipelineStages<Usage> && kUsageForImage<Usage>>>
-	inline bool AddInput(const PoolKey &input_key, ImageBase *image) {
+	inline bool AddInput(const PoolKey &input_key, const ImageBase *image) {
 		return add_input(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>);
 	}
 	template <
@@ -173,17 +174,17 @@ protected:
 	        !kUsageIsAttachment<Usage> && !kUsageIsDescriptor<Usage> && !kUsageHasSpecifiedPipelineStages<Usage> &&
 	        (PipelineStageFlags & kUsageGetOptionalPipelineStages<Usage>) == PipelineStageFlags &&
 	        kUsageForImage<Usage>>>
-	inline bool AddInput(const PoolKey &input_key, ImageBase *image) {
+	inline bool AddInput(const PoolKey &input_key, const ImageBase *image) {
 		return add_input(input_key, image, Usage, PipelineStageFlags);
 	}
 
 	inline const Input *GetInput(const PoolKey &input_key) const {
 		return _InputPool::template Get<0, Input>(input_key);
 	}
-	inline BufferBase *MakeBufferOutput(const PoolKey &input_buffer_key) {
+	inline const BufferAlias *MakeBufferOutput(const PoolKey &input_buffer_key) {
 		return make_output<BufferBase, BufferAlias>(input_buffer_key);
 	}
-	inline ImageBase *MakeImageOutput(const PoolKey &input_image_key) {
+	inline const ImageAlias *MakeImageOutput(const PoolKey &input_image_key) {
 		return make_output<ImageBase, ImageAlias>(input_image_key);
 	}
 	inline void RemoveInput(const PoolKey &input_key);
@@ -341,7 +342,7 @@ protected:
 	template <uint32_t Binding, Usage Usage,
 	          typename = std::enable_if_t<!kUsageIsAttachment<Usage> && kUsageIsDescriptor<Usage> &&
 	                                      kUsageHasSpecifiedPipelineStages<Usage> && kUsageForBuffer<Usage>>>
-	inline bool AddDescriptorInput(const PoolKey &input_key, BufferBase *buffer) {
+	inline bool AddDescriptorInput(const PoolKey &input_key, const BufferBase *buffer) {
 		return add_input_descriptor(input_key, buffer, Usage, kUsageGetSpecifiedPipelineStages<Usage>, Binding);
 	}
 	template <uint32_t Binding, Usage Usage, VkPipelineStageFlags2 PipelineStageFlags,
@@ -349,14 +350,14 @@ protected:
 	              !kUsageIsAttachment<Usage> && kUsageIsDescriptor<Usage> && !kUsageHasSpecifiedPipelineStages<Usage> &&
 	              (PipelineStageFlags & kUsageGetOptionalPipelineStages<Usage>) == PipelineStageFlags &&
 	              kUsageForBuffer<Usage>>>
-	inline bool AddDescriptorInput(const PoolKey &input_key, BufferBase *buffer) {
+	inline bool AddDescriptorInput(const PoolKey &input_key, const BufferBase *buffer) {
 		return add_input_descriptor(input_key, buffer, Usage, PipelineStageFlags, Binding);
 	}
 	template <uint32_t Binding, Usage Usage,
 	          typename = std::enable_if_t<!kUsageIsAttachment<Usage> && Usage != Usage::kSampledImage &&
 	                                      kUsageIsDescriptor<Usage> && kUsageHasSpecifiedPipelineStages<Usage> &&
 	                                      kUsageForImage<Usage>>>
-	inline bool AddDescriptorInput(const PoolKey &input_key, ImageBase *image) {
+	inline bool AddDescriptorInput(const PoolKey &input_key, const ImageBase *image) {
 		return add_input_descriptor(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>, Binding);
 	}
 	template <uint32_t Binding, Usage Usage, VkPipelineStageFlags2 PipelineStageFlags,
@@ -365,13 +366,13 @@ protected:
 	                                      (PipelineStageFlags & kUsageGetOptionalPipelineStages<Usage>) ==
 	                                          PipelineStageFlags &&
 	                                      kUsageForImage<Usage>>>
-	inline bool AddDescriptorInput(const PoolKey &input_key, ImageBase *image) {
+	inline bool AddDescriptorInput(const PoolKey &input_key, const ImageBase *image) {
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding);
 	}
 	template <uint32_t Binding, Usage Usage,
 	          typename = std::enable_if_t<Usage == Usage::kSampledImage && kUsageHasSpecifiedPipelineStages<Usage> &&
 	                                      kUsageForImage<Usage>>>
-	inline bool AddDescriptorInput(const PoolKey &input_key, ImageBase *image,
+	inline bool AddDescriptorInput(const PoolKey &input_key, const ImageBase *image,
 	                               const myvk::Ptr<myvk::Sampler> &sampler) {
 		assert(sampler);
 		return add_input_descriptor(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>, Binding, sampler);
@@ -381,7 +382,7 @@ protected:
 	                                      (PipelineStageFlags & kUsageGetOptionalPipelineStages<Usage>) ==
 	                                          PipelineStageFlags &&
 	                                      kUsageForImage<Usage>>>
-	inline bool AddDescriptorInput(const PoolKey &input_key, ImageBase *image,
+	inline bool AddDescriptorInput(const PoolKey &input_key, const ImageBase *image,
 	                               const myvk::Ptr<myvk::Sampler> &sampler) {
 		assert(sampler);
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
@@ -444,7 +445,7 @@ protected:
 	inline const AttachmentData &GetAttachmentData() const { return m_attachment_data; }
 
 	template <uint32_t Index, Usage Usage, typename = std::enable_if_t<kUsageIsColorAttachment<Usage>>>
-	inline bool AddColorAttachmentInput(const PoolKey &input_key, ImageBase *image) {
+	inline bool AddColorAttachmentInput(const PoolKey &input_key, const ImageBase *image) {
 		static_assert(kUsageHasSpecifiedPipelineStages<Usage>);
 
 		assert(!m_attachment_data.IsColorAttachmentExist(Index));
@@ -460,7 +461,7 @@ protected:
 	}
 
 	template <uint32_t AttachmentIndex, uint32_t DescriptorBinding>
-	inline bool AddInputAttachmentInput(const PoolKey &input_key, ImageBase *image) {
+	inline bool AddInputAttachmentInput(const PoolKey &input_key, const ImageBase *image) {
 		static_assert(kUsageHasSpecifiedPipelineStages<Usage::kInputAttachment>);
 
 		assert(!m_attachment_data.IsInputAttachmentExist(AttachmentIndex));
@@ -477,7 +478,7 @@ protected:
 	}
 
 	template <Usage Usage, typename = std::enable_if_t<kUsageIsDepthAttachment<Usage>>>
-	inline bool SetDepthAttachmentInput(const PoolKey &input_key, ImageBase *image) {
+	inline bool SetDepthAttachmentInput(const PoolKey &input_key, const ImageBase *image) {
 		static_assert(kUsageHasSpecifiedPipelineStages<Usage>);
 
 		assert(!m_attachment_data.IsDepthAttachmentExist());

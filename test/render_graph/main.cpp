@@ -13,7 +13,7 @@ constexpr uint32_t kFrameCount = 3;
 class CullPass final : public myvk_rg::Pass<CullPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kCompute> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_hierarchy) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_hierarchy) {
 		auto draw_list = CreateResource<myvk_rg::ManagedBuffer>({"draw_list"});
 		draw_list->SetSize(1024 * 1024);
 		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
@@ -25,7 +25,7 @@ private:
 	}
 
 public:
-	inline myvk_rg::Buffer *GetDrawListOutput() { return MakeBufferOutput({"draw_list"}); }
+	inline auto GetDrawListOutput() { return MakeBufferOutput({"draw_list"}); }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
@@ -35,7 +35,7 @@ private:
 	    : public myvk_rg::Pass<TopSubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
-		MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_img) {
+		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_img) {
 			auto top_level_img = CreateResource<myvk_rg::ManagedImage>({"top"}, VK_FORMAT_R32_SFLOAT);
 			top_level_img->SetCanvasSize(0, 1);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"top"}, top_level_img);
@@ -46,7 +46,7 @@ private:
 		}
 
 	public:
-		inline myvk_rg::Image *GetTopOutput() { return MakeImageOutput({"top"}); }
+		inline auto GetTopOutput() { return MakeImageOutput({"top"}); }
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	};
 
@@ -54,7 +54,7 @@ private:
 	    : public myvk_rg::Pass<BodySubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
-		MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *prev_level_img, uint32_t level) {
+		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput prev_level_img, uint32_t level) {
 			auto level_img = CreateResource<myvk_rg::ManagedImage>({"level"}, VK_FORMAT_R32_SFLOAT);
 			level_img->SetCanvasSize(level, 1);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"level"}, level_img);
@@ -65,13 +65,13 @@ private:
 		}
 
 	public:
-		inline myvk_rg::Image *GetLevelOutput() { return MakeImageOutput({"level"}); }
+		inline auto GetLevelOutput() { return MakeImageOutput({"level"}); }
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	};
 
 	uint32_t m_levels{};
-	std::vector<myvk_rg::Image *> m_images;
-	void set_levels(uint32_t levels, myvk_rg::Image *depth_img) {
+	std::vector<myvk_rg::ImageInput > m_images;
+	void set_levels(uint32_t levels, myvk_rg::ImageInput depth_img) {
 		m_levels = levels;
 		ClearPasses();
 		if (levels == 0)
@@ -85,11 +85,11 @@ private:
 	}
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_img) { set_levels(10, depth_img); }
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_img) { set_levels(10, depth_img); }
 
 public:
-	myvk_rg::Image *GetDepthHierarchyOutput() {
-		std::vector<const myvk_rg::Image *> images(m_levels);
+	auto GetDepthHierarchyOutput() {
+		std::vector<myvk_rg::ImageOutput> images(m_levels);
 		images[0] = GetPass<TopSubPass>({"level", 0})->GetTopOutput();
 		for (uint32_t i = 1; i < m_levels; ++i)
 			images[i] = GetPass<BodySubPass>({"level", i})->GetLevelOutput();
@@ -108,7 +108,7 @@ class GBufferPass final
     : public myvk_rg::Pass<GBufferPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Buffer *draw_list) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list) {
 		auto depth = CreateResource<myvk_rg::ManagedImage>({"depth"}, VK_FORMAT_D32_SFLOAT);
 		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"}, VK_FORMAT_R8G8B8A8_UNORM);
 		auto normal = CreateResource<myvk_rg::ManagedImage>({"normal"}, VK_FORMAT_R8G8B8A8_SNORM);
@@ -136,7 +136,7 @@ class WBOITGenPass final
     : public myvk_rg::Pass<WBOITGenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *depth_test_img) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_test_img) {
 		auto reveal = CreateResource<myvk_rg::ManagedImage>({"reveal"}, VK_FORMAT_B10G11R11_UFLOAT_PACK32);
 		auto accum = CreateResource<myvk_rg::ManagedImage>({"accum"}, VK_FORMAT_R32_SFLOAT);
 		reveal->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
@@ -160,7 +160,7 @@ private:
 	class Subpass final : public myvk_rg::Pass<Subpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
-		MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
+		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image_src) {
 			printf("image_src = %p\n", image_src);
 
 			auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"}, image_src->GetFormat());
@@ -176,7 +176,7 @@ private:
 	public:
 		inline ~Subpass() final = default;
 
-		inline myvk_rg::Image *GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
+		inline auto GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
 
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	};
@@ -184,7 +184,7 @@ private:
 	uint32_t m_subpass_count = 10;
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *image_src) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image_src) {
 		for (uint32_t i = 0; i < m_subpass_count; ++i) {
 			CreatePass<Subpass>({"blur_subpass", i},
 			                    i == 0 ? image_src : GetPass<Subpass>({"blur_subpass", i - 1})->GetImageDstOutput());
@@ -194,7 +194,7 @@ private:
 public:
 	~BlurPass() final = default;
 
-	inline myvk_rg::Image *GetImageDstOutput() {
+	inline auto GetImageDstOutput() {
 		return MakeImageAliasOutput({"image_dst"},
 		                            GetPass<Subpass>({"blur_subpass", m_subpass_count - 1})->GetImageDstOutput());
 	}
@@ -204,9 +204,9 @@ class ScreenPass final
     : public myvk_rg::Pass<ScreenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *screen_out, myvk_rg::Image *gbuffer_albedo,
-	                           myvk_rg::Image *gbuffer_normal, myvk_rg::Image *wboit_reveal,
-	                           myvk_rg::Image *wboit_accum) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput gbuffer_albedo,
+	                           myvk_rg::ImageInput gbuffer_normal, myvk_rg::ImageInput wboit_reveal,
+	                           myvk_rg::ImageInput wboit_accum) {
 		AddInputAttachmentInput<0, 0>({"gbuffer_albedo"}, gbuffer_albedo);
 		AddInputAttachmentInput<1, 1>({"gbuffer_normal"}, gbuffer_normal);
 		AddInputAttachmentInput<2, 2>({"wboit_reveal"}, wboit_reveal);
@@ -225,7 +225,7 @@ class BrightPass final
     : public myvk_rg::Pass<BrightPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Image *screen_out, myvk_rg::Image *screen_in, myvk_rg::Image *blurred_bright) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput screen_in, myvk_rg::ImageInput blurred_bright) {
 		AddInputAttachmentInput<0, 0>({"screen_in"}, screen_in);
 		AddInputAttachmentInput<1, 1>({"blurred_bright"}, blurred_bright);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"screen_out"}, screen_out);
@@ -288,14 +288,14 @@ public:
 	~TestPass0() final = default;
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const override {}
-	myvk_rg::Buffer *GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
-	myvk_rg::Image *GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
+	inline auto GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
+	inline auto GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
 
 class TestPass1 final : public myvk_rg::Pass<TestPass1, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::Buffer *draw_list, myvk_rg::Image *noise_tex) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list, myvk_rg::ImageInput noise_tex) {
 		printf("Create TestPass\n");
 		AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferR,
 		                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT>(
@@ -314,7 +314,7 @@ public:
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const override {}
 
-	auto *GetColorOutput() { return MakeImageOutput({"color_attachment"}); }
+	inline auto GetColorOutput() { return MakeImageOutput({"color_attachment"}); }
 };
 
 class TestRenderGraph final : public myvk_rg::RenderGraph<TestRenderGraph> {
@@ -337,10 +337,14 @@ private:
 		{
 			auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
 
-			auto last_frame_depth_hierarchy = MakeLastFrameImage({"lf_depth_hierarchy"});
+			auto last_frame_depth = MakeLastFrameImage({"lf_depth"});
+			auto depth_hierarchy_pass = CreatePass<DepthHierarchyPass>({"depth_hierarchy_pass"}, last_frame_depth);
 
-			auto cull_pass = CreatePass<CullPass>({"cull_pass"}, last_frame_depth_hierarchy);
+			auto cull_pass = CreatePass<CullPass>({"cull_pass"}, depth_hierarchy_pass->GetDepthHierarchyOutput());
 			auto gbuffer_pass = CreatePass<GBufferPass>({"gbuffer_pass"}, cull_pass->GetDrawListOutput());
+
+			last_frame_depth->SetCurrentResource(gbuffer_pass->GetDepthOutput());
+
 			auto blur_bright_pass = CreatePass<BlurPass>({"blur_bright_pass"}, gbuffer_pass->GetBrightOutput());
 			auto wboit_gen_pass = CreatePass<WBOITGenPass>({"wboit_gen_pass"}, gbuffer_pass->GetDepthOutput());
 			auto screen_pass = CreatePass<ScreenPass>(
@@ -349,14 +353,8 @@ private:
 			    wboit_gen_pass->GetAccumOutput());
 			auto bright_pass = CreatePass<BrightPass>({"bright_pass"}, swapchain_image, screen_pass->GetScreenOutput(),
 			                                          blur_bright_pass->GetImageDstOutput());
-			auto depth_hierarchy_pass =
-			    CreatePass<DepthHierarchyPass>({"depth_hierarchy_pass"}, gbuffer_pass->GetDepthOutput());
-
-			// Set Next Frame's Depth Hierarchy
-			last_frame_depth_hierarchy->SetCurrentResource(depth_hierarchy_pass->GetDepthHierarchyOutput());
 
 			AddResult({"final"}, bright_pass->GetScreenOutput());
-			AddResult({"depth_hierarchy"}, depth_hierarchy_pass->GetDepthHierarchyOutput());
 		}
 	}
 

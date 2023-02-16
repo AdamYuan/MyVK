@@ -30,7 +30,7 @@ namespace myvk_rg::_details_ {
 
 class PassBase;
 namespace _details_rg_pool_ {
-using ResultPoolData = PoolData<ResourceBase *>;
+using ResultPoolData = PoolData<const ResourceBase *>;
 }
 class ImageBase;
 class ManagedBuffer;

@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(MyVK)
 
-# option(MYVK_ENABLE_GLFW "Enable GLFW" ON)
-# option(MYVK_ENABLE_IMGUI "Enable ImGui" ON)
-# option(MYVK_ENABLE_RENDER_GRAPH "Enable RenderGraph" ON)
 option(MYVK_TESTING "Testing" ON)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -77,17 +74,6 @@ add_library(MyVK_ImGui STATIC
 add_library(myvk::imgui ALIAS MyVK_ImGui)
 target_compile_definitions(MyVK_ImGui PUBLIC MYVK_ENABLE_IMGUI)
 target_link_libraries(MyVK_ImGui PUBLIC MyVK_Vulkan MyVK_GLFW MyVK_Dep_ImGui)
-
-# MyVK Target
-# add_library(MyVK INTERFACE)
-# add_library(myvk ALIAS MyVK)
-# target_link_libraries(MyVK INTERFACE MyVK_Vulkan)
-# if (MYVK_ENABLE_GLFW)
-#     target_link_libraries(MyVK INTERFACE MyVK_GLFW)
-# endif ()
-# if (MYVK_ENABLE_IMGUI)
-#     target_link_libraries(MyVK INTERFACE MyVK_ImGui)
-# endif ()
 
 # Testings
 if (MYVK_TESTING)
