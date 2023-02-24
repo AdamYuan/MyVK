@@ -3,28 +3,22 @@
 
 #include "RenderGraphResolver.hpp"
 
+#include <span>
+
 namespace myvk_rg::_details_ {
 
 class RenderGraphScheduler {
 public:
-	struct DependencyLink {
-		const Input *p_input{};
-		const PassBase *pass{};
-		inline DependencyLink() = default;
-		inline explicit DependencyLink(const RenderGraphResolver::EdgeLink &edge_link)
-		    : p_input{edge_link.p_input}, pass{edge_link.pass} {}
-		inline DependencyLink(const Input *p_input, const PassBase *pass) : p_input{p_input}, pass{pass} {}
-	};
 	struct SubpassDependency {
 		const ResourceBase *resource{};
-		DependencyLink from{}, to{};
+		ResourceReference from{}, to{};
 	};
 	struct SubpassInfo {
 		const PassBase *pass{};
 	};
 	struct PassDependency {
 		const ResourceBase *resource{};
-		std::vector<DependencyLink> from, to;
+		std::vector<ResourceReference> from, to;
 		DependencyType type{};
 	};
 	struct RenderPassArea {
@@ -68,6 +62,45 @@ public:
 
 	inline const std::vector<PassInfo> &GetPassInfos() const { return m_passes; }
 	inline const std::vector<PassDependency> &GetPassDependencies() const { return m_pass_dependencies; }
+
+	template <ResourceType ResType>
+	inline static std::span<const ResourceReference>
+	GetLastReferences(const std::vector<ResourceReference> &last_references) {
+		if constexpr (ResType == ResourceType::kBuffer)
+			return last_references;
+		else {
+			VkImageLayout last_layout{VK_IMAGE_LAYOUT_UNDEFINED};
+			uint32_t i = last_references.size() - 1;
+			for (; ~i; --i) {
+				auto usage = last_references[i].p_input->GetUsage();
+				if (last_layout != VK_IMAGE_LAYOUT_UNDEFINED && UsageGetImageLayout(usage) != last_layout)
+					return {last_references.begin() + (i + 1u), last_references.end()};
+				if (UsageIsAttachment(usage) || !UsageIsReadOnly(usage))
+					return {last_references.begin() + i, last_references.end()};
+				last_layout = UsageGetImageLayout(usage);
+			}
+			return last_references;
+		}
+	}
+
+	inline static std::span<const ResourceReference>
+	GetLastReferences(ResourceType resource_type, const std::vector<ResourceReference> &last_references) {
+		if (resource_type == ResourceType::kBuffer)
+			return last_references;
+		else {
+			VkImageLayout last_layout{VK_IMAGE_LAYOUT_UNDEFINED};
+			uint32_t i = last_references.size() - 1;
+			for (; ~i; --i) {
+				auto usage = last_references[i].p_input->GetUsage();
+				if (last_layout != VK_IMAGE_LAYOUT_UNDEFINED && UsageGetImageLayout(usage) != last_layout)
+					return {last_references.begin() + (i + 1u), last_references.end()};
+				if (UsageIsAttachment(usage) || !UsageIsReadOnly(usage))
+					return {last_references.begin() + i, last_references.end()};
+				last_layout = UsageGetImageLayout(usage);
+			}
+			return last_references;
+		}
+	}
 };
 
 } // namespace myvk_rg::_details_

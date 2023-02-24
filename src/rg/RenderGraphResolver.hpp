@@ -14,20 +14,19 @@ namespace myvk_rg::_details_ {
 
 enum class DependencyType : uint8_t { kDependency, kValidation, kExternal, kLastFrame };
 
+struct ResourceReference {
+	const Input *p_input;
+	const PassBase *pass;
+};
+
 class RenderGraphResolver {
 public:
-	struct ResourceReference {
-		const Input *p_input;
-		const PassBase *pass;
-	};
 	struct LFResourceInfo {
-		std::vector<ResourceReference> references;
+		std::vector<ResourceReference> references, last_references;
 	};
 	struct IntResourceInfo {
 		LFResourceInfo *p_last_frame_info;
-		std::vector<ResourceReference> references;
-		std::vector<ResourceReference> validation_references;
-		std::vector<ResourceReference> last_references;
+		std::vector<ResourceReference> references, validation_references, last_references;
 	};
 	struct IntBufferInfo : public IntResourceInfo {
 		const ManagedBuffer *buffer{};
@@ -40,13 +39,9 @@ public:
 		const InternalImageBase *image{};
 	};
 
-	struct EdgeLink {
-		const Input *p_input{};
-		const PassBase *pass{};
-	};
 	struct PassEdge {
 		const ResourceBase *resource{};
-		EdgeLink from{}, to{};
+		ResourceReference from{}, to{};
 		DependencyType type{};
 	};
 	struct PassNode {
@@ -76,7 +71,7 @@ private:
 	void extract_ordered_passes_and_edges(OriginGraph &&graph);
 
 	void extract_pass_relation();
-	void extract_resource_order_relation();
+	void extract_resource_relation();
 	void extract_resource_references();
 
 public:

@@ -14,7 +14,7 @@ struct RenderGraphResolver::OriginGraph {
 	enum class ExtraEdgeType : uint8_t { kNone, kWriteAfterRead, kExternalOutput, kDeleted };
 	struct Edge {
 		const ResourceBase *resource{};
-		EdgeLink from{}, to{};
+		ResourceReference from{}, to{};
 		DependencyType type{};
 		ExtraEdgeType extra_type{};
 	};
@@ -27,8 +27,8 @@ struct RenderGraphResolver::OriginGraph {
 	std::unordered_map<const PassBase *, Node> nodes;
 	std::list<Edge> edges;
 
-	inline void add_edge(const ResourceBase *resource, const EdgeLink &from, const EdgeLink &to, DependencyType type,
-	                     ExtraEdgeType extra_type = ExtraEdgeType::kNone) {
+	inline void add_edge(const ResourceBase *resource, const ResourceReference &from, const ResourceReference &to,
+	                     DependencyType type, ExtraEdgeType extra_type = ExtraEdgeType::kNone) {
 		assert(bool(from.pass) == bool(from.p_input));
 		assert(bool(to.pass) == bool(to.p_input));
 		edges.push_back({resource, from, to, type, extra_type});
@@ -282,8 +282,8 @@ void RenderGraphResolver::extract_ordered_passes_and_edges(OriginGraph &&graph) 
 	m_pass_edges.reserve(graph.edges.size());
 	m_src_output_edges.clear();
 
-	const auto add_edge = [this](const ResourceBase *resource, const EdgeLink &from, const EdgeLink &to,
-	                             DependencyType type) {
+	const auto add_edge = [this](const ResourceBase *resource, const ResourceReference &from,
+	                             const ResourceReference &to, DependencyType type) {
 		m_pass_edges.push_back({resource, from, to, type});
 		const PassEdge *p_edge = &m_pass_edges.back();
 		(from.pass ? m_pass_nodes[GetPassOrder(from.pass)].output_edges : m_src_output_edges).push_back(p_edge);
@@ -327,7 +327,7 @@ void RenderGraphResolver::extract_pass_relation() {
 	m_pass_prior_relation_transpose = m_pass_prior_relation.GetTranspose();
 }
 
-void RenderGraphResolver::extract_resource_order_relation() {
+void RenderGraphResolver::extract_resource_relation() {
 	const uint32_t kOrderedPassCount = m_pass_nodes.size();
 
 	RelationMatrix pass_resource_not_prior_relation;
@@ -387,22 +387,26 @@ void RenderGraphResolver::extract_resource_references() {
 	m_last_frame_resources.clear();
 	m_last_frame_resources.reserve(GetIntResourceCount());
 
-	// references and last_references
-	RelationMatrix resource_pass_visited;
+	RelationMatrix resource_pass_visited, resource_lf_pass_visited;
 	resource_pass_visited.Reset(GetIntResourceCount(), kOrderedPassCount);
+	resource_lf_pass_visited.Reset(GetIntResourceCount(), kOrderedPassCount);
 
 	for (uint32_t order = kOrderedPassCount - 1; ~order; --order) {
 		const auto &node = m_pass_nodes[order];
 
 		const auto update_resource_reference =
 		    [this, order, &node, &resource_pass_visited](const auto *resource, const Input *p_input) -> void {
-			if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
+			using Trait = ResourceVisitorTrait<decltype(resource)>;
+			if constexpr (Trait::kIsInternal) {
 				uint32_t int_res_id = GetIntResourceID(resource);
 				auto &int_res_info = GetIntResourceInfo(int_res_id);
 
 				int_res_info.references.push_back({p_input, node.pass});
-				if (!resource_pass_visited.GetRelation(int_res_id, order))
+				if (!resource_pass_visited.GetRelation(int_res_id, order)) {
 					int_res_info.last_references.push_back({p_input, node.pass});
+					if constexpr (Trait::kType == ResourceType::kImage)
+						assert(resource == m_internal_images[resource->m_resolved_info.image_id].image);
+				}
 
 				// Exclude all the passes prior than last_reference
 				assert(resource_pass_visited.GetRowSize() == m_pass_prior_relation_transpose.GetRowSize());
@@ -412,23 +416,50 @@ void RenderGraphResolver::extract_resource_references() {
 			}
 		};
 
-		node.pass->for_each_input([this, &node, &update_resource_reference](const Input *p_input) -> void {
+		const auto update_lf_resource_reference =
+		    [this, order, &node, &resource_lf_pass_visited](const auto *resource, const Input *p_input) -> void {
+			using Trait = ResourceVisitorTrait<decltype(resource)>;
+
+			uint32_t int_res_id = GetIntResourceID(resource);
+			auto &int_res_info = GetIntResourceInfo(resource->GetCurrentResource());
+
+			if (int_res_info.p_last_frame_info == nullptr) {
+				m_last_frame_resources.emplace_back();
+				int_res_info.p_last_frame_info = &m_last_frame_resources.back();
+			}
+
+			int_res_info.p_last_frame_info->references.push_back({p_input, node.pass});
+			if (!resource_lf_pass_visited.GetRelation(int_res_id, order)) {
+				int_res_info.p_last_frame_info->last_references.push_back({p_input, node.pass});
+				if constexpr (Trait::kType == ResourceType::kImage)
+					assert(resource->GetCurrentResource() ==
+					       m_internal_images[resource->GetCurrentResource()->m_resolved_info.image_id].image);
+			}
+
+			// Exclude all the passes prior than last_reference
+			assert(resource_lf_pass_visited.GetRowSize() == m_pass_prior_relation_transpose.GetRowSize());
+			for (uint32_t i = 0; i < resource_lf_pass_visited.GetRowSize(); ++i)
+				resource_lf_pass_visited.GetRowData(int_res_id)[i] |=
+				    m_pass_prior_relation_transpose.GetRowData(order)[i];
+		};
+
+		node.pass->for_each_input([this, &node, &update_resource_reference,
+		                           &update_lf_resource_reference](const Input *p_input) -> void {
 			const auto local_update_resource_reference = [&update_resource_reference, p_input](const auto *resource) {
 				return update_resource_reference(resource, p_input);
 			};
+			const auto local_update_lf_resource_reference = [&update_lf_resource_reference,
+			                                                 p_input](const auto *resource) {
+				return update_lf_resource_reference(resource, p_input);
+			};
 			ResourceReference res_ref = {p_input, node.pass};
-			p_input->GetResource()->Visit([this, &res_ref, &local_update_resource_reference](const auto *resource) {
+			p_input->GetResource()->Visit([this, &res_ref, &local_update_resource_reference,
+			                               &local_update_lf_resource_reference](const auto *resource) {
 				if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsAlias) {
 					resource->GetPointedResource()->Visit(local_update_resource_reference);
 				} else if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsLastFrame) {
 					// last_frame_references
-					auto &int_res_info = GetIntResourceInfo(resource->GetCurrentResource());
-
-					if (int_res_info.p_last_frame_info == nullptr) {
-						m_last_frame_resources.emplace_back();
-						int_res_info.p_last_frame_info = &m_last_frame_resources.back();
-					}
-					int_res_info.p_last_frame_info->references.push_back(res_ref);
+					local_update_lf_resource_reference(resource);
 				} else {
 					if constexpr (ResourceVisitorTrait<decltype(resource)>::kIsInternal) {
 						// validation_references
@@ -447,9 +478,12 @@ void RenderGraphResolver::extract_resource_references() {
 		std::reverse(image_info.last_references.begin(), image_info.last_references.end());
 
 		std::reverse(image_info.validation_references.begin(), image_info.validation_references.end());
-		if (image_info.p_last_frame_info)
+		if (image_info.p_last_frame_info) {
 			std::reverse(image_info.p_last_frame_info->references.begin(),
 			             image_info.p_last_frame_info->references.end());
+			std::reverse(image_info.p_last_frame_info->last_references.begin(),
+			             image_info.p_last_frame_info->last_references.end());
+		}
 	}
 	for (auto &buffer_info : m_internal_buffers) {
 		assert(!buffer_info.references.empty() && !buffer_info.last_references.empty());
@@ -457,9 +491,12 @@ void RenderGraphResolver::extract_resource_references() {
 		std::reverse(buffer_info.last_references.begin(), buffer_info.last_references.end());
 
 		std::reverse(buffer_info.validation_references.begin(), buffer_info.validation_references.end());
-		if (buffer_info.p_last_frame_info)
+		if (buffer_info.p_last_frame_info) {
 			std::reverse(buffer_info.p_last_frame_info->references.begin(),
 			             buffer_info.p_last_frame_info->references.end());
+			std::reverse(buffer_info.p_last_frame_info->last_references.begin(),
+			             buffer_info.p_last_frame_info->last_references.end());
+		}
 	}
 }
 
@@ -471,7 +508,7 @@ void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 	}
 
 	extract_pass_relation();
-	extract_resource_order_relation();
+	extract_resource_relation();
 	extract_resource_references();
 }
 

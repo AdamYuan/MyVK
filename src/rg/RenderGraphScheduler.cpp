@@ -216,7 +216,7 @@ void RenderGraphScheduler::extract_dependencies(const RenderGraphResolver &resol
 			dep_map_from[resource] = p_dep;
 		} else {
 			m_pass_dependencies.push_back(
-			    {resource, {DependencyLink{link_from}}, {DependencyLink{link_to}}, edge.type});
+			    {resource, {ResourceReference{link_from}}, {ResourceReference{link_to}}, edge.type});
 			p_dep = &m_pass_dependencies.back();
 			dep_map_from[resource] = p_dep;
 			dep_map_to[resource] = p_dep;
@@ -236,7 +236,7 @@ void RenderGraphScheduler::extract_dependencies(const RenderGraphResolver &resol
 			assert(GetSubpassID(pass_from) != GetSubpassID(pass_to));
 			assert(UsageIsAttachment(edge.from.p_input->GetUsage()) && UsageIsAttachment(edge.to.p_input->GetUsage()));
 			m_passes[GetPassID(pass_to)].p_render_pass_info->subpass_dependencies.push_back(
-			    {edge.resource, DependencyLink{edge.from}, DependencyLink{edge.to}});
+			    {edge.resource, ResourceReference{edge.from}, ResourceReference{edge.to}});
 		} else
 			maintain_dependency(edge);
 	}
@@ -255,12 +255,12 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 		assert(dep.from.size() == 1 && !dep.to.empty());
 
 		// Sort the outputs and cull the useless ones
-		std::sort(dep.to.begin(), dep.to.end(), [](const DependencyLink &l, const DependencyLink &r) {
+		std::sort(dep.to.begin(), dep.to.end(), [](const ResourceReference &l, const ResourceReference &r) {
 			return GetPassID(l.pass) < GetPassID(r.pass);
 		});
 
 		if (dep.resource->GetType() == ResourceType::kImage) {
-			std::vector<DependencyLink> links = std::move(dep.to);
+			std::vector<ResourceReference> links = std::move(dep.to);
 			dep.to.clear();
 
 			PassDependency *p_cur_dep = &dep;

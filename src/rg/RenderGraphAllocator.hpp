@@ -105,6 +105,12 @@ public:
 		                                                         m_p_resolved->GetIntResourceID(resource_1));
 	}
 
+	template <typename Resource> inline const IntResourceAlloc &GetIntResourceAlloc(const Resource *resource) const {
+		if constexpr (ResourceTrait<Resource>::kIsImage)
+			return GetIntImageAlloc(resource);
+		else
+			return GetIntBufferAlloc(resource);
+	}
 	template <typename Image> inline const IntImageAlloc &GetIntImageAlloc(const Image *image) const {
 		return m_allocated_images[RenderGraphResolver::GetIntImageID(image)];
 	}

@@ -49,6 +49,7 @@ private:
 	struct BarrierInfo {
 		std::vector<BufferMemoryBarrier> buffer_barriers;
 		std::vector<ImageMemoryBarrier> image_barriers;
+
 		inline bool empty() const { return buffer_barriers.empty() && image_barriers.empty(); }
 		inline void clear() {
 			buffer_barriers.clear();
@@ -64,9 +65,10 @@ private:
 	BarrierInfo m_post_barrier_info;
 
 	struct SubpassDependencies;
+	struct DependencyBuilder;
 
 	void reset_pass_executor_vector();
-	void _process_validation_dependency(const RenderGraphScheduler::PassDependency &dependency,
+	void _process_validation_dependency(const RenderGraphScheduler::PassDependency &dep,
 	                                    std::vector<SubpassDependencies> *p_sub_deps);
 	void _process_generic_dependency(const RenderGraphScheduler::PassDependency &dep,
 	                                 std::vector<SubpassDependencies> *p_sub_deps);

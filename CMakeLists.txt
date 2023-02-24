@@ -3,7 +3,7 @@ project(MyVK)
 
 option(MYVK_TESTING "Testing" ON)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(dep)
 

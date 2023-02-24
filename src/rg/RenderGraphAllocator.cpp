@@ -150,7 +150,7 @@ void RenderGraphAllocator::update_resource_info() {
 		if (int_res_info.p_last_frame_info == nullptr || int_res_info.validation_references.empty())
 			return false;
 
-		const auto last_frame_references = int_res_info.p_last_frame_info->references;
+		const auto last_frame_references = int_res_info.p_last_frame_info->last_references;
 		for (uint32_t i = last_frame_references.size() - 1; ~i; --i) {
 			for (const auto &validation_ref : int_res_info.validation_references)
 				if (!m_p_resolved->IsPassPrior(last_frame_references[i].pass, validation_ref.pass))
