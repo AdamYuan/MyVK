@@ -33,10 +33,10 @@ struct RenderGraphExecutor::SubpassDependencies {
 			final_layout = layout;
 		}
 	};
-	inline void add_subpass_dependency_base(VkDependencyFlags dep_flags, const PassBase *src_pass,
-	                                        VkPipelineStageFlags2 src_stages, VkAccessFlags src_access,
-	                                        const PassBase *dst_pass, VkPipelineStageFlags2 dst_stages,
-	                                        VkAccessFlags dst_access) {
+	inline void add_subpass_dependency(VkDependencyFlags dep_flags, const PassBase *src_pass,
+	                                   VkPipelineStageFlags2 src_stages, VkAccessFlags src_access,
+	                                   const PassBase *dst_pass, VkPipelineStageFlags2 dst_stages,
+	                                   VkAccessFlags dst_access) {
 		uint32_t src_subpass = src_pass && RenderGraphScheduler::GetPassID(src_pass) == pass_id
 		                           ? RenderGraphScheduler::GetSubpassID(src_pass)
 		                           : VK_SUBPASS_EXTERNAL;
@@ -63,7 +63,7 @@ struct RenderGraphExecutor::SubpassDependencies {
 	                                   const ResourceReference &link_to, VkPipelineStageFlags2 extra_src_stages = 0,
 	                                   VkAccessFlags2 extra_src_access = 0, VkPipelineStageFlags2 extra_dst_stages = 0,
 	                                   VkAccessFlags2 extra_dst_access = 0) {
-		add_subpass_dependency_base(
+		add_subpass_dependency(
 		    dep_flags, //
 		    link_from.pass, (link_from.p_input ? link_from.p_input->GetUsagePipelineStages() : 0u) | extra_src_stages,
 		    (link_from.p_input ? UsageGetWriteAccessFlags(link_from.p_input->GetUsage()) : 0u) | extra_src_access,
@@ -81,6 +81,7 @@ struct MemoryState {
 	VkPipelineStageFlags2 stage_mask;
 	VkAccessFlags2 access_mask;
 	VkImageLayout layout;
+	bool attachment_init;
 };
 class RenderGraphExecutor::DependencyBuilder {
 private:
@@ -194,8 +195,8 @@ public:
 
 			if (is_from_attachment && is_to_attachment) {
 				const auto &ref_from = m_from_references[0], &ref_to = m_to_references[0];
-				VkImageLayout trans_layout = from_func(ref_from).layout;
-				// UsageGetImageLayout(ref_from.p_input->GetUsage());
+				MemoryState state_from = from_func(ref_from), state_to = to_func(ref_to);
+				VkImageLayout trans_layout = state_to.attachment_init ? VK_IMAGE_LAYOUT_UNDEFINED : state_from.layout;
 
 				{
 					uint32_t from_pass_id = RenderGraphScheduler::GetPassID(ref_from.pass);
@@ -204,42 +205,58 @@ public:
 					m_sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(trans_layout);
 				}
 				{
+					VkAccessFlags2 attachment_access = state_to.attachment_init
+					                                       ? VkAttachmentInitAccessFromVkFormat(image->GetFormat())
+					                                       : VkAttachmentLoadAccessFromVkFormat(image->GetFormat());
+
 					uint32_t to_pass_id = RenderGraphScheduler::GetPassID(ref_to.pass);
 					m_sub_deps[to_pass_id].add_subpass_dependency(
-					    0, ref_from, ref_to, 0, 0, VkAttachmentInitialStagesFromVkFormat(image->GetFormat()),
-					    VkAttachmentLoadAccessFromVkFormat(image->GetFormat()));
+					    0,                                                            //
+					    ref_from.pass, state_from.stage_mask, state_from.access_mask, //
+					    ref_to.pass, state_to.stage_mask | VkAttachmentInitialStagesFromVkFormat(image->GetFormat()),
+					    state_to.access_mask | attachment_access);
 					uint32_t attachment_id =
 					    m_parent.m_p_scheduled->GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
 					m_sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(trans_layout);
 				}
 			} else if (is_from_attachment) {
 				const auto &ref_from = m_from_references[0];
+				MemoryState state_from = from_func(ref_from);
 
 				uint32_t from_pass_id = RenderGraphScheduler::GetPassID(ref_from.pass);
 				uint32_t attachment_id =
 				    m_parent.m_p_scheduled->GetPassInfo(from_pass_id).p_render_pass_info->attachment_id_map.at(image);
 
 				for (const auto &ref_to : m_to_references) {
-					m_sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(
-					    to_func(ref_to).layout);
-					m_sub_deps[from_pass_id].add_subpass_dependency(0, ref_from,
-					                                                m_to_direct_pass ? ref_to : ResourceReference{});
+					MemoryState state_to = to_func(ref_to);
+					m_sub_deps[from_pass_id].attachment_dependencies[attachment_id].set_final_layout(state_to.layout);
+					m_sub_deps[from_pass_id].add_subpass_dependency(
+					    0,                                                            //
+					    ref_from.pass, state_from.stage_mask, state_from.access_mask, //
+					    m_to_direct_pass ? ref_to.pass : nullptr, state_to.stage_mask, state_to.access_mask);
 				}
 			} else {
 				assert(is_to_attachment);
 				const auto &ref_to = m_to_references[0];
+				MemoryState state_to = to_func(ref_to);
 
 				uint32_t to_pass_id = RenderGraphScheduler::GetPassID(ref_to.pass);
 				uint32_t attachment_id =
 				    m_parent.m_p_scheduled->GetPassInfo(to_pass_id).p_render_pass_info->attachment_id_map.at(image);
+				VkAccessFlags2 attachment_access = state_to.attachment_init
+				                                       ? VkAttachmentInitAccessFromVkFormat(image->GetFormat())
+				                                       : VkAttachmentLoadAccessFromVkFormat(image->GetFormat());
 
 				for (const auto &ref_from : m_from_references) {
-					m_sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(
-					    from_func(ref_from).layout);
+					MemoryState state_from = from_func(ref_from);
+					if (!state_to.attachment_init) // If is init_mode, don't load
+						m_sub_deps[to_pass_id].attachment_dependencies[attachment_id].set_initial_layout(
+						    state_from.layout);
 					m_sub_deps[to_pass_id].add_subpass_dependency(
-					    0, m_from_direct_pass ? ref_from : ResourceReference{}, ref_to, 0, 0,
-					    VkAttachmentInitialStagesFromVkFormat(image->GetFormat()),
-					    VkAttachmentLoadAccessFromVkFormat(image->GetFormat()));
+					    0,                                                                                           //
+					    m_from_direct_pass ? ref_from.pass : nullptr, state_from.stage_mask, state_from.access_mask, //
+					    ref_to.pass, state_to.stage_mask | VkAttachmentInitialStagesFromVkFormat(image->GetFormat()),
+					    state_to.access_mask | attachment_access);
 				}
 			}
 		}
@@ -298,7 +315,8 @@ void RenderGraphExecutor::_process_validation_dependency(const RenderGraphSchedu
 
 	builder.Build(
 	    [](const ResourceReference &ref) {
-		    return MemoryState{ref.p_input->GetUsagePipelineStages(), VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED};
+		    return MemoryState{ref.p_input->GetUsagePipelineStages(), VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
+		                       true};
 	    },
 	    DependencyBuilder::DefaultToFunc);
 }
