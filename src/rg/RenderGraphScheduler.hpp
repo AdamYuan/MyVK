@@ -74,9 +74,9 @@ public:
 			for (; ~i; --i) {
 				auto usage = last_references[i].p_input->GetUsage();
 				if (last_layout != VK_IMAGE_LAYOUT_UNDEFINED && UsageGetImageLayout(usage) != last_layout)
-					return {last_references.begin() + (i + 1u), last_references.end()};
+					return std::span{last_references}.subspan(i + 1u);
 				if (UsageIsAttachment(usage) || !UsageIsReadOnly(usage))
-					return {last_references.begin() + i, last_references.end()};
+					return std::span{last_references}.subspan(i);
 				last_layout = UsageGetImageLayout(usage);
 			}
 			return last_references;
@@ -93,9 +93,9 @@ public:
 			for (; ~i; --i) {
 				auto usage = last_references[i].p_input->GetUsage();
 				if (last_layout != VK_IMAGE_LAYOUT_UNDEFINED && UsageGetImageLayout(usage) != last_layout)
-					return {last_references.begin() + (i + 1u), last_references.end()};
+					return std::span{last_references}.subspan(i + 1u);
 				if (UsageIsAttachment(usage) || !UsageIsReadOnly(usage))
-					return {last_references.begin() + i, last_references.end()};
+					return std::span{last_references}.subspan(i);
 				last_layout = UsageGetImageLayout(usage);
 			}
 			return last_references;
