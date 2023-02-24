@@ -118,13 +118,10 @@ public:
 	template <typename FromFunc, typename ToFunc> inline void Build(FromFunc &&from_func, ToFunc &&to_func) {
 		assert(m_from_direct_pass || m_to_direct_pass);
 
-		bool is_from_attachment = m_from_direct_pass && m_from_references[0].p_input &&
+		bool is_from_attachment = m_from_direct_pass && m_from_references.size() == 1 && m_from_references[0].p_input &&
 		                          UsageIsAttachment(m_from_references[0].p_input->GetUsage());
-		bool is_to_attachment =
-		    m_to_direct_pass && m_to_references[0].p_input && UsageIsAttachment(m_to_references[0].p_input->GetUsage());
-
-		assert(!is_from_attachment || m_from_references.size() == 1);
-		assert(!is_to_attachment || m_to_references.size() == 1);
+		bool is_to_attachment = m_to_direct_pass && m_to_references.size() == 1 && m_to_references[0].p_input &&
+		                        UsageIsAttachment(m_to_references[0].p_input->GetUsage());
 
 		if (!is_from_attachment && !is_to_attachment) {
 			// Not Attachment-related, then Add a Vulkan Barrier
@@ -315,10 +312,13 @@ void RenderGraphExecutor::_process_validation_dependency(const RenderGraphSchedu
 
 	builder.Build(
 	    [](const ResourceReference &ref) {
-		    return MemoryState{ref.p_input->GetUsagePipelineStages(), VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED,
-		                       true};
+		    return MemoryState{ref.p_input->GetUsagePipelineStages(), VK_ACCESS_2_NONE, VK_IMAGE_LAYOUT_UNDEFINED};
 	    },
-	    DependencyBuilder::DefaultToFunc);
+	    [](const ResourceReference &ref) {
+		    auto usage = ref.p_input->GetUsage();
+		    return MemoryState{ref.p_input->GetUsagePipelineStages(), UsageGetAccessFlags(usage),
+		                       UsageGetImageLayout(usage), true};
+	    });
 }
 
 void RenderGraphExecutor::_process_generic_dependency(const RenderGraphScheduler::PassDependency &dep,
