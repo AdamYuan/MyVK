@@ -10,7 +10,7 @@
 
 constexpr uint32_t kFrameCount = 3;
 
-class CullPass final : public myvk_rg::Pass<CullPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kCompute> {
+class CullPass final : public myvk_rg::ComputePass<CullPass> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_hierarchy) {
@@ -31,8 +31,7 @@ public:
 
 class DepthHierarchyPass final : public myvk_rg::PassGroup<DepthHierarchyPass> {
 private:
-	class TopSubPass final
-	    : public myvk_rg::Pass<TopSubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+	class TopSubPass final : public myvk_rg::GraphicsPass<TopSubPass> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_img) {
@@ -50,8 +49,7 @@ private:
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	};
 
-	class BodySubPass final
-	    : public myvk_rg::Pass<BodySubPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+	class BodySubPass final : public myvk_rg::GraphicsPass<BodySubPass> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput prev_level_img, uint32_t level) {
@@ -70,7 +68,7 @@ private:
 	};
 
 	uint32_t m_levels{};
-	std::vector<myvk_rg::ImageInput > m_images;
+	std::vector<myvk_rg::ImageInput> m_images;
 	void set_levels(uint32_t levels, myvk_rg::ImageInput depth_img) {
 		m_levels = levels;
 		ClearPasses();
@@ -104,8 +102,7 @@ public:
     inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 }; */
 
-class GBufferPass final
-    : public myvk_rg::Pass<GBufferPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+class GBufferPass final : public myvk_rg::GraphicsPass<GBufferPass> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list) {
@@ -132,8 +129,7 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
-class WBOITGenPass final
-    : public myvk_rg::Pass<WBOITGenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+class WBOITGenPass final : public myvk_rg::GraphicsPass<WBOITGenPass> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_test_img) {
@@ -157,7 +153,7 @@ public:
 
 class BlurPass final : public myvk_rg::PassGroup<BlurPass> {
 private:
-	class Subpass final : public myvk_rg::Pass<Subpass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+	class Subpass final : public myvk_rg::GraphicsPass<Subpass> {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image_src) {
@@ -200,8 +196,7 @@ public:
 	}
 };
 
-class ScreenPass final
-    : public myvk_rg::Pass<ScreenPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+class ScreenPass final : public myvk_rg::GraphicsPass<ScreenPass> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput gbuffer_albedo,
@@ -221,11 +216,11 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
-class BrightPass final
-    : public myvk_rg::Pass<BrightPass, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+class BrightPass final : public myvk_rg::GraphicsPass<BrightPass> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput screen_in, myvk_rg::ImageInput blurred_bright) {
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput screen_in,
+	                           myvk_rg::ImageInput blurred_bright) {
 		AddInputAttachmentInput<0, 0>({"screen_in"}, screen_in);
 		AddInputAttachmentInput<1, 1>({"blurred_bright"}, blurred_bright);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"screen_out"}, screen_out);
@@ -238,7 +233,7 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 };
 
-class TestPass0 final : public myvk_rg::Pass<TestPass0, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kCompute> {
+class TestPass0 final : public myvk_rg::ComputePass<TestPass0> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
@@ -292,7 +287,7 @@ public:
 	inline auto GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
 
-class TestPass1 final : public myvk_rg::Pass<TestPass1, myvk_rg::PassFlag::kDescriptor | myvk_rg::PassFlag::kGraphics> {
+class TestPass1 final : public myvk_rg::GraphicsPass<TestPass1> {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list, myvk_rg::ImageInput noise_tex) {
@@ -386,23 +381,16 @@ int main() {
 
 	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
 
-	myvk::Ptr<TestRenderGraph> render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device, frame_manager);
-	render_graph->SetCanvasSize(frame_manager->GetExtent());
-	/* render_graph->ToggleResult1();
-	printf("TOGGLE_RESULT_1\n");
-	render_graph->SetCanvasSize(frame_manager->GetExtent());
-	render_graph->compile();
-	render_graph->ToggleResult1();
-	printf("TOGGLE_RESULT_1\n");
-	render_graph->SetCanvasSize({1280, 720});
-	render_graph->compile();
-	printf("RESIZE\n");
-	render_graph->SetCanvasSize({1920, 1080});
-	render_graph->compile(); */
-
-	frame_manager->SetResizeFunc([render_graph](const VkExtent2D &extent) { render_graph->SetCanvasSize(extent); });
-
-	// object_pool.DeleteBuffer("draw_list");
+	myvk::Ptr<TestRenderGraph> render_graphs[kFrameCount];
+	for (auto &render_graph : render_graphs) {
+		render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device, frame_manager);
+		render_graph->SetCanvasSize(frame_manager->GetExtent());
+	}
+	frame_manager->SetResizeFunc([&render_graphs](const VkExtent2D &extent) {
+		for (auto &render_graph : render_graphs) {
+			render_graph->SetCanvasSize(extent);
+		}
+	});
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -420,7 +408,7 @@ int main() {
 
 			command_buffer->Begin();
 
-			render_graph->CmdExecute(command_buffer);
+			render_graphs[current_frame]->CmdExecute(command_buffer);
 
 			command_buffer->End();
 

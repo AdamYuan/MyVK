@@ -34,6 +34,8 @@ private:
 	template <typename, uint8_t> friend class Pass;
 	template <typename> friend class PassGroup;
 	template <typename> friend class GraphicsPass;
+	template <typename> friend class ComputePass;
+	template <typename> friend class TransferPass;
 	friend class RenderGraphBase;
 	friend class RenderGraphResolver;
 	friend class RenderGraphScheduler;
@@ -56,6 +58,7 @@ public:
 
 	inline bool IsPassGroup() const { return m_p_pass_pool_sequence; }
 
+	virtual void CreatePipeline() {}
 	virtual void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const = 0;
 };
 
@@ -106,32 +109,42 @@ struct NoDescriptorInputSlot {};
 struct NoAttachmentInputSlot {};
 } // namespace _details_rg_pass_
 
-struct PassFlag {
-	enum : uint8_t { kDescriptor = 4u, kGraphics = 8u, kCompute = 16u };
+template <typename Derived>
+class GraphicsPass : public PassBase,
+                     public InputPool<Derived>,
+                     public ResourcePool<Derived>,
+                     public AttachmentInputSlot<Derived>,
+                     public DescriptorInputSlot<Derived> {
+public:
+	inline GraphicsPass() {
+		m_p_input_pool_data = &InputPool<Derived>::GetPoolData();
+		m_p_descriptor_set_data = &DescriptorInputSlot<Derived>::GetDescriptorSetData();
+		m_p_attachment_data = &AttachmentInputSlot<Derived>::GetAttachmentData();
+	}
+	inline GraphicsPass(GraphicsPass &&) noexcept = default;
+	inline ~GraphicsPass() override = default;
 };
 
-template <typename Derived, uint8_t Flags>
-class Pass : public PassBase,
-             public InputPool<Derived>,
-             public ResourcePool<Derived>,
-             public std::conditional_t<(Flags & PassFlag::kDescriptor) != 0, DescriptorInputSlot<Derived>,
-                                       _details_rg_pass_::NoDescriptorInputSlot>,
-             public std::conditional_t<(Flags & PassFlag::kGraphics) != 0, AttachmentInputSlot<Derived>,
-                                       _details_rg_pass_::NoAttachmentInputSlot> {
+template <typename Derived>
+class ComputePass : public PassBase,
+                    public InputPool<Derived>,
+                    public ResourcePool<Derived>,
+                    public DescriptorInputSlot<Derived> {
 public:
-	inline Pass() {
+	inline ComputePass() {
 		m_p_input_pool_data = &InputPool<Derived>::GetPoolData();
-		/* if constexpr ((Flags & PassFlag::kEnableResourceAllocation) != 0)
-		    m_p_resource_pool_data = &ResourcePool<Derived>::GetPoolData();
-		if constexpr ((Flags & PassFlag::kEnableSubpass) != 0)
-		    m_p_pass_pool_data = &PassPool<Derived>::GetPoolData(); */
-		if constexpr ((Flags & PassFlag::kDescriptor) != 0)
-			m_p_descriptor_set_data = &DescriptorInputSlot<Derived>::GetDescriptorSetData();
-		if constexpr ((Flags & PassFlag::kGraphics) != 0)
-			m_p_attachment_data = &AttachmentInputSlot<Derived>::GetAttachmentData();
+		m_p_descriptor_set_data = &DescriptorInputSlot<Derived>::GetDescriptorSetData();
 	}
-	inline Pass(Pass &&) noexcept = default;
-	inline ~Pass() override = default;
+	inline ComputePass(ComputePass &&) noexcept = default;
+	inline ~ComputePass() override = default;
+};
+
+template <typename Derived>
+class TransferPass : public PassBase, public InputPool<Derived>, public ResourcePool<Derived> {
+public:
+	inline TransferPass() { m_p_input_pool_data = &InputPool<Derived>::GetPoolData(); }
+	inline TransferPass(TransferPass &&) noexcept = default;
+	inline ~TransferPass() override = default;
 };
 
 template <typename Derived>
