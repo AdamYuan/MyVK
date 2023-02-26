@@ -61,7 +61,7 @@ private:
 	void compile() const;
 
 	template <typename> friend class RenderGraph;
-	template <typename> friend class ImageAttachmentInfo;
+
 	friend class ManagedBuffer;
 	friend class ManagedImage;
 	friend class CombinedImage;

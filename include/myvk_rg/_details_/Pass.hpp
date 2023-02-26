@@ -6,17 +6,26 @@
 #include "Resource.hpp"
 
 #include <myvk/CommandBuffer.hpp>
+#include <myvk/ComputePipeline.hpp>
+#include <myvk/GraphicsPipeline.hpp>
 
 namespace myvk_rg::_details_ {
 
+enum class PassType : uint8_t { kGraphics, kCompute, kTransfer, kGroup };
+
+class GraphicsPassBase;
+class ComputePassBase;
+class TransferPassBase;
+class PassGroupBase;
+
 class PassBase : public ObjectBase {
 private:
-	// PassGroup
-	const std::vector<PassBase *> *m_p_pass_pool_sequence{};
+	PassType m_type{};
 
 	// Pass
 	const _details_rg_pool_::InputPoolData *m_p_input_pool_data{};
 	const DescriptorSetData *m_p_descriptor_set_data{};
+	// GraphicsPass
 	const AttachmentData *m_p_attachment_data{};
 
 	mutable struct {
@@ -31,11 +40,19 @@ private:
 		friend class RenderGraphScheduler;
 	} m_scheduled_info{};
 
-	template <typename, uint8_t> friend class Pass;
-	template <typename> friend class PassGroup;
-	template <typename> friend class GraphicsPass;
-	template <typename> friend class ComputePass;
-	template <typename> friend class TransferPass;
+	mutable struct {
+	private:
+		bool pipeline_updated{};
+		friend class RenderGraphExecutor;
+		friend class GraphicsPassBase;
+		friend class ComputePassBase;
+	} m_executor_info;
+
+	friend class PassGroupBase;
+	friend class GraphicsPassBase;
+	friend class ComputePassBase;
+	friend class TransferPassBase;
+
 	friend class RenderGraphBase;
 	friend class RenderGraphResolver;
 	friend class RenderGraphScheduler;
@@ -52,13 +69,18 @@ private:
 	}
 
 public:
-	inline PassBase() = default;
+	inline PassBase(PassType type) : m_type{type} {};
 	inline PassBase(PassBase &&) noexcept = default;
 	inline ~PassBase() override = default;
 
-	inline bool IsPassGroup() const { return m_p_pass_pool_sequence; }
+	inline PassType GetType() const { return m_type; }
 
-	virtual void CreatePipeline() {}
+	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor);
+	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor) const;
+
+	inline void CreatePipeline() const {
+		Visit([](auto *pass) -> void { pass->CreatePipeline(); });
+	}
 	virtual void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const = 0;
 };
 
@@ -101,64 +123,114 @@ protected:
 	}
 };
 
-namespace _details_rg_pass_ {
-struct NoResourcePool {};
-struct NoPassPool {};
-struct NoAliasOutputPool {};
-struct NoDescriptorInputSlot {};
-struct NoAttachmentInputSlot {};
-} // namespace _details_rg_pass_
+class GraphicsPassBase : public PassBase,
+                         public InputPool<GraphicsPassBase>,
+                         public ResourcePool<GraphicsPassBase>,
+                         public AttachmentInputSlot<GraphicsPassBase>,
+                         public DescriptorInputSlot<GraphicsPassBase> {
+private:
+	mutable myvk::Ptr<myvk::GraphicsPipeline> m_graphics_pipeline;
 
-template <typename Derived>
-class GraphicsPass : public PassBase,
-                     public InputPool<Derived>,
-                     public ResourcePool<Derived>,
-                     public AttachmentInputSlot<Derived>,
-                     public DescriptorInputSlot<Derived> {
 public:
-	inline GraphicsPass() {
-		m_p_input_pool_data = &InputPool<Derived>::GetPoolData();
-		m_p_descriptor_set_data = &DescriptorInputSlot<Derived>::GetDescriptorSetData();
-		m_p_attachment_data = &AttachmentInputSlot<Derived>::GetAttachmentData();
+	inline constexpr PassType GetType() const { return PassType::kGraphics; }
+
+	inline GraphicsPassBase() : PassBase(PassType::kGraphics) {
+		m_p_input_pool_data = &InputPool<GraphicsPassBase>::GetPoolData();
+		m_p_descriptor_set_data = &DescriptorInputSlot<GraphicsPassBase>::GetDescriptorSetData();
+		m_p_attachment_data = &AttachmentInputSlot<GraphicsPassBase>::GetAttachmentData();
 	}
-	inline GraphicsPass(GraphicsPass &&) noexcept = default;
-	inline ~GraphicsPass() override = default;
+	inline GraphicsPassBase(GraphicsPassBase &&) noexcept = default;
+	inline ~GraphicsPassBase() override = default;
+
+	inline const auto &GetGraphicsPipeline() const { return m_graphics_pipeline; }
+	inline void UpdateGraphicsPipeline() const { m_executor_info.pipeline_updated = true; }
+	inline virtual myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const = 0;
+	inline void CreatePipeline() const { m_graphics_pipeline = CreateGraphicsPipeline(); }
 };
 
-template <typename Derived>
-class ComputePass : public PassBase,
-                    public InputPool<Derived>,
-                    public ResourcePool<Derived>,
-                    public DescriptorInputSlot<Derived> {
+class ComputePassBase : public PassBase,
+                        public InputPool<ComputePassBase>,
+                        public ResourcePool<ComputePassBase>,
+                        public DescriptorInputSlot<ComputePassBase> {
+private:
+	mutable myvk::Ptr<myvk::ComputePipeline> m_compute_pipeline;
+
 public:
-	inline ComputePass() {
-		m_p_input_pool_data = &InputPool<Derived>::GetPoolData();
-		m_p_descriptor_set_data = &DescriptorInputSlot<Derived>::GetDescriptorSetData();
+	inline constexpr PassType GetType() const { return PassType::kCompute; }
+
+	inline ComputePassBase() : PassBase(PassType::kCompute) {
+		m_p_input_pool_data = &InputPool<ComputePassBase>::GetPoolData();
+		m_p_descriptor_set_data = &DescriptorInputSlot<ComputePassBase>::GetDescriptorSetData();
 	}
-	inline ComputePass(ComputePass &&) noexcept = default;
-	inline ~ComputePass() override = default;
+	inline ComputePassBase(ComputePassBase &&) noexcept = default;
+	inline ~ComputePassBase() override = default;
+
+	inline const auto &GetComputePipeline() const { return m_compute_pipeline; }
+	inline void UpdateComputePipeline() const { m_executor_info.pipeline_updated = true; }
+	inline virtual myvk::Ptr<myvk::ComputePipeline> CreateComputePipeline() const = 0;
+	inline void CreatePipeline() const { m_compute_pipeline = CreateComputePipeline(); }
 };
 
-template <typename Derived>
-class TransferPass : public PassBase, public InputPool<Derived>, public ResourcePool<Derived> {
+class TransferPassBase : public PassBase, public InputPool<TransferPassBase>, public ResourcePool<TransferPassBase> {
 public:
-	inline TransferPass() { m_p_input_pool_data = &InputPool<Derived>::GetPoolData(); }
-	inline TransferPass(TransferPass &&) noexcept = default;
-	inline ~TransferPass() override = default;
+	inline constexpr PassType GetType() const { return PassType::kTransfer; }
+
+	inline TransferPassBase() : PassBase(PassType::kTransfer) {
+		m_p_input_pool_data = &InputPool<TransferPassBase>::GetPoolData();
+	}
+	inline TransferPassBase(TransferPassBase &&) noexcept = default;
+	inline ~TransferPassBase() override = default;
+
+	inline void CreatePipeline() const {}
 };
 
-template <typename Derived>
-class PassGroup : public PassBase,
-                  public ResourcePool<Derived>,
-                  public PassPool<Derived>,
-                  public AliasOutputPool<Derived> {
+class PassGroupBase : public PassBase,
+                      public ResourcePool<PassGroupBase>,
+                      public PassPool<PassGroupBase>,
+                      public AliasOutputPool<PassGroupBase> {
 public:
+	inline constexpr PassType GetType() const { return PassType::kGroup; }
+
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &) const final {}
 
-	inline PassGroup() = default;
-	inline PassGroup(PassGroup &&) noexcept = default;
-	inline ~PassGroup() override = default;
+	inline PassGroupBase() : PassBase(PassType::kGroup) {}
+	inline PassGroupBase(PassGroupBase &&) noexcept = default;
+	inline ~PassGroupBase() override = default;
+
+	inline void CreatePipeline() const {}
 };
+
+template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> PassBase::Visit(Visitor &&visitor) {
+	switch (GetType()) {
+	case PassType::kGraphics:
+		return visitor(static_cast<GraphicsPassBase *>(this));
+	case PassType::kCompute:
+		return visitor(static_cast<ComputePassBase *>(this));
+	case PassType::kTransfer:
+		return visitor(static_cast<TransferPassBase *>(this));
+	case PassType::kGroup:
+		return visitor(static_cast<PassGroupBase *>(this));
+	default:
+		assert(false);
+	}
+	return visitor(static_cast<GraphicsPassBase *>(nullptr));
+}
+
+template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> PassBase::Visit(Visitor &&visitor) const {
+	switch (GetType()) {
+	case PassType::kGraphics:
+		return visitor(static_cast<const GraphicsPassBase *>(this));
+	case PassType::kCompute:
+		return visitor(static_cast<const ComputePassBase *>(this));
+	case PassType::kTransfer:
+		return visitor(static_cast<const TransferPassBase *>(this));
+	case PassType::kGroup:
+		return visitor(static_cast<const PassGroupBase *>(this));
+	default:
+		assert(false);
+	}
+	return visitor(static_cast<const GraphicsPassBase *>(nullptr));
+}
 
 } // namespace myvk_rg::_details_
 

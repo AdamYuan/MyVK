@@ -9,10 +9,10 @@ namespace myvk_rg {
 
 using Key = _details_::PoolKey;
 
-template <typename Derived> using GraphicsPass = _details_::GraphicsPass<Derived>;
-template <typename Derived> using ComputePass = _details_::ComputePass<Derived>;
-template <typename Derived> using TransferPass = _details_::TransferPass<Derived>;
-template <typename Derived> using PassGroup = _details_::PassGroup<Derived>;
+using GraphicsPassBase = _details_::GraphicsPassBase;
+using ComputePassBase = _details_::ComputePassBase;
+using TransferPassBase = _details_::TransferPassBase;
+using PassGroupBase = _details_::PassGroupBase;
 
 using ImageInput = const _details_::ImageBase *;
 using ImageOutput = const _details_::ImageAlias *;

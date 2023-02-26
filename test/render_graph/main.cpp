@@ -10,7 +10,7 @@
 
 constexpr uint32_t kFrameCount = 3;
 
-class CullPass final : public myvk_rg::ComputePass<CullPass> {
+class CullPass final : public myvk_rg::ComputePassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_hierarchy) {
@@ -27,11 +27,12 @@ private:
 public:
 	inline auto GetDrawListOutput() { return MakeBufferOutput({"draw_list"}); }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline myvk::Ptr<myvk::ComputePipeline> CreateComputePipeline() const final { return nullptr; }
 };
 
-class DepthHierarchyPass final : public myvk_rg::PassGroup<DepthHierarchyPass> {
+class DepthHierarchyPass final : public myvk_rg::PassGroupBase {
 private:
-	class TopSubPass final : public myvk_rg::GraphicsPass<TopSubPass> {
+	class TopSubPass final : public myvk_rg::GraphicsPassBase {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_img) {
@@ -47,9 +48,10 @@ private:
 	public:
 		inline auto GetTopOutput() { return MakeImageOutput({"top"}); }
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+		inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 	};
 
-	class BodySubPass final : public myvk_rg::GraphicsPass<BodySubPass> {
+	class BodySubPass final : public myvk_rg::GraphicsPassBase {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput prev_level_img, uint32_t level) {
@@ -65,6 +67,7 @@ private:
 	public:
 		inline auto GetLevelOutput() { return MakeImageOutput({"level"}); }
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+		inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 	};
 
 	uint32_t m_levels{};
@@ -102,7 +105,7 @@ public:
     inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) final {}
 }; */
 
-class GBufferPass final : public myvk_rg::GraphicsPass<GBufferPass> {
+class GBufferPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list) {
@@ -127,9 +130,10 @@ public:
 	inline auto GetBrightOutput() { return MakeImageOutput({"bright"}); }
 	inline auto GetDepthOutput() { return MakeImageOutput({"depth"}); }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 };
 
-class WBOITGenPass final : public myvk_rg::GraphicsPass<WBOITGenPass> {
+class WBOITGenPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_test_img) {
@@ -149,11 +153,12 @@ public:
 	inline auto GetRevealOutput() { return MakeImageOutput({"reveal"}); }
 	inline auto GetAccumOutput() { return MakeImageOutput({"accum"}); }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 };
 
-class BlurPass final : public myvk_rg::PassGroup<BlurPass> {
+class BlurPass final : public myvk_rg::PassGroupBase {
 private:
-	class Subpass final : public myvk_rg::GraphicsPass<Subpass> {
+	class Subpass final : public myvk_rg::GraphicsPassBase {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image_src) {
@@ -175,6 +180,7 @@ private:
 		inline auto GetImageDstOutput() { return MakeImageOutput({"image_dst"}); }
 
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+		inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 	};
 
 	uint32_t m_subpass_count = 10;
@@ -196,7 +202,7 @@ public:
 	}
 };
 
-class ScreenPass final : public myvk_rg::GraphicsPass<ScreenPass> {
+class ScreenPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput gbuffer_albedo,
@@ -214,9 +220,10 @@ public:
 
 	inline auto GetScreenOutput() { return MakeImageOutput({"screen"}); }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 };
 
-class BrightPass final : public myvk_rg::GraphicsPass<BrightPass> {
+class BrightPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput screen_in,
@@ -230,10 +237,12 @@ public:
 	~BrightPass() final = default;
 
 	inline auto GetScreenOutput() { return MakeImageOutput({"screen_out"}); }
+
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 };
 
-class TestPass0 final : public myvk_rg::ComputePass<TestPass0> {
+class TestPass0 final : public myvk_rg::ComputePassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {
@@ -283,11 +292,12 @@ public:
 	~TestPass0() final = default;
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const override {}
+	inline myvk::Ptr<myvk::ComputePipeline> CreateComputePipeline() const final { return nullptr; }
 	inline auto GetDrawListOutput() { return MakeBufferOutput({"draw_list_gen", 2}); }
 	inline auto GetNoiseTexOutput() { return MakeImageOutput({"noise_tex", 2}); }
 };
 
-class TestPass1 final : public myvk_rg::GraphicsPass<TestPass1> {
+class TestPass1 final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list, myvk_rg::ImageInput noise_tex) {
@@ -308,6 +318,7 @@ public:
 	~TestPass1() final = default;
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const override {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() const final { return nullptr; }
 
 	inline auto GetColorOutput() { return MakeImageOutput({"color_attachment"}); }
 };
@@ -383,7 +394,7 @@ int main() {
 
 	myvk::Ptr<TestRenderGraph> render_graphs[kFrameCount];
 	for (auto &render_graph : render_graphs) {
-		render_graph = myvk_rg::RenderGraph<TestRenderGraph>::Create(device, frame_manager);
+		render_graph = TestRenderGraph::Create(device, frame_manager);
 		render_graph->SetCanvasSize(frame_manager->GetExtent());
 	}
 	frame_manager->SetResizeFunc([&render_graphs](const VkExtent2D &extent) {

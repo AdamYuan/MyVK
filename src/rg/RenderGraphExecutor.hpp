@@ -68,6 +68,7 @@ private:
 	struct DependencyBuilder;
 
 	void reset_pass_executor_vector();
+	void reset_pass_pipeline_state();
 	void _process_validation_dependency(const RenderGraphScheduler::PassDependency &dep,
 	                                    std::vector<SubpassDependencies> *p_sub_deps);
 	void _process_generic_dependency(const RenderGraphScheduler::PassDependency &dep,

@@ -3,7 +3,6 @@
 #include "VkHelper.hpp"
 
 #include <algorithm>
-#include <list>
 #include <map>
 #include <span>
 
@@ -267,6 +266,13 @@ void RenderGraphExecutor::reset_pass_executor_vector() {
 		m_pass_executors[pass_id].p_info = &m_p_scheduled->GetPassInfo(pass_id);
 
 	m_post_barrier_info.clear();
+}
+
+void RenderGraphExecutor::reset_pass_pipeline_state() {
+	for (const auto &pass_exec : m_pass_executors) {
+		for (const auto &subpass : pass_exec.p_info->subpasses)
+			subpass.pass->m_executor_info.pipeline_updated = true;
+	}
 }
 
 void RenderGraphExecutor::_process_validation_dependency(const RenderGraphScheduler::PassDependency &dep,
@@ -648,6 +654,7 @@ void RenderGraphExecutor::Prepare(const myvk::Ptr<myvk::Device> &device, const R
 	m_p_allocated = &allocated;
 
 	reset_pass_executor_vector();
+	reset_pass_pipeline_state();
 	auto subpass_dependencies = extract_barriers_and_subpass_dependencies();
 	create_render_passes_and_framebuffers(std::move(subpass_dependencies));
 }
@@ -703,6 +710,14 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 		vkCmdPipelineBarrier2(command_buffer->GetHandle(), &dep_info);
 	};
 
+	const auto execute_pass = [&command_buffer](const PassBase *pass) {
+		if (pass->m_executor_info.pipeline_updated) {
+			pass->CreatePipeline();
+			pass->m_executor_info.pipeline_updated = false;
+		}
+		pass->CmdExecute(command_buffer);
+	};
+
 	for (const auto &pass_exec : m_pass_executors) {
 		cmd_pipeline_barriers(pass_exec.prior_barrier_info);
 		const auto &pass_info = *pass_exec.p_info;
@@ -747,16 +762,16 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 
 			vkCmdBeginRenderPass(command_buffer->GetHandle(), &render_begin_info, VK_SUBPASS_CONTENTS_INLINE);
 
-			pass_info.subpasses.front().pass->CmdExecute(command_buffer);
+			execute_pass(pass_info.subpasses.front().pass);
 			for (uint32_t i = 1; i < pass_info.subpasses.size(); ++i) {
 				vkCmdNextSubpass(command_buffer->GetHandle(), VK_SUBPASS_CONTENTS_INLINE);
-				pass_info.subpasses[i].pass->CmdExecute(command_buffer);
+				execute_pass(pass_info.subpasses[i].pass);
 			}
 
 			vkCmdEndRenderPass(command_buffer->GetHandle());
 		} else {
 			assert(pass_info.subpasses.size() == 1);
-			pass_info.subpasses.front().pass->CmdExecute(command_buffer);
+			execute_pass(pass_info.subpasses.front().pass);
 		}
 	}
 	cmd_pipeline_barriers(m_post_barrier_info);
