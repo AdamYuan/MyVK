@@ -129,10 +129,12 @@ public:
 			uint32_t from_bound = 0, to_bound = m_parent.m_p_scheduled->GetPassCount();
 			if (m_from_direct_pass)
 				for (const auto &ref : m_from_references)
-					from_bound = std::max(from_bound, 1u + RenderGraphScheduler::GetPassID(ref.pass));
+					if (ref.pass)
+						from_bound = std::max(from_bound, 1u + RenderGraphScheduler::GetPassID(ref.pass));
 			if (m_to_direct_pass)
 				for (const auto &ref : m_to_references)
-					to_bound = std::min(to_bound, RenderGraphScheduler::GetPassID(ref.pass));
+					if (ref.pass)
+						to_bound = std::min(to_bound, RenderGraphScheduler::GetPassID(ref.pass));
 
 			assert(from_bound <= to_bound);
 

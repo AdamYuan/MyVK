@@ -32,8 +32,8 @@ private:
 	std::vector<Ptr<myvk::CommandBuffer>> m_frame_command_buffers;
 
 	void initialize(const Ptr<Queue> &graphics_queue, const Ptr<PresentQueue> &present_queue, bool use_vsync,
-	                uint32_t frame_count = 3, VkImageUsageFlags image_usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
-	void recreate_swapchain() ;
+	                uint32_t frame_count, VkImageUsageFlags image_usage);
+	void recreate_swapchain();
 
 public:
 	static Ptr<FrameManager> Create(const Ptr<Queue> &graphics_queue, const Ptr<PresentQueue> &present_queue,

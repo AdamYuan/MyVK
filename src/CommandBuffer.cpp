@@ -295,6 +295,32 @@ void CommandBuffer::CmdBlitImage(const Ptr<ImageBase> &src, const Ptr<ImageBase>
 	               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, filter);
 }
 
+void CommandBuffer::CmdBlitImage(const Ptr<ImageView> &src_view, const Ptr<ImageView> &dst_view,
+                                 VkFilter filter) const {
+	std::vector<VkImageBlit> blits;
+	const auto &src_subres = src_view->GetSubresourceRange(), dst_subres = dst_view->GetSubresourceRange();
+	const auto &src_extent = src_view->GetImagePtr()->GetExtent(), dst_extent = dst_view->GetImagePtr()->GetExtent();
+	for (uint32_t i = src_subres.baseMipLevel; i < src_subres.baseMipLevel + src_subres.levelCount; ++i) {
+		VkImageBlit blit = {};
+		blit.srcSubresource = {src_subres.aspectMask, i, src_subres.baseArrayLayer, src_subres.layerCount};
+		blit.dstSubresource = {dst_subres.aspectMask, i, dst_subres.baseArrayLayer, dst_subres.layerCount};
+		blit.srcOffsets[1] = {
+		    (int32_t)std::max(1u, src_extent.width >> i),
+		    (int32_t)std::max(1u, src_extent.height >> i),
+		    (int32_t)std::max(1u, src_extent.depth >> i),
+		};
+		blit.dstOffsets[1] = {
+		    (int32_t)std::max(1u, dst_extent.width >> i),
+		    (int32_t)std::max(1u, dst_extent.height >> i),
+		    (int32_t)std::max(1u, dst_extent.depth >> i),
+		};
+		blits.push_back(blit);
+	}
+	vkCmdBlitImage(m_command_buffer, src_view->GetImagePtr()->GetHandle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+	               dst_view->GetImagePtr()->GetHandle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, blits.size(),
+	               blits.data(), filter);
+}
+
 void CommandBuffer::CmdGenerateMipmap2D(const Ptr<ImageBase> &image, VkPipelineStageFlags src_stage,
                                         VkPipelineStageFlags dst_stage, VkAccessFlags src_access_mask,
                                         VkAccessFlags dst_access_mask, VkImageLayout old_layout,

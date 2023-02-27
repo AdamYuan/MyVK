@@ -64,10 +64,11 @@ private:
 	template <typename> friend class RenderGraph;
 
 	friend class ManagedBuffer;
+	friend class LastFrameBuffer;
+
 	friend class ManagedImage;
 	friend class CombinedImage;
-	friend class RenderGraphBuffer;
-	friend class RenderGraphImage;
+	friend class LastFrameImage;
 
 	friend class DescriptorSetData;
 	friend class GraphicsPassBase;

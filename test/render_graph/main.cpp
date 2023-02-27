@@ -397,16 +397,41 @@ public:
 	}
 };
 
+class ImageBlitPass final : public myvk_rg::TransferPassBase {
+private:
+	myvk_rg::ImageInput m_src{}, m_dst{};
+	VkFilter m_filter{};
+
+public:
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput src, myvk_rg::ImageInput dst, VkFilter filter) {
+		m_src = src, m_dst = dst;
+		m_filter = filter;
+		AddInput<myvk_rg::Usage::kTransferImageSrc, VK_PIPELINE_STAGE_2_BLIT_BIT>({"src"}, src);
+		AddInput<myvk_rg::Usage::kTransferImageDst, VK_PIPELINE_STAGE_2_BLIT_BIT>({"dst"}, dst);
+	}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
+		command_buffer->CmdBlitImage(m_src->GetVkImageView(), m_dst->GetVkImageView(), m_filter);
+	}
+	inline auto GetDstOutput() { return MakeImageOutput({"dst"}); }
+};
+
 class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
 private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+		auto screen_image = CreateResource<myvk_rg::ManagedImage>({"screen"}, VK_FORMAT_R8G8B8A8_UNORM);
+		screen_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
+		screen_image->SetClearColorValue({0.5f, 0, 0, 1});
+
+		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, screen_image);
+
 		auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
-		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
+		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
 
-		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, swapchain_image);
+		auto copy_pass =
+		    CreatePass<ImageBlitPass>({"blit_pass"}, imgui_pass->GetImageOutput(), swapchain_image, VK_FILTER_NEAREST);
 
-		AddResult({"final"}, imgui_pass->GetImageOutput());
+		AddResult({"final"}, copy_pass->GetDstOutput());
 	}
 
 public:
@@ -428,7 +453,9 @@ int main() {
 	}
 	myvk::ImGuiInit(window, myvk::CommandPool::Create(generic_queue));
 
-	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
+	auto frame_manager =
+	    myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount,
+	                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
 	myvk::Ptr<MyRenderGraph> render_graphs[kFrameCount];
 	for (auto &render_graph : render_graphs) {

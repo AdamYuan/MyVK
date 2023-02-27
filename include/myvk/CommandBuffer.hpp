@@ -96,6 +96,10 @@ public:
 	             VkImageLayout src_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 	             VkImageLayout dst_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) const;
 
+	/*void CmdCopy(const Ptr<ImageView> &src_view, const Ptr<ImageView> &dst_view,
+	             VkImageLayout src_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+	             VkImageLayout dst_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) const; */
+
 	void CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const;
 
 	void CmdDrawIndirect(const Ptr<BufferBase> &buffer, VkDeviceSize offset, uint32_t draw_count,
@@ -124,6 +128,9 @@ public:
 	                        const std::vector<VkImageMemoryBarrier> &image_memory_barriers) const;
 
 	void CmdBlitImage(const Ptr<ImageBase> &src, const Ptr<ImageBase> &dst, const VkImageBlit &blit,
+	                  VkFilter filter) const;
+
+	void CmdBlitImage(const Ptr<myvk::ImageView> &src_view, const Ptr<myvk::ImageView> &dst_view,
 	                  VkFilter filter) const;
 
 	void CmdClearColorImage(const Ptr<ImageBase> &image, VkImageLayout layout, const VkClearColorValue &color,

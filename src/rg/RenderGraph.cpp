@@ -93,11 +93,18 @@ void RenderGraphBase::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_b
 const myvk::Ptr<myvk::BufferBase> &ManagedBuffer::GetVkBuffer() const {
 	return GetRenderGraphPtr()->m_compiler->allocator.GetVkBuffer(this, GetRenderGraphPtr()->m_exe_flip);
 }
+const myvk::Ptr<myvk::BufferBase> &LastFrameBuffer::GetVkBuffer() const {
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkBuffer(this, !GetRenderGraphPtr()->m_exe_flip);
+}
+
 const myvk::Ptr<myvk::ImageView> &ManagedImage::GetVkImageView() const {
 	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this, GetRenderGraphPtr()->m_exe_flip);
 }
 const myvk::Ptr<myvk::ImageView> &CombinedImage::GetVkImageView() const {
 	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this, GetRenderGraphPtr()->m_exe_flip);
+}
+const myvk::Ptr<myvk::ImageView> &LastFrameImage::GetVkImageView() const {
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this, !GetRenderGraphPtr()->m_exe_flip);
 }
 
 // Descriptor GetVk functions
