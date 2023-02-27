@@ -14,6 +14,10 @@
 #include <cinttypes>
 #include <type_traits>
 
+namespace myvk_rg {
+enum class BufferMapType : uint8_t { kNone, kRandom, kSeqWrite };
+}
+
 namespace myvk_rg::_details_ {
 class BufferBase : public ResourceBase {
 public:
@@ -325,19 +329,34 @@ private:
 		friend class RenderGraphResolver;
 	} m_resolved_info{};
 
+	BufferMapType m_map_type{BufferMapType::kNone};
+
 	friend class RenderGraphResolver;
+
 	MYVK_RG_OBJECT_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER() {}
+
+	void *get_mapped_data() const;
 
 public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kManagedBuffer; }
+
+	inline BufferMapType GetMapType() const { return m_map_type; }
+	inline void SetMapType(BufferMapType map_type) {
+		if (m_map_type != map_type) {
+			m_map_type = map_type;
+			GetRenderGraphPtr()->SetCompilePhrases(CompilePhrase::kAllocate);
+		}
+	}
+	void *GetMappedData() const;
 
 	inline ManagedBuffer() : BufferBase(ResourceState::kManaged) {}
 	inline ManagedBuffer(ManagedBuffer &&) noexcept = default;
 	~ManagedBuffer() override = default;
 
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
+	template <typename T = void> inline T *GetMappedData() const { return static_cast<T *>(get_mapped_data()); }
 };
 
 // Internal Image ( the combination of ManagedImage and CombinedImage, used in implementation )
@@ -501,49 +520,6 @@ public:
 		for (auto *image : m_images)
 			image->GetPointedResource()->Visit(visitor);
 	}
-	// For All Child ManagedImages, ImageAliases and CombinedImages
-	/* template <typename Visitor> inline void ForAllImages(Visitor &&visitor) {
-	    ForEachImage([&visitor](auto *image) -> void {
-	        if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedImageChild) {
-	            visitor(image);
-	            if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
-	                          ResourceClass::kCombinedImage) // Expand CombinedImage
-	                image->ForAllImages(visitor);
-	            else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
-	                               ResourceClass::kImageAlias) // Expand ImageAlias
-	                image->GetPointedResource()->Visit([&visitor](auto *image) -> void {
-	                    if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
-	                        visitor(image);
-	                        if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
-	                                      ResourceClass::kCombinedImage)
-	                            image->ForAllImages(visitor);
-	                    } else
-	                        assert(false);
-	                });
-	        } else
-	            assert(false);
-	    });
-	}
-	template <typename Visitor> inline void ForAllImages(Visitor &&visitor) const {
-	    ForEachImage([visitor](auto *image) -> void {
-	        if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedImageChild) {
-	            visitor(image);
-	            if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kCombinedImage)
-	                image->ForAllImages(visitor);
-	            else if constexpr (ResourceVisitorTrait<decltype(image)>::kClass == ResourceClass::kImageAlias)
-	                image->GetPointedResource()->Visit([visitor](auto *image) -> void {
-	                    if constexpr (ResourceVisitorTrait<decltype(image)>::kIsCombinedOrManagedImage) {
-	                        visitor(image);
-	                        if constexpr (ResourceVisitorTrait<decltype(image)>::kClass ==
-	                                      ResourceClass::kCombinedImage)
-	                            image->ForAllImages(visitor);
-	                    } else
-	                        assert(false);
-	                });
-	        } else
-	            assert(false);
-	    });
-	} */
 
 	inline VkImageViewType GetViewType() const { return m_view_type; }
 	inline VkFormat GetFormat() const { return m_images[0]->GetFormat(); }
