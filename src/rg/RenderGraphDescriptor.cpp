@@ -195,6 +195,9 @@ void RenderGraphDescriptor::PreBind(const RenderGraphAllocator &allocated) {
 		if (pass_desc.sets[1] != pass_desc.sets[0])
 			write_int_lf_descriptors(true);
 	}
+	if (writer.writes.empty())
+		return;
+
 	printf("Pre-bind descriptors with %zu writes\n", writer.writes.size());
 	vkUpdateDescriptorSets(m_pass_descriptors.front().sets[0]->GetDevicePtr()->GetHandle(), writer.writes.size(),
 	                       writer.writes.data(), 0, nullptr);

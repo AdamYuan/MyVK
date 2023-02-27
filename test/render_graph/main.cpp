@@ -10,6 +10,7 @@
 
 constexpr uint32_t kFrameCount = 3;
 
+#if 0
 class CullPass final : public myvk_rg::ComputePassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
@@ -373,10 +374,46 @@ public:
 		}
 	}
 };
+#endif
+
+class ImGuiPass final : public myvk_rg::GraphicsPassBase {
+private:
+	myvk::Ptr<myvk::ImGuiRenderer> m_imgui_renderer;
+
+public:
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image) {
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"image"}, image);
+	}
+
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
+		m_imgui_renderer->CmdDrawPipeline(command_buffer, 0);
+	}
+
+	inline auto GetImageOutput() { return MakeImageOutput({"image"}); }
+
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() final {
+		m_imgui_renderer = myvk::ImGuiRenderer::Create(GetVkRenderPass(), GetSubpass(), 1);
+		return nullptr;
+	}
+};
+
+class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
+private:
+	MYVK_RG_RENDER_GRAPH_FRIENDS
+	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+		auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
+		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
+
+		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, swapchain_image);
+
+		AddResult({"final"}, imgui_pass->GetImageOutput());
+	}
+
+public:
+};
 
 int main() {
 	GLFWwindow *window = myvk::GLFWCreateWindow("Test", 640, 480, true);
-	myvk::ImGuiInit(window);
 
 	myvk::Ptr<myvk::Device> device;
 	myvk::Ptr<myvk::Queue> generic_queue;
@@ -389,12 +426,13 @@ int main() {
 		    physical_device, myvk::GenericPresentQueueSelector{&generic_queue, surface, &present_queue},
 		    physical_device->GetDefaultFeatures(), {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 	}
+	myvk::ImGuiInit(window, myvk::CommandPool::Create(generic_queue));
 
 	auto frame_manager = myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount);
 
-	myvk::Ptr<TestRenderGraph> render_graphs[kFrameCount];
+	myvk::Ptr<MyRenderGraph> render_graphs[kFrameCount];
 	for (auto &render_graph : render_graphs) {
-		render_graph = TestRenderGraph::Create(device, frame_manager);
+		render_graph = MyRenderGraph::Create(generic_queue, frame_manager);
 		render_graph->SetCanvasSize(frame_manager->GetExtent());
 	}
 	frame_manager->SetResizeFunc([&render_graphs](const VkExtent2D &extent) {
@@ -406,11 +444,11 @@ int main() {
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
-		/* myvk::ImGuiNewFrame();
+		myvk::ImGuiNewFrame();
 		ImGui::Begin("Test");
 		ImGui::Text("%f", ImGui::GetIO().Framerate);
 		ImGui::End();
-		ImGui::Render(); */
+		ImGui::Render();
 
 		if (frame_manager->NewFrame()) {
 			uint32_t image_index = frame_manager->GetCurrentImageIndex();

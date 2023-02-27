@@ -40,11 +40,11 @@ public:
 	inline ~RenderGraph() override = default;
 
 	template <typename... Args>
-	inline static myvk::Ptr<Derived> Create(const myvk::Ptr<myvk::Device> &device_ptr, Args &&...args) {
+	inline static myvk::Ptr<Derived> Create(const myvk::Ptr<myvk::Queue> &main_queue_ptr, Args &&...args) {
 		static_assert(std::is_base_of_v<RenderGraph<Derived>, Derived>);
 
 		auto ret = std::make_shared<Derived>();
-		dynamic_cast<RenderGraphBase *>(ret.get())->MYVK_RG_INITIALIZER_FUNC(device_ptr);
+		dynamic_cast<RenderGraphBase *>(ret.get())->MYVK_RG_INITIALIZER_FUNC(main_queue_ptr);
 		ret->MYVK_RG_INITIALIZER_FUNC(std::forward<Args>(args)...);
 		return ret;
 	}

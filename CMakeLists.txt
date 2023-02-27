@@ -69,6 +69,7 @@ target_compile_definitions(MyVK_GLFW PUBLIC MYVK_ENABLE_GLFW)
 target_link_libraries(MyVK_GLFW PUBLIC MyVK_Vulkan MyVK_Dep_GLFW)
 
 add_library(MyVK_ImGui STATIC
+        src/imgui/ImGuiHelper.cpp
         src/imgui/ImGuiRenderer.cpp
         )
 add_library(myvk::imgui ALIAS MyVK_ImGui)

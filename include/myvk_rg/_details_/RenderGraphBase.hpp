@@ -43,7 +43,8 @@ public:
 	inline void SetCompilePhrases(CompilePhrase phrase) const { m_compile_phrase |= static_cast<uint8_t>(phrase); }
 
 private:
-	myvk::Ptr<myvk::Device> m_device_ptr;
+	myvk::Ptr<myvk::Queue> m_main_queue_ptr;
+
 	const _details_rg_pool_::ResultPoolData *m_p_result_pool_data{};
 
 	VkExtent2D m_canvas_size{};
@@ -56,7 +57,7 @@ private:
 	std::unique_ptr<Compiler> m_compiler{};
 	mutable bool m_exe_flip{};
 
-	void MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &device);
+	void MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Queue> &main_queue);
 
 	void compile() const;
 
@@ -88,7 +89,8 @@ public:
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
 
-	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
+	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_main_queue_ptr->GetDevicePtr(); }
+	inline const auto &GetMainQueuePtr() const { return m_main_queue_ptr; }
 };
 
 } // namespace myvk_rg::_details_

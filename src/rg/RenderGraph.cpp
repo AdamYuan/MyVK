@@ -21,8 +21,8 @@ struct RenderGraphBase::Compiler {
 	RenderGraphExecutor executor;
 };
 
-void RenderGraphBase::MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Device> &device) {
-	m_device_ptr = device;
+void RenderGraphBase::MYVK_RG_INITIALIZER_FUNC(const myvk::Ptr<myvk::Queue> &main_queue) {
+	m_main_queue_ptr = main_queue;
 	// Check Lazy Allocation Support
 	/* for (uint32_t i = 0; i < GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypeCount; i++) {
 	    if (GetDevicePtr()->GetPhysicalDevicePtr()->GetMemoryProperties().memoryTypes[i].propertyFlags &

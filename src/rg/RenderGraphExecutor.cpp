@@ -712,7 +712,7 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 
 	const auto execute_pass = [&command_buffer](const PassBase *pass) {
 		if (pass->m_executor_info.pipeline_updated) {
-			pass->CreatePipeline();
+			((PassBase *)pass)->CreatePipeline();
 			pass->m_executor_info.pipeline_updated = false;
 		}
 		pass->CmdExecute(command_buffer);

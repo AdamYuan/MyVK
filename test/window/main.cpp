@@ -11,7 +11,6 @@ constexpr uint32_t kFrameCount = 3;
 
 int main() {
 	GLFWwindow *window = myvk::GLFWCreateWindow("Test", 640, 480, true);
-	myvk::ImGuiInit(window);
 
 	myvk::Ptr<myvk::Device> device;
 	myvk::Ptr<myvk::Queue> generic_queue;
@@ -40,8 +39,9 @@ int main() {
 		render_pass = myvk::RenderPass::Create(device, state);
 	}
 
-	auto imgui_renderer =
-	    myvk::ImGuiRenderer::Create(myvk::CommandPool::Create(generic_queue), render_pass, 1, kFrameCount);
+	myvk::ImGuiInit(window, myvk::CommandPool::Create(generic_queue));
+
+	auto imgui_renderer = myvk::ImGuiRenderer::Create(render_pass, 1, kFrameCount);
 
 	auto framebuffer = myvk::ImagelessFramebuffer::Create(render_pass, {frame_manager->GetSwapchainImageViews()[0]});
 	frame_manager->SetResizeFunc([&framebuffer, &render_pass, &frame_manager](const VkExtent2D &) {

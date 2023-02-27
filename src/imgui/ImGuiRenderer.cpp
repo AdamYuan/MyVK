@@ -4,68 +4,16 @@
 #include "imgui_internal.h"
 #include "myvk/Buffer.hpp"
 #include "myvk/CommandBuffer.hpp"
+#include "myvk/ImGuiHelper.hpp"
 #include "myvk/ShaderModule.hpp"
 
 namespace myvk {
-void ImGuiRenderer::initialize(const Ptr<CommandPool> &command_pool, const Ptr<RenderPass> &render_pass,
-                               uint32_t subpass, uint32_t frame_count) {
-	create_font_texture(command_pool);
+
+void ImGuiRenderer::initialize(const Ptr<RenderPass> &render_pass, uint32_t subpass, uint32_t frame_count) {
 	create_descriptor(render_pass->GetDevicePtr());
 	create_pipeline(render_pass, subpass);
 	m_vertex_buffers.resize(frame_count);
 	m_index_buffers.resize(frame_count);
-}
-
-void ImGuiRenderer::create_font_texture(const Ptr<CommandPool> &command_pool) {
-	unsigned char *data;
-	int width, height;
-	ImGui::GetIO().Fonts->GetTexDataAsRGBA32(&data, &width, &height);
-	uint32_t data_size = width * height * 4;
-
-	m_font_texture =
-	    Image::CreateTexture2D(command_pool->GetDevicePtr(), {(uint32_t)width, (uint32_t)height}, 1,
-	                           VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
-	ImGui::GetIO().Fonts->SetTexID((ImTextureID)(intptr_t)m_font_texture->GetHandle());
-
-	{
-		Ptr<Fence> fence = Fence::Create(command_pool->GetDevicePtr());
-		Ptr<Buffer> staging_buffer = Buffer::CreateStaging(command_pool->GetDevicePtr(), data, data + data_size);
-
-		Ptr<CommandBuffer> command_buffer = CommandBuffer::Create(command_pool);
-		command_buffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
-
-		VkBufferImageCopy region = {};
-		region.bufferOffset = 0;
-		region.bufferRowLength = 0;
-		region.bufferImageHeight = 0;
-		region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		region.imageSubresource.mipLevel = 0;
-		region.imageSubresource.baseArrayLayer = 0;
-		region.imageSubresource.layerCount = 1;
-		region.imageOffset = {0, 0, 0};
-		region.imageExtent = {(uint32_t)width, (uint32_t)height, 1};
-
-		command_buffer->CmdPipelineBarrier(
-		    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, {}, {},
-		    m_font_texture->GetDstMemoryBarriers({region}, 0, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_UNDEFINED,
-		                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL));
-		command_buffer->CmdCopy(staging_buffer, m_font_texture, {region});
-		command_buffer->CmdPipelineBarrier(
-		    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, {}, {},
-		    m_font_texture->GetDstMemoryBarriers({region}, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-		                                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL));
-
-		command_buffer->End();
-
-		command_buffer->Submit(fence);
-		fence->Wait();
-	}
-
-	m_font_texture_view = ImageView::Create(m_font_texture, VK_IMAGE_VIEW_TYPE_2D, m_font_texture->GetFormat(),
-	                                        VK_IMAGE_ASPECT_COLOR_BIT);
-	m_font_texture_sampler =
-	    Sampler::Create(command_pool->GetDevicePtr(), VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_REPEAT);
 }
 
 void ImGuiRenderer::create_descriptor(const Ptr<Device> &device) {
@@ -75,14 +23,14 @@ void ImGuiRenderer::create_descriptor(const Ptr<Device> &device) {
 		layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		layout_binding.descriptorCount = 1;
 		layout_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-		VkSampler immutable_samplers[] = {m_font_texture_sampler->GetHandle()};
+		VkSampler immutable_samplers[] = {kImGuiInfo.font_texture_sampler->GetHandle()};
 		layout_binding.pImmutableSamplers = immutable_samplers;
 
 		m_descriptor_set_layout = DescriptorSetLayout::Create(device, {layout_binding});
 	}
 	m_descriptor_pool = DescriptorPool::Create(device, 1, {{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1}});
 	m_descriptor_set = DescriptorSet::Create(m_descriptor_pool, m_descriptor_set_layout);
-	m_descriptor_set->UpdateCombinedImageSampler(m_font_texture_sampler, m_font_texture_view, 0);
+	m_descriptor_set->UpdateCombinedImageSampler(kImGuiInfo.font_texture_sampler, kImGuiInfo.font_texture_view, 0);
 }
 
 //-----------------------------------------------------------------------------
