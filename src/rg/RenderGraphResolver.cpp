@@ -6,8 +6,6 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include <iostream>
-
 namespace myvk_rg::_details_ {
 
 struct RenderGraphResolver::OriginGraph {

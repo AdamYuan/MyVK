@@ -6,8 +6,6 @@
 #include <map>
 #include <span>
 
-#include <iostream>
-
 namespace myvk_rg::_details_ {
 
 struct RenderGraphExecutor::SubpassDependencies {
@@ -375,7 +373,9 @@ void RenderGraphExecutor::_process_external_dependency(const RenderGraphSchedule
 		});
 		builder.Build(DependencyBuilder::DefaultFromFunc, [dst_state](const auto &) { return dst_state; });
 	}
+#ifdef MYVK_RG_DEBUG
 	std::cout << "EXTERNAL " << dep.resource->GetKey().GetName() << (is_initial ? " INIT" : " FINAL") << std::endl;
+#endif
 }
 
 void RenderGraphExecutor::_process_last_frame_dependency(const RenderGraphScheduler::PassDependency &dep,
@@ -614,6 +614,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 
 		pass_exec.render_pass_info.myvk_render_pass = myvk::RenderPass::Create(m_device_ptr, create_info);
 
+#ifdef MYVK_RG_DEBUG
 		printf("PASS #%u Subpass Dependency Count : %zu (subpass count = %zu) HANDLE = 0x%lx\n", pass_id,
 		       vk_subpass_dependencies.size(), vk_subpass_descriptions.size(),
 		       (uintptr_t)pass_exec.render_pass_info.myvk_render_pass->GetHandle());
@@ -622,6 +623,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 			printf("%u->%u srcStage = %lu, dstStage = %lu; srcAccess = %lu, dstAccess = %lu\n", i.srcSubpass,
 			       i.dstSubpass, b.srcStageMask, b.dstStageMask, b.srcAccessMask, b.dstAccessMask);
 		}
+#endif
 
 		// Create Framebuffer
 		RenderGraphScheduler::RenderPassArea area = pass_info.p_render_pass_info->area;

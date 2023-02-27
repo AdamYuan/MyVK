@@ -104,7 +104,9 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 		m_pass_descriptors[i].sets[0] = descriptor_sets[s++];
 	}
 
+#ifdef MYVK_RG_DEBUG
 	printf("Descriptor Created\n");
+#endif
 }
 
 struct DescriptorWriter {
@@ -198,7 +200,9 @@ void RenderGraphDescriptor::PreBind(const RenderGraphAllocator &allocated) {
 	if (writer.writes.empty())
 		return;
 
+#ifdef MYVK_RG_DEBUG
 	printf("Pre-bind descriptors with %zu writes\n", writer.writes.size());
+#endif
 	vkUpdateDescriptorSets(m_pass_descriptors.front().sets[0]->GetDevicePtr()->GetHandle(), writer.writes.size(),
 	                       writer.writes.data(), 0, nullptr);
 }
@@ -220,7 +224,9 @@ void RenderGraphDescriptor::ExecutionBind(bool flip) {
 	if (writer.writes.empty())
 		return;
 
+#ifdef MYVK_RG_DEBUG
 	printf("Bind execution descriptors with %zu writes\n", writer.writes.size());
+#endif
 	vkUpdateDescriptorSets(m_pass_descriptors.front().sets[0]->GetDevicePtr()->GetHandle(), writer.writes.size(),
 	                       writer.writes.data(), 0, nullptr);
 }

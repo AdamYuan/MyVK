@@ -1,9 +1,6 @@
 #include "RenderGraphScheduler.hpp"
 
 #include <algorithm>
-#include <iostream>
-
-// TODO: Support LastFrameImage (attachments)
 
 namespace myvk_rg::_details_ {
 
@@ -331,6 +328,7 @@ void RenderGraphScheduler::Schedule(const RenderGraphResolver &resolved) {
 	sort_and_insert_image_dependencies();
 	extract_pass_attachments();
 
+#ifdef MYVK_RG_DEBUG
 	printf("\nResolved Passes: \n");
 	for (const auto &pass_info : m_passes) {
 		printf("PASS #%u (isRenderPass = %d): ", GetPassID(pass_info.subpasses[0].pass),
@@ -350,6 +348,7 @@ void RenderGraphScheduler::Schedule(const RenderGraphResolver &resolved) {
 		printf("\n");
 	}
 	printf("\n");
+#endif
 }
 
 } // namespace myvk_rg::_details_

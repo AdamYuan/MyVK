@@ -3,7 +3,6 @@
 #include "VkHelper.hpp"
 
 #include <algorithm>
-#include <iostream>
 
 namespace myvk_rg::_details_ {
 
@@ -240,7 +239,9 @@ void RenderGraphAllocator::create_vk_resources() {
 }
 
 void RenderGraphAllocator::create_vk_image_views() {
+#ifdef MYVK_RG_DEBUG
 	printf("\nImage Views: \n");
+#endif
 	for (uint32_t image_view_id = 0; image_view_id < m_p_resolved->GetIntImageViewCount(); ++image_view_id) {
 		const auto *image = m_p_resolved->GetIntImageViewInfo(image_view_id).image;
 		auto &image_view_alloc = m_allocated_image_views[image_view_id];
@@ -266,15 +267,19 @@ void RenderGraphAllocator::create_vk_image_views() {
 				else
 					image_view_alloc.myvk_image_views[1] = image_view_alloc.myvk_image_views[0];
 
+#ifdef MYVK_RG_DEBUG
 				std::cout << image->GetKey().GetName() << ":" << image->GetKey().GetID();
 				printf(" {baseArrayLayer, layerCount, baseMipLevel, levelCount} = {%u, %u, %u, %u}\n",
 				       create_info.subresourceRange.baseArrayLayer, create_info.subresourceRange.layerCount,
 				       create_info.subresourceRange.baseMipLevel, create_info.subresourceRange.levelCount);
+#endif
 			} else
 				assert(false);
 		});
 	}
+#ifdef MYVK_RG_DEBUG
 	printf("\n");
+#endif
 }
 
 inline static constexpr VkDeviceSize DivRoundUp(VkDeviceSize l, VkDeviceSize r) { return (l / r) + (l % r ? 1 : 0); }
@@ -483,6 +488,7 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 			                     buffer_alloc.db_memory_offset, buffer_alloc.myvk_buffers[1]->GetHandle(), nullptr);
 	}
 
+#ifdef MYVK_RG_DEBUG
 	printf("Aliased:\n");
 	for (uint32_t i = 0; i < m_p_resolved->GetIntResourceCount(); ++i) {
 		for (uint32_t j = 0; j < m_p_resolved->GetIntResourceCount(); ++j)
@@ -500,6 +506,7 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 		printf("allocation: size = %lu MB, memory_type = %u\n", info.size >> 20u, flags);
 	}
 	printf("\n");
+#endif
 }
 
 void RenderGraphAllocator::reset_resource_vectors() {
@@ -537,6 +544,7 @@ void RenderGraphAllocator::Allocate(const myvk::Ptr<myvk::Device> &device, const
 	create_and_bind_allocations();
 	create_vk_image_views();
 
+#ifdef MYVK_RG_DEBUG
 	printf("\nImages: \n");
 	for (uint32_t i = 0; i < m_p_resolved->GetIntImageCount(); ++i) {
 		const auto &image_info = m_p_resolved->GetIntImageInfo(i);
@@ -563,6 +571,7 @@ void RenderGraphAllocator::Allocate(const myvk::Ptr<myvk::Device> &device, const
 		          << " double_buffering = " << buffer_alloc.double_buffering << std::endl;
 	}
 	printf("\n");
+#endif
 }
 
 } // namespace myvk_rg::_details_

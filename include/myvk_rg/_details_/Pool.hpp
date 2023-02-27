@@ -317,8 +317,7 @@ template <typename... Types> struct PoolData {
 
 	inline PoolData() {
 		static_assert(std::is_default_constructible_v<TypeTuple> && std::is_move_constructible_v<TypeTuple>);
-		// TODO: Debug
-		printf("%s\n", typeid(TypeTuple).name());
+		// printf("%s\n", typeid(TypeTuple).name());
 	}
 	inline PoolData(PoolData &&) noexcept = default;
 	inline ~PoolData() = default;
