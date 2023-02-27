@@ -68,6 +68,9 @@ private:
 	friend class RenderGraphBuffer;
 	friend class RenderGraphImage;
 
+	friend class DescriptorSetData;
+	friend class GraphicsPassBase;
+
 	friend class RenderGraphResolver;
 	friend class RenderGraphExecutor;
 

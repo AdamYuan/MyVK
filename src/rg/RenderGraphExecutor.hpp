@@ -84,6 +84,11 @@ public:
 	void Prepare(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved,
 	             const RenderGraphScheduler &scheduled, const RenderGraphAllocator &allocated);
 
+	inline const auto &GetPassExec(uint32_t pass_id) const { return m_pass_executors[pass_id]; }
+	inline const auto &GetPassExec(const PassBase *pass) const {
+		return m_pass_executors[RenderGraphScheduler::GetPassID(pass)];
+	}
+
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, bool flip) const;
 };
 

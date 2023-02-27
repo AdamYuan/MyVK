@@ -33,6 +33,12 @@ public:
 	void Create(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved);
 	void PreBind(const RenderGraphAllocator &flip);
 	void ExecutionBind(bool flip);
+	inline const auto &GetVkDescriptorSet(uint32_t pass_order, bool db) const {
+		return m_pass_descriptors[pass_order].sets[db];
+	}
+	inline const auto &GetVkDescriptorSet(const PassBase *pass, bool db) const {
+		return m_pass_descriptors[RenderGraphResolver::GetPassOrder(pass)].sets[db];
+	}
 };
 
 } // namespace myvk_rg::_details_

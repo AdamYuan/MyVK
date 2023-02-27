@@ -634,7 +634,7 @@ void RenderGraphExecutor::create_render_passes_and_framebuffers(
 
 			attachment_image_formats.push_back(att_info.image->GetFormat());
 
-			image_info.usage = m_p_allocated->GetVkImage(att_info.image)->GetUsage();
+			image_info.usage = m_p_allocated->GetVkImage(att_info.image, false)->GetUsage();
 			image_info.width = area.extent.width;
 			image_info.height = area.extent.height;
 			image_info.layerCount = area.layers;

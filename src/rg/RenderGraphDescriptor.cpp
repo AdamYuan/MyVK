@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "VkHelper.hpp"
+#include "myvk_rg/_details_/Input.hpp"
 
 namespace myvk_rg::_details_ {
 

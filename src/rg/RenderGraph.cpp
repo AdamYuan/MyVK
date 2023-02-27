@@ -6,6 +6,8 @@
 #include "RenderGraphResolver.hpp"
 #include "RenderGraphScheduler.hpp"
 
+#include "myvk_rg/_details_/Input.hpp"
+#include "myvk_rg/_details_/Pass.hpp"
 #include "myvk_rg/_details_/RenderGraphBase.hpp"
 #include "myvk_rg/_details_/Resource.hpp"
 
@@ -89,15 +91,29 @@ void RenderGraphBase::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_b
 
 // Resource GetVk functions
 const myvk::Ptr<myvk::BufferBase> &ManagedBuffer::GetVkBuffer() const {
-	return GetRenderGraphPtr()->m_compiler->allocator.GetVkBuffer(this);
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkBuffer(this, GetRenderGraphPtr()->m_exe_flip);
 }
 const myvk::Ptr<myvk::ImageView> &ManagedImage::GetVkImageView() const {
-	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this);
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this, GetRenderGraphPtr()->m_exe_flip);
 }
 const myvk::Ptr<myvk::ImageView> &CombinedImage::GetVkImageView() const {
-	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this);
+	return GetRenderGraphPtr()->m_compiler->allocator.GetVkImageView(this, GetRenderGraphPtr()->m_exe_flip);
 }
 
 // Descriptor GetVk functions
+const myvk::Ptr<myvk::DescriptorSetLayout> &DescriptorSetData::GetVkDescriptorSetLayout(const PassBase *pass) const {
+	const auto *render_graph = pass->GetRenderGraphPtr();
+	return render_graph->m_compiler->descriptor.GetVkDescriptorSet(pass, false)->GetDescriptorSetLayoutPtr();
+}
+const myvk::Ptr<myvk::DescriptorSet> &DescriptorSetData::GetVkDescriptorSet(const PassBase *pass) const {
+	const auto *render_graph = pass->GetRenderGraphPtr();
+	return render_graph->m_compiler->descriptor.GetVkDescriptorSet(pass, render_graph->m_exe_flip);
+}
+
+// RenderPass GetVk functions
+const myvk::Ptr<myvk::RenderPass> &GraphicsPassBase::GetVkRenderPass() const {
+	return GetRenderGraphPtr()->m_compiler->executor.GetPassExec(this).render_pass_info.myvk_render_pass;
+}
+uint32_t GraphicsPassBase::GetSubpass() const { return RenderGraphScheduler::GetSubpassID(this); }
 
 } // namespace myvk_rg::_details_

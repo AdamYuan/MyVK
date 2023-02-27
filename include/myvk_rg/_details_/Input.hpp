@@ -226,7 +226,8 @@ public:
 	inline void RemoveBinding(uint32_t binding) { m_bindings.erase(binding); }
 	inline void ClearBindings() { m_bindings.clear(); }
 
-	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet(const myvk::Ptr<myvk::Device> &device) const;
+	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout(const PassBase *pass) const;
+	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet(const PassBase *pass) const;
 };
 
 class AttachmentData {
@@ -288,6 +289,11 @@ private:
 	inline const InputPool<Derived> *get_input_pool_ptr() const {
 		static_assert(std::is_base_of_v<InputPool<Derived>, Derived>);
 		return (const InputPool<Derived> *)static_cast<const Derived *>(this);
+	}
+
+	inline const PassBase *get_pass_ptr() const {
+		static_assert(std::is_base_of_v<PassBase, Derived> || std::is_same_v<PassBase, Derived>);
+		return static_cast<const PassBase *>(static_cast<const Derived *>(this));
 	}
 
 	inline const RenderGraphBase *get_render_graph_ptr() const {
@@ -387,9 +393,13 @@ protected:
 		assert(sampler);
 		return add_input_descriptor(input_key, image, Usage, PipelineStageFlags, Binding, sampler);
 	}
-	/* inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetDescriptorSetLayout() const {
-	    return m_descriptor_set_data.GetVkDescriptorSetLayout(get_render_graph_ptr()->GetDevicePtr());
-	} */
+
+	inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const {
+		return m_descriptor_set_data.GetVkDescriptorSetLayout(get_pass_ptr());
+	}
+	inline const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet() const {
+		return m_descriptor_set_data.GetVkDescriptorSet(get_pass_ptr());
+	}
 };
 
 template <typename Derived> class AttachmentInputSlot {

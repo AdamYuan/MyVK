@@ -44,6 +44,7 @@ private:
 	private:
 		bool pipeline_updated{};
 		friend class RenderGraphExecutor;
+
 		friend class GraphicsPassBase;
 		friend class ComputePassBase;
 	} m_executor_info;
@@ -78,6 +79,7 @@ public:
 	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor);
 	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor) const;
 
+	inline const auto &GetVkDevice() const { return GetRenderGraphPtr()->GetDevicePtr(); }
 	inline void CreatePipeline() const {
 		Visit([](auto *pass) -> void { pass->CreatePipeline(); });
 	}
@@ -141,6 +143,9 @@ public:
 	}
 	inline GraphicsPassBase(GraphicsPassBase &&) noexcept = default;
 	inline ~GraphicsPassBase() override = default;
+
+	uint32_t GetSubpass() const;
+	const myvk::Ptr<myvk::RenderPass> &GetVkRenderPass() const;
 
 	inline const auto &GetGraphicsPipeline() const { return m_graphics_pipeline; }
 	inline void UpdateGraphicsPipeline() const { m_executor_info.pipeline_updated = true; }
