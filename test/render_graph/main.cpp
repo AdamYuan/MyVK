@@ -456,7 +456,7 @@ private:
 #include "blur_y.frag.u32"
 	};
 	using BlurXSubpass = GaussianBlurSubpass<kBlurXSpv, sizeof(kBlurXSpv)>;
-	using BlurYSubpass = GaussianBlurSubpass<kBlurYSpv, sizeof(kBlurXSpv)>;
+	using BlurYSubpass = GaussianBlurSubpass<kBlurYSpv, sizeof(kBlurYSpv)>;
 
 public:
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
@@ -490,9 +490,9 @@ class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
 private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
-		auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_R8G8B8A8_UNORM);
+		/* auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_R8G8B8A8_UNORM);
 		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
-		init_image->SetClearColorValue({0.5f, 0, 0, 1});
+		init_image->SetClearColorValue({0.5f, 0, 0, 1}); */
 
 		auto lf_image = MakeLastFrameImage({"lf"});
 
