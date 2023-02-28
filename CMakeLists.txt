@@ -53,6 +53,9 @@ add_library(MyVK_RenderGraph STATIC
 add_library(myvk::rg ALIAS MyVK_RenderGraph)
 target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_ENABLE_RG)
 target_link_libraries(MyVK_RenderGraph PUBLIC MyVK_Vulkan)
+if (MYVK_TESTING)
+    target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_RG_DEBUG)
+endif ()
 
 add_library(MyVK_GLFW STATIC
         src/glfw/Surface.cpp

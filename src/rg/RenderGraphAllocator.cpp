@@ -4,6 +4,10 @@
 
 #include <algorithm>
 
+#ifdef MYVK_RG_DEBUG
+#include <iostream>
+#endif
+
 namespace myvk_rg::_details_ {
 
 // TODO: Alloc Double-Buffering Images
@@ -508,7 +512,8 @@ void RenderGraphAllocator::create_and_bind_allocations() {
 			                     buffer_alloc.db_memory_offset, buffer_alloc.myvk_buffers[1]->GetHandle(), nullptr);
 			buffer_alloc.mapped_mem[1] =
 			    (uint8_t *)allocation_ptr->GetInfo().pMappedData + buffer_alloc.db_memory_offset;
-		}
+		} else
+			buffer_alloc.mapped_mem[1] = buffer_alloc.mapped_mem[0];
 	}
 
 #ifdef MYVK_RG_DEBUG

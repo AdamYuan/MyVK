@@ -382,7 +382,8 @@ private:
 
 public:
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image) {
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"image"}, image);
+		auto lf_image = MakeLastFrameImage({"lf_image"}, image);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"image"}, lf_image);
 	}
 
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {

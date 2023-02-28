@@ -79,6 +79,10 @@ void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const 
 		// TODO: DescriptorSetLayout Create Callbacks
 	}
 
+	// If no descriptors are used, just return
+	if (descriptor_type_counts.empty())
+		return;
+
 	myvk::Ptr<myvk::DescriptorPool> descriptor_pool;
 	{
 		std::vector<VkDescriptorPoolSize> pool_sizes;
