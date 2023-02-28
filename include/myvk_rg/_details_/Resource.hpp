@@ -213,8 +213,6 @@ private:
 		m_pointed_image = image->Visit([](auto *image) -> const ImageBase * {
 			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kAlias)
 				return image->GetPointedResource();
-			else if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kLastFrame)
-				return image->GetCurrentResource();
 			return image;
 		});
 	}
@@ -227,7 +225,13 @@ public:
 	inline ImageAlias(ImageAlias &&) noexcept = default;
 	inline ~ImageAlias() final = default;
 
-	inline const ImageBase *GetPointedResource() const { return m_pointed_image; }
+	inline const ImageBase *GetPointedResource() const {
+		return m_pointed_image->Visit([](auto *image) -> const ImageBase * {
+			if constexpr (ResourceVisitorTrait<decltype(image)>::kState == ResourceState::kLastFrame)
+				return image->GetCurrentResource();
+			return image;
+		});
+	}
 	inline const PassBase *GetProducerPass() const { return m_producer_pass; }
 	inline const Input *GetProducerInput() const { return m_producer_input; }
 
@@ -247,8 +251,6 @@ private:
 		m_pointed_buffer = buffer->Visit([](auto *buffer) -> const BufferBase * {
 			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kAlias)
 				return buffer->GetPointedResource();
-			else if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kLastFrame)
-				return buffer->GetCurrentResource();
 			return buffer;
 		});
 	}
@@ -261,7 +263,13 @@ public:
 	inline BufferAlias(BufferAlias &&) = default;
 	inline ~BufferAlias() final = default;
 
-	inline const BufferBase *GetPointedResource() const { return m_pointed_buffer; }
+	inline const BufferBase *GetPointedResource() const {
+		return m_pointed_buffer->Visit([](auto *buffer) -> const BufferBase * {
+			if constexpr (ResourceVisitorTrait<decltype(buffer)>::kState == ResourceState::kLastFrame)
+				return buffer->GetCurrentResource();
+			return buffer;
+		});
+	}
 	inline const PassBase *GetProducerPass() const { return m_producer_pass; }
 	inline const Input *GetProducerInput() const { return m_producer_input; }
 

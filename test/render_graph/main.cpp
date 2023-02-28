@@ -382,19 +382,89 @@ private:
 
 public:
 	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image) {
-		auto lf_image = MakeLastFrameImage({"lf_image"}, image);
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"image"}, lf_image);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"image"}, image);
 	}
 
+	inline void CreatePipeline() final {
+		m_imgui_renderer = myvk::ImGuiRenderer::Create(GetVkRenderPass(), GetSubpass(), 1);
+	}
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
 		m_imgui_renderer->CmdDrawPipeline(command_buffer, 0);
 	}
 
 	inline auto GetImageOutput() { return MakeImageOutput({"image"}); }
+};
 
-	inline myvk::Ptr<myvk::GraphicsPipeline> CreateGraphicsPipeline() final {
-		m_imgui_renderer = myvk::ImGuiRenderer::Create(GetVkRenderPass(), GetSubpass(), 1);
-		return nullptr;
+class GaussianBlurPass final : public myvk_rg::PassGroupBase {
+private:
+	template <const uint32_t ProgramSpv[], std::size_t ProgramSize>
+	class GaussianBlurSubpass final : public myvk_rg::GraphicsPassBase {
+	private:
+		myvk::Ptr<myvk::GraphicsPipeline> m_pipeline;
+
+	public:
+		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
+			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+			    {"in"}, image,
+			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR,
+			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
+			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
+			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img);
+		}
+		inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
+		inline void CreatePipeline() final {
+			auto pipeline_layout =
+			    myvk::PipelineLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), {GetVkDescriptorSetLayout()}, {});
+			myvk::GraphicsPipelineState pipeline_state = {};
+			auto extent = GetRenderGraphPtr()->GetCanvasSize();
+			pipeline_state.m_viewport_state.Enable(
+			    std::vector<VkViewport>{{0, 0, (float)extent.width, (float)extent.height}},
+			    std::vector<VkRect2D>{{{0, 0}, extent}});
+			pipeline_state.m_vertex_input_state.Enable();
+			pipeline_state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+			pipeline_state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_COUNTER_CLOCKWISE,
+			                                                VK_CULL_MODE_FRONT_BIT);
+			pipeline_state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
+			pipeline_state.m_color_blend_state.Enable(1, VK_FALSE);
+
+			static constexpr uint32_t kQuadVertSpv[] = {
+#include "quad.vert.u32"
+			};
+
+			auto vert_shader_module =
+			    myvk::ShaderModule::Create(GetRenderGraphPtr()->GetDevicePtr(), kQuadVertSpv, sizeof(kQuadVertSpv));
+			auto frag_shader_module =
+			    myvk::ShaderModule::Create(GetRenderGraphPtr()->GetDevicePtr(), ProgramSpv, ProgramSize);
+			std::vector<VkPipelineShaderStageCreateInfo> shader_stages = {
+			    vert_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT),
+			    frag_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT)};
+
+			m_pipeline = myvk::GraphicsPipeline::Create(pipeline_layout, GetVkRenderPass(), shader_stages,
+			                                            pipeline_state, GetSubpass());
+		}
+		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
+			command_buffer->CmdBindPipeline(m_pipeline);
+			command_buffer->CmdBindDescriptorSets({GetVkDescriptorSet()}, m_pipeline);
+			command_buffer->CmdDraw(3, 1, 0, 0);
+		}
+	};
+
+	inline static constexpr uint32_t kBlurXSpv[] = {
+#include "blur_x.frag.u32"
+	};
+	inline static constexpr uint32_t kBlurYSpv[] = {
+#include "blur_y.frag.u32"
+	};
+	using BlurXSubpass = GaussianBlurSubpass<kBlurXSpv, sizeof(kBlurXSpv)>;
+	using BlurYSubpass = GaussianBlurSubpass<kBlurYSpv, sizeof(kBlurXSpv)>;
+
+public:
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
+		auto blur_x_pass = CreatePass<BlurXSubpass>({"blur_x"}, image, format);
+		auto blur_y_pass = CreatePass<BlurYSubpass>({"blur_y"}, blur_x_pass->GetImageOutput(), format);
+	}
+	inline auto GetImageOutput() {
+		return MakeImageAliasOutput({"image"}, GetPass<BlurYSubpass>({"blur_y"})->GetImageOutput());
 	}
 };
 
@@ -420,11 +490,17 @@ class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
 private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
-		auto screen_image = CreateResource<myvk_rg::ManagedImage>({"screen"}, VK_FORMAT_R8G8B8A8_UNORM);
-		screen_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
-		screen_image->SetClearColorValue({0.5f, 0, 0, 1});
+		auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_R8G8B8A8_UNORM);
+		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
+		init_image->SetClearColorValue({0.5f, 0, 0, 1});
 
-		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, screen_image);
+		auto lf_image = MakeLastFrameImage({"lf"});
+
+		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, VK_FORMAT_R8G8B8A8_UNORM);
+
+		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, blur_pass->GetImageOutput());
+
+		lf_image->SetCurrentResource(imgui_pass->GetImageOutput());
 
 		auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
 		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
@@ -463,11 +539,7 @@ int main() {
 		render_graph = MyRenderGraph::Create(generic_queue, frame_manager);
 		render_graph->SetCanvasSize(frame_manager->GetExtent());
 	}
-	frame_manager->SetResizeFunc([&render_graphs](const VkExtent2D &extent) {
-		for (auto &render_graph : render_graphs) {
-			render_graph->SetCanvasSize(extent);
-		}
-	});
+	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
 
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -482,10 +554,12 @@ int main() {
 			uint32_t image_index = frame_manager->GetCurrentImageIndex();
 			uint32_t current_frame = frame_manager->GetCurrentFrame();
 			const auto &command_buffer = frame_manager->GetCurrentCommandBuffer();
+			const auto &render_graph = render_graphs[current_frame];
 
 			command_buffer->Begin();
 
-			render_graphs[current_frame]->CmdExecute(command_buffer);
+			render_graph->SetCanvasSize(frame_manager->GetExtent());
+			render_graph->CmdExecute(command_buffer);
 
 			command_buffer->End();
 
