@@ -1,12 +1,15 @@
+#include <cmath>
 #include <iostream>
 
-#include "myvk/FrameManager.hpp"
-#include "myvk/GLFWHelper.hpp"
-#include "myvk/ImGuiHelper.hpp"
-#include "myvk/ImGuiRenderer.hpp"
-#include "myvk/Instance.hpp"
-#include "myvk/Queue.hpp"
-#include "myvk_rg/RenderGraph.hpp"
+#include <myvk/FrameManager.hpp>
+#include <myvk/GLFWHelper.hpp>
+#include <myvk/ImGuiHelper.hpp>
+#include <myvk/ImGuiRenderer.hpp>
+#include <myvk/Instance.hpp>
+#include <myvk/Queue.hpp>
+#include <myvk_rg/RenderGraph.hpp>
+#include <myvk_rg/pass/ImGuiPass.hpp>
+#include <myvk_rg/pass/ImageBlitPass.hpp>
 
 constexpr uint32_t kFrameCount = 3;
 
@@ -376,25 +379,6 @@ public:
 };
 #endif
 
-class ImGuiPass final : public myvk_rg::GraphicsPassBase {
-private:
-	myvk::Ptr<myvk::ImGuiRenderer> m_imgui_renderer;
-
-public:
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image) {
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"image"}, image);
-	}
-
-	inline void CreatePipeline() final {
-		m_imgui_renderer = myvk::ImGuiRenderer::Create(GetVkRenderPass(), GetSubpass(), 1);
-	}
-	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
-		m_imgui_renderer->CmdDrawPipeline(command_buffer, 0);
-	}
-
-	inline auto GetImageOutput() { return MakeImageOutput({"image"}); }
-};
-
 class GaussianBlurPass final : public myvk_rg::PassGroupBase {
 private:
 	template <const uint32_t ProgramSpv[], std::size_t ProgramSize>
@@ -467,22 +451,63 @@ public:
 	}
 };
 
-class ImageBlitPass final : public myvk_rg::TransferPassBase {
+class DimPass final : public myvk_rg::GraphicsPassBase {
 private:
-	myvk_rg::ImageInput m_src{}, m_dst{};
-	VkFilter m_filter{};
+	myvk::Ptr<myvk::GraphicsPipeline> m_pipeline;
+
+	float m_dim{0.99f};
 
 public:
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput src, myvk_rg::ImageInput dst, VkFilter filter) {
-		m_src = src, m_dst = dst;
-		m_filter = filter;
-		AddInput<myvk_rg::Usage::kTransferImageSrc, VK_PIPELINE_STAGE_2_BLIT_BIT>({"src"}, src);
-		AddInput<myvk_rg::Usage::kTransferImageDst, VK_PIPELINE_STAGE_2_BLIT_BIT>({"dst"}, dst);
+	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
+		AddInputAttachmentInput<0, 0>({"in"}, image);
+		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image);
+	}
+	inline void CreatePipeline() final {
+		// Not the best solution, just to test INPUT_ATTACHMENT
+		auto pipeline_layout =
+		    myvk::PipelineLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), {GetVkDescriptorSetLayout()},
+		                                 {{VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(float)}});
+
+		myvk::GraphicsPipelineState pipeline_state = {};
+		auto extent = GetRenderGraphPtr()->GetCanvasSize();
+		pipeline_state.m_viewport_state.Enable(
+		    std::vector<VkViewport>{{0, 0, (float)extent.width, (float)extent.height}},
+		    std::vector<VkRect2D>{{{0, 0}, extent}});
+		pipeline_state.m_vertex_input_state.Enable();
+		pipeline_state.m_input_assembly_state.Enable(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+		pipeline_state.m_rasterization_state.Initialize(VK_POLYGON_MODE_FILL, VK_FRONT_FACE_COUNTER_CLOCKWISE,
+		                                                VK_CULL_MODE_FRONT_BIT);
+		pipeline_state.m_multisample_state.Enable(VK_SAMPLE_COUNT_1_BIT);
+		pipeline_state.m_color_blend_state.Enable(1, VK_FALSE);
+
+		static constexpr uint32_t kQuadVertSpv[] = {
+#include "quad.vert.u32"
+		};
+		static constexpr uint32_t kDimFragSpv[] = {
+#include "dim.frag.u32"
+		};
+
+		auto vert_shader_module =
+		    myvk::ShaderModule::Create(GetRenderGraphPtr()->GetDevicePtr(), kQuadVertSpv, sizeof(kQuadVertSpv));
+		auto frag_shader_module =
+		    myvk::ShaderModule::Create(GetRenderGraphPtr()->GetDevicePtr(), kDimFragSpv, sizeof(kDimFragSpv));
+		std::vector<VkPipelineShaderStageCreateInfo> shader_stages = {
+		    vert_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT),
+		    frag_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT)};
+
+		m_pipeline = myvk::GraphicsPipeline::Create(pipeline_layout, GetVkRenderPass(), shader_stages, pipeline_state,
+		                                            GetSubpass());
 	}
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
-		command_buffer->CmdBlitImage(m_src->GetVkImageView(), m_dst->GetVkImageView(), m_filter);
+		command_buffer->CmdBindPipeline(m_pipeline);
+		command_buffer->CmdBindDescriptorSets({GetVkDescriptorSet()}, m_pipeline);
+		command_buffer->CmdPushConstants(m_pipeline->GetPipelineLayoutPtr(), VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+		                                 sizeof(float), &m_dim);
+		command_buffer->CmdDraw(3, 1, 0, 0);
 	}
-	inline auto GetDstOutput() { return MakeImageOutput({"dst"}); }
+	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
+	inline void SetDim(float dim) { m_dim = dim; }
 };
 
 class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
@@ -493,27 +518,30 @@ private:
 		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
 		init_image->SetClearColorValue({0.5f, 0, 0, 1}); */
 
+		auto format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+
 		auto lf_image = MakeLastFrameImage({"lf"});
 
-		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
+		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, format);
+		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
 
-		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(),
-		                                               VK_FORMAT_A2B10G10R10_UNORM_PACK32);
+		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass2->GetImageOutput(), format);
 
-		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, blur_pass2->GetImageOutput());
+		auto imgui_pass = CreatePass<myvk_rg::ImGuiPass>({"imgui_pass"}, dim_pass->GetImageOutput());
 
 		lf_image->SetCurrentResource(imgui_pass->GetImageOutput());
 
 		auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
 		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
 
-		auto copy_pass =
-		    CreatePass<ImageBlitPass>({"blit_pass"}, imgui_pass->GetImageOutput(), swapchain_image, VK_FILTER_NEAREST);
+		auto copy_pass = CreatePass<myvk_rg::ImageBlitPass>({"blit_pass"}, imgui_pass->GetImageOutput(),
+		                                                    swapchain_image, VK_FILTER_NEAREST);
 
 		AddResult({"final"}, copy_pass->GetDstOutput());
 	}
 
 public:
+	inline void SetDim(float dim) { GetPass<DimPass>({"dim_pass"})->SetDim(dim); }
 };
 
 int main() {
@@ -543,12 +571,14 @@ int main() {
 	}
 	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
 
+	float dim_level = 1.0;
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
 		myvk::ImGuiNewFrame();
 		ImGui::Begin("Test");
 		ImGui::Text("%f", ImGui::GetIO().Framerate);
+		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 100.0);
 		ImGui::End();
 		ImGui::Render();
 
@@ -561,6 +591,7 @@ int main() {
 			command_buffer->Begin();
 
 			render_graph->SetCanvasSize(frame_manager->GetExtent());
+			render_graph->SetDim(1.0f - std::exp(-dim_level));
 			render_graph->CmdExecute(command_buffer);
 
 			command_buffer->End();
