@@ -406,8 +406,7 @@ private:
 		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 			    {"in"}, image,
-			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR,
-			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
+			    myvk::Sampler::CreateClampToBorder(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR, {}));
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img);
 		}
@@ -490,15 +489,18 @@ class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
 private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
 	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
-		/* auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_R8G8B8A8_UNORM);
+		/* auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
 		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
 		init_image->SetClearColorValue({0.5f, 0, 0, 1}); */
 
 		auto lf_image = MakeLastFrameImage({"lf"});
 
-		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, VK_FORMAT_R8G8B8A8_UNORM);
+		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
 
-		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, blur_pass->GetImageOutput());
+		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(),
+		                                               VK_FORMAT_A2B10G10R10_UNORM_PACK32);
+
+		auto imgui_pass = CreatePass<ImGuiPass>({"imgui_pass"}, blur_pass2->GetImageOutput());
 
 		lf_image->SetCurrentResource(imgui_pass->GetImageOutput());
 

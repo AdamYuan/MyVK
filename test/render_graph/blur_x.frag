@@ -19,5 +19,5 @@ vec4 blur13(in sampler2D image, in vec2 uv, in vec2 resolution, in vec2 directio
 
 void main() {
 	ivec2 coord = ivec2(gl_FragCoord.xy), resolution = textureSize(uInput, 0);
-	oColor = blur13(uInput, vec2(coord) / vec2(resolution), vec2(resolution), vec2(1, 0));
+	oColor = blur13(uInput, (vec2(coord) + .5) / vec2(resolution), vec2(resolution), vec2(1, 0));
 }
