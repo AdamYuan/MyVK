@@ -10,6 +10,7 @@
 #include <myvk_rg/RenderGraph.hpp>
 #include <myvk_rg/pass/ImGuiPass.hpp>
 #include <myvk_rg/pass/ImageBlitPass.hpp>
+#include <myvk_rg/resource/SwapchainImage.hpp>
 
 constexpr uint32_t kFrameCount = 3;
 
@@ -576,9 +577,11 @@ int main() {
 		glfwPollEvents();
 
 		myvk::ImGuiNewFrame();
+		ImGui::Begin("Dim");
+		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 10000.0);
+		ImGui::End();
 		ImGui::Begin("Test");
 		ImGui::Text("%f", ImGui::GetIO().Framerate);
-		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 100.0);
 		ImGui::End();
 		ImGui::Render();
 
