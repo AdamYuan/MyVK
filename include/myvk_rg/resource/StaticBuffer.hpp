@@ -1,18 +1,26 @@
-#ifndef MYVK_RG_STATIC_EXTERNAL_BUFFER_HPP
-#define MYVK_RG_STATIC_EXTERNAL_BUFFER_HPP
+#ifndef MYVK_RG_STATIC_BUFFER_HPP
+#define MYVK_RG_STATIC_BUFFER_HPP
 
 #include <myvk_rg/RenderGraph.hpp>
 
 namespace myvk_rg {
-class StaticBuffer final : public myvk_rg::ExternalBufferBase {
+template <typename Buffer = myvk::Buffer> class StaticBuffer final : public myvk_rg::ExternalBufferBase {
+	static_assert(std::is_base_of_v<myvk::BufferBase, Buffer>);
+
 private:
-	myvk::Ptr<myvk::BufferBase> m_buffer;
+	myvk::Ptr<Buffer> m_buffer;
+	myvk::Ptr<myvk::BufferBase> m_buffer_base;
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk::Ptr<myvk::BufferBase> buffer) { m_buffer = std::move(buffer); }
+	MYVK_RG_INLINE_INITIALIZER(myvk::Ptr<Buffer> buffer) {
+		m_buffer = std::move(buffer);
+		m_buffer_base = m_buffer;
+	}
 
 public:
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const final { return m_buffer; }
+	inline const auto &GetBuffer() const { return m_buffer; }
+
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const final { return m_buffer_base; }
 	inline bool IsStatic() const final { return true; }
 };
 } // namespace myvk_rg
