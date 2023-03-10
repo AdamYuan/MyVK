@@ -18,7 +18,7 @@ constexpr uint32_t kFrameCount = 3;
 class CullPass final : public myvk_rg::ComputePassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_hierarchy) {
+	inline void Initialize(myvk_rg::ImageInput depth_hierarchy) {
 		auto draw_list = CreateResource<myvk_rg::ManagedBuffer>({"draw_list"});
 		draw_list->SetSize(1024 * 1024);
 		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
@@ -40,7 +40,7 @@ private:
 	class TopSubPass final : public myvk_rg::GraphicsPassBase {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
-		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_img) {
+		inline void Initialize(myvk_rg::ImageInput depth_img) {
 			auto top_level_img = CreateResource<myvk_rg::ManagedImage>({"top"}, VK_FORMAT_R32_SFLOAT);
 			top_level_img->SetCanvasSize(0, 1);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"top"}, top_level_img);
@@ -59,7 +59,7 @@ private:
 	class BodySubPass final : public myvk_rg::GraphicsPassBase {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
-		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput prev_level_img, uint32_t level) {
+		inline void Initialize(myvk_rg::ImageInput prev_level_img, uint32_t level) {
 			auto level_img = CreateResource<myvk_rg::ManagedImage>({"level"}, VK_FORMAT_R32_SFLOAT);
 			level_img->SetCanvasSize(level, 1);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"level"}, level_img);
@@ -91,7 +91,7 @@ private:
 	}
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_img) { set_levels(10, depth_img); }
+	inline void Initialize(myvk_rg::ImageInput depth_img) { set_levels(10, depth_img); }
 
 public:
 	auto GetDepthHierarchyOutput() {
@@ -113,7 +113,7 @@ public:
 class GBufferPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list) {
+	inline void Initialize(myvk_rg::BufferInput draw_list) {
 		auto depth = CreateResource<myvk_rg::ManagedImage>({"depth"}, VK_FORMAT_D32_SFLOAT);
 		auto albedo = CreateResource<myvk_rg::ManagedImage>({"albedo"}, VK_FORMAT_R8G8B8A8_UNORM);
 		auto normal = CreateResource<myvk_rg::ManagedImage>({"normal"}, VK_FORMAT_R8G8B8A8_SNORM);
@@ -141,7 +141,7 @@ public:
 class WBOITGenPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput depth_test_img) {
+	inline void Initialize(myvk_rg::ImageInput depth_test_img) {
 		auto reveal = CreateResource<myvk_rg::ManagedImage>({"reveal"}, VK_FORMAT_B10G11R11_UFLOAT_PACK32);
 		auto accum = CreateResource<myvk_rg::ManagedImage>({"accum"}, VK_FORMAT_R32_SFLOAT);
 		reveal->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
@@ -166,7 +166,7 @@ private:
 	class Subpass final : public myvk_rg::GraphicsPassBase {
 	private:
 		MYVK_RG_OBJECT_FRIENDS
-		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image_src) {
+		inline void Initialize(myvk_rg::ImageInput image_src) {
 			printf("image_src = %p\n", image_src);
 
 			auto image_dst = CreateResource<myvk_rg::ManagedImage>({"image_dst"}, image_src->GetFormat());
@@ -191,7 +191,7 @@ private:
 	uint32_t m_subpass_count = 10;
 
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image_src) {
+	inline void Initialize(myvk_rg::ImageInput image_src) {
 		for (uint32_t i = 0; i < m_subpass_count; ++i) {
 			CreatePass<Subpass>({"blur_subpass", i},
 			                    i == 0 ? image_src : GetPass<Subpass>({"blur_subpass", i - 1})->GetImageDstOutput());
@@ -210,7 +210,7 @@ public:
 class ScreenPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput gbuffer_albedo,
+	inline void Initialize(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput gbuffer_albedo,
 	                           myvk_rg::ImageInput gbuffer_normal, myvk_rg::ImageInput wboit_reveal,
 	                           myvk_rg::ImageInput wboit_accum) {
 		AddInputAttachmentInput<0, 0>({"gbuffer_albedo"}, gbuffer_albedo);
@@ -231,7 +231,7 @@ public:
 class BrightPass final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput screen_in,
+	inline void Initialize(myvk_rg::ImageInput screen_out, myvk_rg::ImageInput screen_in,
 	                           myvk_rg::ImageInput blurred_bright) {
 		AddInputAttachmentInput<0, 0>({"screen_in"}, screen_in);
 		AddInputAttachmentInput<1, 1>({"blurred_bright"}, blurred_bright);
@@ -250,7 +250,7 @@ public:
 class TestPass0 final : public myvk_rg::ComputePassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER() {
+	inline void Initialize() {
 		for (int i = 0; i < 3; ++i) {
 			auto managed_buffer = CreateResource<myvk_rg::ManagedBuffer>({"draw_list", i});
 			managed_buffer->SetSize(sizeof(uint32_t) * 100);
@@ -305,7 +305,7 @@ public:
 class TestPass1 final : public myvk_rg::GraphicsPassBase {
 private:
 	MYVK_RG_OBJECT_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::BufferInput draw_list, myvk_rg::ImageInput noise_tex) {
+	inline void Initialize(myvk_rg::BufferInput draw_list, myvk_rg::ImageInput noise_tex) {
 		printf("Create TestPass\n");
 		AddDescriptorInput<0, myvk_rg::Usage::kStorageBufferR,
 		                   VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT>(
@@ -331,7 +331,7 @@ public:
 class TestRenderGraph final : public myvk_rg::RenderGraph<TestRenderGraph> {
 private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+	inline void Initialize(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
 		{
 			auto test_pass_0 = CreatePass<TestPass0>({"test_pass_0"});
 			auto test_blur_pass = CreatePass<BlurPass>({"test_blur_pass"}, test_pass_0->GetNoiseTexOutput());
@@ -388,7 +388,7 @@ private:
 		myvk::Ptr<myvk::GraphicsPipeline> m_pipeline;
 
 	public:
-		MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
+		inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 			    {"in"}, image,
 			    myvk::Sampler::CreateClampToBorder(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR, {}));
@@ -443,7 +443,7 @@ private:
 	using BlurYSubpass = GaussianBlurSubpass<kBlurYSpv, sizeof(kBlurYSpv)>;
 
 public:
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
+	inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
 		auto blur_x_pass = CreatePass<BlurXSubpass>({"blur_x"}, image, format);
 		auto blur_y_pass = CreatePass<BlurYSubpass>({"blur_y"}, blur_x_pass->GetImageOutput(), format);
 	}
@@ -459,7 +459,7 @@ private:
 	float m_dim{0.99f};
 
 public:
-	MYVK_RG_INLINE_INITIALIZER(myvk_rg::ImageInput image, VkFormat format) {
+	inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
 		AddInputAttachmentInput<0, 0>({"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
 		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image);
@@ -514,7 +514,7 @@ public:
 class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
 private:
 	MYVK_RG_RENDER_GRAPH_FRIENDS
-	MYVK_RG_INLINE_INITIALIZER(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+	void Initialize(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
 		/* auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
 		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
 		init_image->SetClearColorValue({0.5f, 0, 0, 1}); */
