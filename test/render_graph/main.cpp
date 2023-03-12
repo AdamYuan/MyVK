@@ -446,10 +446,9 @@ public:
 	inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
 		auto blur_x_pass = CreatePass<BlurXSubpass>({"blur_x"}, image, format);
 		auto blur_y_pass = CreatePass<BlurYSubpass>({"blur_y"}, blur_x_pass->GetImageOutput(), format);
+		CreateImageAliasOutput({"image"}, GetPass<BlurYSubpass>({"blur_y"})->GetImageOutput());
 	}
-	inline auto GetImageOutput() {
-		return MakeImageAliasOutput({"image"}, GetPass<BlurYSubpass>({"blur_y"})->GetImageOutput());
-	}
+	inline auto GetImageOutput() { return GetImageAliasOutput({"image"}); }
 };
 
 class DimPass final : public myvk_rg::GraphicsPassBase {
@@ -521,7 +520,7 @@ private:
 
 		auto format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
 
-		auto lf_image = MakeLastFrameImage({"lf"});
+		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
 
 		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
