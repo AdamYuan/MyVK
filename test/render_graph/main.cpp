@@ -391,7 +391,8 @@ private:
 		inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 			    {"in"}, image,
-			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
+			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR,
+			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img);
 		}
