@@ -391,7 +391,7 @@ private:
 		inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
 			    {"in"}, image,
-			    myvk::Sampler::CreateClampToBorder(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR, {}));
+			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR, VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
 			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img);
 		}
@@ -518,7 +518,7 @@ private:
 		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
 		init_image->SetClearColorValue({0.5f, 0, 0, 1}); */
 
-		auto format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
+		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
 		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
 		/* lf_image->SetInitTransferFunc(
@@ -584,13 +584,13 @@ int main() {
 	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
 
 	float init_rgb[3] = {1.0f, 0.0f, 0.0f};
-	float dim_level = 10000000.0;
+	float dim_level = 5.0;
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
 		myvk::ImGuiNewFrame();
 		ImGui::Begin("Config");
-		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 10000000.0);
+		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 10.0);
 		ImGui::ColorPicker3("Init Color", init_rgb);
 		if (ImGui::Button("Re-Init")) {
 			for (const auto &rg : render_graphs)
