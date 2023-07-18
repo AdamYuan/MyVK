@@ -521,11 +521,11 @@ private:
 		auto format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
 
 		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
-		lf_image->SetInitTransferFunc(
+		/* lf_image->SetInitTransferFunc(
 		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageView> &image_view) {
-			    command_buffer->CmdClearColorImage(image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			                                       {{1.0, 0.0, 0.0, 1.0}});
-		    });
+		        command_buffer->CmdClearColorImage(image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		                                           {{1.0, 0.0, 0.0, 1.0}});
+		    }); */
 
 		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
@@ -547,10 +547,17 @@ private:
 
 public:
 	inline void SetDim(float dim) { GetPass<DimPass>({"dim_pass"})->SetDim(dim); }
+	inline void ReInitBG() {
+		GetResource<myvk_rg::LastFrameImage>({"lf"})->SetInitTransferFunc(
+		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageView> &image_view) {
+			    command_buffer->CmdClearColorImage(image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			                                       {{1.0, 0.0, 0.0, 1.0}});
+		    });
+	}
 };
 
 int main() {
-	GLFWwindow *window = myvk::GLFWCreateWindow("Test", 640, 480, false);
+	GLFWwindow *window = myvk::GLFWCreateWindow("Test", 640, 480, true);
 
 	myvk::Ptr<myvk::Device> device;
 	myvk::Ptr<myvk::Queue> generic_queue;
@@ -576,13 +583,17 @@ int main() {
 	}
 	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
 
-	float dim_level = 100000.0;
+	float dim_level = 10000000.0;
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
 		myvk::ImGuiNewFrame();
-		ImGui::Begin("Dim");
-		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 100000.0);
+		ImGui::Begin("Config");
+		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 10000000.0);
+		if (ImGui::Button("Re-Init")) {
+			for (const auto &rg : render_graphs)
+				rg->ReInitBG();
+		}
 		ImGui::End();
 		ImGui::Begin("Test");
 		ImGui::Text("%f", ImGui::GetIO().Framerate);

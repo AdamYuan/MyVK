@@ -43,25 +43,33 @@ void RenderGraphLFInit::InitLastFrameResources(const myvk::Ptr<myvk::Queue> &que
 					}
 				};
 
-				assert(resource->GetInitTransferFunc());
-
-				{ // Pre barrier
+				if (resource->GetInitTransferFunc()) {
+					{ // Pre barrier
+						barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+						barrier.srcAccessMask = 0;
+						barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+						barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+						barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+						barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+						push_barrier(pre_image_barriers);
+					}
+					{ // Post barrier
+						barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+						barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+						barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+						barrier.dstStageMask = stage_flags;
+						barrier.dstAccessMask = access_flags;
+						barrier.newLayout = layout;
+						push_barrier(post_image_barriers);
+					}
+				} else {
 					barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
 					barrier.srcAccessMask = 0;
 					barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-					barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
-					barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-					barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-					push_barrier(pre_image_barriers);
-				}
-				{ // Post barrier
-					barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
-					barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-					barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 					barrier.dstStageMask = stage_flags;
 					barrier.dstAccessMask = access_flags;
 					barrier.newLayout = layout;
-					push_barrier(post_image_barriers);
+					push_barrier(pre_image_barriers);
 				}
 			}
 			if constexpr (ResourceVisitorTrait<decltype(resource)>::kClass == ResourceClass::kLastFrameBuffer) {
@@ -91,21 +99,21 @@ void RenderGraphLFInit::InitLastFrameResources(const myvk::Ptr<myvk::Queue> &que
 					}
 				};
 
-				assert(resource->GetInitTransferFunc());
-
-				{ // Pre barrier
-					barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-					barrier.srcAccessMask = 0;
-					barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
-					barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-					push_barrier(pre_buffer_barriers);
-				}
-				{ // Post barrier
-					barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
-					barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-					barrier.dstStageMask = stage_flags;
-					barrier.dstAccessMask = access_flags;
-					push_barrier(post_buffer_barriers);
+				if (resource->GetInitTransferFunc()) {
+					{ // Pre barrier
+						barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+						barrier.srcAccessMask = 0;
+						barrier.dstStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+						barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+						push_barrier(pre_buffer_barriers);
+					}
+					{ // Post barrier
+						barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT;
+						barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+						barrier.dstStageMask = stage_flags;
+						barrier.dstAccessMask = access_flags;
+						push_barrier(post_buffer_barriers);
+					}
 				}
 			}
 		});
@@ -132,7 +140,8 @@ void RenderGraphLFInit::InitLastFrameResources(const myvk::Ptr<myvk::Queue> &que
 
 		dep.resource->Visit([&allocated, &command_buffer](const auto &resource) {
 			if constexpr (ResourceVisitorTrait<decltype(resource)>::kClass == ResourceClass::kLastFrameImage) {
-				assert(resource->GetInitTransferFunc());
+				if (!resource->GetInitTransferFunc())
+					return;
 
 				const myvk::Ptr<myvk::ImageView> &myvk_image_view_0 = allocated.GetVkImageView(resource, 0);
 				resource->GetInitTransferFunc()(command_buffer, myvk_image_view_0);
@@ -141,7 +150,8 @@ void RenderGraphLFInit::InitLastFrameResources(const myvk::Ptr<myvk::Queue> &que
 					resource->GetInitTransferFunc()(command_buffer, myvk_image_view_1);
 			}
 			if constexpr (ResourceVisitorTrait<decltype(resource)>::kClass == ResourceClass::kLastFrameBuffer) {
-				assert(resource->GetInitTransferFunc());
+				if (!resource->GetInitTransferFunc())
+					return;
 
 				const myvk::Ptr<myvk::BufferBase> &myvk_buffer_0 = allocated.GetVkBuffer(resource, 0);
 				resource->GetInitTransferFunc()(command_buffer, myvk_buffer_0);
