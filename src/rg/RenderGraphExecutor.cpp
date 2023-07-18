@@ -191,8 +191,8 @@ public:
 				is_to_attachment = false;
 		}
 
-		if (!is_from_attachment || !is_to_attachment) {
-			// Not totally Attachment-related, then Add a Vulkan Barrier
+		if (!is_from_attachment && !is_to_attachment) {
+			// Not Attachment-related, then Add a Vulkan Barrier
 
 			// Find the optimal barrier position
 			uint32_t from_bound = 0, to_bound = m_parent.m_p_scheduled->GetPassCount();
@@ -255,8 +255,7 @@ public:
 						barrier_info.image_barriers.push_back(barrier);
 				}
 			});
-		}
-		if (is_from_attachment || is_to_attachment) {
+		} else {
 			// Add Extra Vulkan Subpass Dependencies (External) if a Dependency is Attachment-related
 			assert(m_resource->GetType() == ResourceType::kImage);
 			auto *image = static_cast<const ImageBase *>(m_resource);
@@ -316,12 +315,12 @@ public:
 					else if (!state_to.attachment_init)
 						from_att_dep.set_final_layout(state_to.layout);
 
-					/* if (state_from.is_valid_barrier(state_to))
+					if (state_from.is_valid_barrier(state_to))
 						m_sub_deps[from_pass_id].add_subpass_dependency(0,                      //
 						                                                ref_from.pass, state_from.stage_mask,
 						                                                state_from.access_mask, //
 						                                                in_cur_frame ? ref_to.pass : nullptr,
-						                                                state_to.stage_mask, state_to.access_mask); */
+						                                                state_to.stage_mask, state_to.access_mask);
 				}
 			} else {
 #ifdef MYVK_RG_DEBUG
@@ -350,7 +349,7 @@ public:
 					else if (!state_to.attachment_init) // If is init_mode, don't load
 						to_att_dep.set_initial_layout(state_from.layout);
 
-					/* if (state_from.is_valid_barrier(state_to)) {
+					if (state_from.is_valid_barrier(state_to)) {
 						m_sub_deps[to_pass_id].add_subpass_dependency(
 						    0,                      //
 						    in_cur_frame ? ref_from.pass : nullptr, state_from.stage_mask,
@@ -360,7 +359,7 @@ public:
 						std::cout << ref_from.p_input->GetResource()->GetKey().GetName() << " " << state_from.stage_mask
 						          << std::endl;
 #endif
-					} */
+					}
 				}
 #ifdef MYVK_RG_DEBUG
 				std::cout << "END: TO_ATT " << image->GetKey().GetName() << std::endl;
