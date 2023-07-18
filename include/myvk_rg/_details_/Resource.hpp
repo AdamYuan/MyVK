@@ -296,7 +296,7 @@ public:
 	}
 	inline bool HaveSizeFunc() const { return m_size_func; }
 	inline const SizeFunc &GetSizeFunc() const { return m_size_func; }
-	template <typename Func> inline void SetSizeFunc(Func &&func) {
+	inline void SetSizeFunc(const SizeFunc &func) {
 		m_size_func = func;
 		set_size_changed_compile_phrease();
 	}
@@ -536,7 +536,7 @@ private:
 	InitTransferFunc m_init_transfer_func{};
 
 public:
-	template <typename Func> inline void SetInitTransferFunc(Func &&func) {
+	inline void SetInitTransferFunc(const InitTransferFunc &func) {
 		if ((m_init_transfer_func == nullptr) != (func == nullptr))
 			get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kAllocate);
 		else

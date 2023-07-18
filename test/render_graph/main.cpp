@@ -547,10 +547,11 @@ private:
 
 public:
 	inline void SetDim(float dim) { GetPass<DimPass>({"dim_pass"})->SetDim(dim); }
-	inline void ReInitBG() {
+	inline void ReInitBG(const float rgb[3]) {
 		GetResource<myvk_rg::LastFrameImage>({"lf"})->SetInitTransferFunc(
-		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageBase> &image) {
-			    command_buffer->CmdClearColorImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {{1.0, 0.0, 0.0, 1.0}});
+		    [r = rgb[0], g = rgb[1], b = rgb[2]](const myvk::Ptr<myvk::CommandBuffer> &command_buffer,
+		                                         const myvk::Ptr<myvk::ImageBase> &image) {
+			    command_buffer->CmdClearColorImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {{r, g, b, 1.0}});
 		    });
 	}
 };
@@ -582,6 +583,7 @@ int main() {
 	}
 	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
 
+	float init_rgb[3] = {1.0f, 0.0f, 0.0f};
 	float dim_level = 10000000.0;
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
@@ -589,9 +591,10 @@ int main() {
 		myvk::ImGuiNewFrame();
 		ImGui::Begin("Config");
 		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 10000000.0);
+		ImGui::ColorPicker3("Init Color", init_rgb);
 		if (ImGui::Button("Re-Init")) {
 			for (const auto &rg : render_graphs)
-				rg->ReInitBG();
+				rg->ReInitBG(init_rgb);
 		}
 		ImGui::End();
 		ImGui::Begin("Test");
