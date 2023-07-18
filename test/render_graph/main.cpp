@@ -446,7 +446,7 @@ public:
 	inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
 		auto blur_x_pass = CreatePass<BlurXSubpass>({"blur_x"}, image, format);
 		auto blur_y_pass = CreatePass<BlurYSubpass>({"blur_y"}, blur_x_pass->GetImageOutput(), format);
-		CreateImageAliasOutput({"image"}, GetPass<BlurYSubpass>({"blur_y"})->GetImageOutput());
+		CreateImageAliasOutput({"image"}, blur_y_pass->GetImageOutput());
 	}
 	inline auto GetImageOutput() { return GetImageAliasOutput({"image"}); }
 };
@@ -521,6 +521,11 @@ private:
 		auto format = VK_FORMAT_B10G11R11_UFLOAT_PACK32;
 
 		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
+		lf_image->SetInitTransferFunc(
+		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageView> &image_view) {
+			    command_buffer->CmdClearColorImage(image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			                                       {{1.0, 0.0, 0.0, 1.0}});
+		    });
 
 		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image, format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
@@ -545,7 +550,7 @@ public:
 };
 
 int main() {
-	GLFWwindow *window = myvk::GLFWCreateWindow("Test", 640, 480, true);
+	GLFWwindow *window = myvk::GLFWCreateWindow("Test", 640, 480, false);
 
 	myvk::Ptr<myvk::Device> device;
 	myvk::Ptr<myvk::Queue> generic_queue;
@@ -571,13 +576,13 @@ int main() {
 	}
 	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
 
-	float dim_level = 1.0;
+	float dim_level = 100000.0;
 	while (!glfwWindowShouldClose(window)) {
 		glfwPollEvents();
 
 		myvk::ImGuiNewFrame();
 		ImGui::Begin("Dim");
-		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 10000.0);
+		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 100000.0);
 		ImGui::End();
 		ImGui::Begin("Test");
 		ImGui::Text("%f", ImGui::GetIO().Framerate);
