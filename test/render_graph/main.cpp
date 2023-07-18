@@ -549,9 +549,8 @@ public:
 	inline void SetDim(float dim) { GetPass<DimPass>({"dim_pass"})->SetDim(dim); }
 	inline void ReInitBG() {
 		GetResource<myvk_rg::LastFrameImage>({"lf"})->SetInitTransferFunc(
-		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageView> &image_view) {
-			    command_buffer->CmdClearColorImage(image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			                                       {{1.0, 0.0, 0.0, 1.0}});
+		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageBase> &image) {
+			    command_buffer->CmdClearColorImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {{1.0, 0.0, 0.0, 1.0}});
 		    });
 	}
 };

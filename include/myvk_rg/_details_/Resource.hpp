@@ -551,7 +551,7 @@ public:
 };
 
 // Last Frame Resources
-class LastFrameImage final : public ImageBase, public LastFrameResourceInfo<LastFrameImage, myvk::ImageView> {
+class LastFrameImage final : public ImageBase, public LastFrameResourceInfo<LastFrameImage, myvk::ImageBase> {
 private:
 	const InternalImageBase *m_pointed_image{};
 
