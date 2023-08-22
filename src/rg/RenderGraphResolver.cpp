@@ -267,7 +267,7 @@ void RenderGraphResolver::extract_ordered_passes_and_edges(OriginGraph &&graph) 
 			continue;
 
 		pass->m_resolved_info.pass_order = m_pass_nodes.size();
-		m_pass_nodes.emplace_back(pass);
+		m_pass_nodes.push_back({pass});
 
 		for (auto *p_edge : graph.nodes.at(pass).output_edges) {
 			uint32_t degree = --graph.nodes.at(p_edge->to.pass).in_degree;

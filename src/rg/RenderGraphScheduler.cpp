@@ -304,8 +304,8 @@ void RenderGraphScheduler::sort_and_insert_image_dependencies() {
 					bool is_write_or_result = !UsageIsReadOnly(link.p_input->GetUsage());
 					assert(!is_write_or_result || link.pass == links.back().pass);
 					if (prev_is_attachment || image_layout_changed || is_write_or_result) {
-						m_pass_dependencies.emplace_back(p_cur_dep->resource, p_cur_dep->to,
-						                                 std::vector<ResourceReference>{}, DependencyType::kDependency);
+						m_pass_dependencies.push_back({p_cur_dep->resource, p_cur_dep->to,
+						                               std::vector<ResourceReference>{}, DependencyType::kDependency});
 						p_cur_dep = &m_pass_dependencies.back();
 					}
 				}
