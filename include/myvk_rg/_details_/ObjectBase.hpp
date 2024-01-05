@@ -1,29 +1,48 @@
 #ifndef MYVK_RG_BASE_HPP
 #define MYVK_RG_BASE_HPP
 
+#include "Key.hpp"
+
+#include <variant>
+
 namespace myvk_rg::_details_ {
 
+// helper type for the visitor #4
+template <class... Ts> struct overloaded : Ts... {
+	using Ts::operator()...;
+};
+// explicit deduction guide (not needed as of C++20)
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
+
 class RenderGraphBase;
-class PassBase;
-class ResourceBase;
-// Object Base
-class PoolKey;
 class ObjectBase {
+public:
+	struct Parent {
+		const PoolKey *p_pool_key;
+		std::variant<RenderGraphBase *, const ObjectBase *> p_var_parent;
+	};
+
 private:
-	RenderGraphBase *m_render_graph_ptr{};
-	const PoolKey *m_key_ptr{};
-
-	inline void set_render_graph_ptr(RenderGraphBase *render_graph_ptr) { m_render_graph_ptr = render_graph_ptr; }
-	inline void set_key_ptr(const PoolKey *key_ptr) { m_key_ptr = key_ptr; }
-
-	template <typename, typename...> friend class Pool;
+	RenderGraphBase *m_p_render_graph{};
+	const ObjectBase *m_p_parent_object{};
+	const PoolKey *m_p_key{};
 
 public:
-	inline ObjectBase() = default;
+	inline explicit ObjectBase(Parent parent) : m_p_key{parent.p_pool_key} {
+		std::visit(overloaded([this](RenderGraphBase *p_rg) { m_p_render_graph = p_rg; },
+		                      [this](const ObjectBase *p_obj) {
+			                      m_p_render_graph = p_obj->GetRenderGraphPtr();
+			                      m_p_parent_object = p_obj;
+		                      }),
+		           parent.p_var_parent);
+	}
 	inline virtual ~ObjectBase() = default;
 
-	inline RenderGraphBase *GetRenderGraphPtr() const { return m_render_graph_ptr; }
-	inline const PoolKey &GetKey() const { return *m_key_ptr; }
+	inline RenderGraphBase *GetRenderGraphPtr() const { return m_p_render_graph; }
+	inline const PoolKey &GetKey() const { return *m_p_key; }
+	inline GlobalKey GetGlobalKey() const {
+		return m_p_parent_object ? GlobalKey{m_p_parent_object->GetGlobalKey(), *m_p_key} : GlobalKey{*m_p_key};
+	}
 
 	// Disable Copy
 	inline ObjectBase(ObjectBase &&r) noexcept = default;
