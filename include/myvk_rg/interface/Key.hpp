@@ -58,9 +58,6 @@ public:
 		return std::string{GetName()} + (m_id == std::numeric_limits<IDType>::max() ? "" : ":" + std::to_string(m_id));
 	}
 
-	inline bool Empty() const { return *this == PoolKey{}; }
-	inline void Clear() { *this = PoolKey{}; }
-
 	inline bool operator<(const PoolKey &r) const { return _32_ < r._32_; }
 	inline bool operator>(const PoolKey &r) const { return _32_ > r._32_; }
 	inline bool operator==(const PoolKey &r) const { return _32_ == r._32_; }

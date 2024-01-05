@@ -1,6 +1,7 @@
 #ifndef MYVK_RG_RESOURCE_IO_HPP
 #define MYVK_RG_RESOURCE_IO_HPP
 
+#include <cassert>
 #include <optional>
 
 #include "Alias.hpp"
@@ -12,7 +13,8 @@
 
 namespace myvk_rg::interface {
 
-// Resource Input
+class ImageInput;
+
 class InputBase : public ObjectBase {
 private:
 	AliasBase m_resource{};
@@ -33,6 +35,9 @@ public:
 
 	inline const AliasBase &GetResource() const { return m_resource; }
 	inline ResourceType GetType() const { return m_resource.GetType(); }
+
+	template <typename Visitor> inline std::invoke_result_t<Visitor, ImageInput *> Visit(Visitor &&visitor);
+	template <typename Visitor> inline std::invoke_result_t<Visitor, ImageInput *> Visit(Visitor &&visitor) const;
 };
 
 class ImageInput final : public InputBase {
@@ -70,6 +75,29 @@ public:
 	inline static ResourceType GetType() { return ResourceType::kBuffer; }
 	inline auto GetOutput() const { return OutputBufferAlias(this); }
 };
+
+template <typename Visitor> std::invoke_result_t<Visitor, ImageInput *> InputBase::Visit(Visitor &&visitor) const {
+	switch (GetType()) {
+	case ResourceType::kImage:
+		return visitor(static_cast<const ImageInput *>(this));
+	case ResourceType::kBuffer:
+		return visitor(static_cast<const BufferInput *>(this));
+	default:
+		assert(false);
+	}
+	return visitor(static_cast<const BufferInput *>(nullptr));
+}
+template <typename Visitor> std::invoke_result_t<Visitor, ImageInput *> InputBase::Visit(Visitor &&visitor) {
+	switch (GetType()) {
+	case ResourceType::kImage:
+		return visitor(static_cast<ImageInput *>(this));
+	case ResourceType::kBuffer:
+		return visitor(static_cast<BufferInput *>(this));
+	default:
+		assert(false);
+	}
+	return visitor(static_cast<BufferInput *>(nullptr));
+}
 
 } // namespace myvk_rg::interface
 

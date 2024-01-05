@@ -12,11 +12,6 @@ namespace myvk_rg::interface {
 
 enum class PassType : uint8_t { kGraphics, kCompute, kTransfer, kGroup };
 
-class GraphicsPassBase;
-class ComputePassBase;
-class TransferPassBase;
-class PassGroupBase;
-
 struct RenderPassArea {
 	VkExtent2D extent{};
 	uint32_t layers{};
@@ -26,6 +21,7 @@ struct RenderPassArea {
 };
 using RenderPassAreaFunc = std::function<RenderPassArea(const VkExtent2D &)>;
 
+class GraphicsPassBase;
 class PassBase : public ObjectBase {
 private:
 	PassType m_type{};
