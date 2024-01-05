@@ -3,40 +3,40 @@
 #ifndef MYVK_RG_RENDER_GRAPH_HPP
 #define MYVK_RG_RENDER_GRAPH_HPP
 
-#include "_details_/RenderGraph.hpp"
+#include "interface/RenderGraph.hpp"
 
 namespace myvk_rg {
 
-using Key = _details_::PoolKey;
+using Key = interface::PoolKey;
 
-using GraphicsPassBase = _details_::GraphicsPassBase;
-using ComputePassBase = _details_::ComputePassBase;
-using TransferPassBase = _details_::TransferPassBase;
-using PassGroupBase = _details_::PassGroupBase;
+using GraphicsPassBase = interface::GraphicsPassBase;
+using ComputePassBase = interface::ComputePassBase;
+using TransferPassBase = interface::TransferPassBase;
+using PassGroupBase = interface::PassGroupBase;
 
-using ImageBase = _details_::ImageBase;
-using ImageInput = const _details_::ImageBase *;
-using ImageOutput = const _details_::ImageAlias *;
-using ManagedImage = _details_::ManagedImage;
-using CombinedImage = _details_::CombinedImage;
-using LastFrameImage = _details_::LastFrameImage;
-using ExternalImageBase = _details_::ExternalImageBase;
+using ImageBase = interface::ImageBase;
+using ImageInput = const interface::ImageBase *;
+using ImageOutput = const interface::ImageAliasBase *;
+using ManagedImage = interface::ManagedImage;
+using CombinedImage = interface::CombinedImage;
+using LastFrameImage = interface::LastFrameImage;
+using ExternalImageBase = interface::ExternalImageBase;
 
-using BufferBase = _details_::BufferBase;
-using BufferInput = const _details_::BufferBase *;
-using BufferOutput = const _details_::BufferAlias *;
-using ManagedBuffer = _details_::ManagedBuffer;
-using LastFrameBuffer = _details_::LastFrameBuffer;
-using ExternalBufferBase = _details_::ExternalBufferBase;
+using BufferBase = interface::BufferBase;
+using BufferInput = const interface::BufferBase *;
+using BufferOutput = const interface::BufferAliasBase *;
+using ManagedBuffer = interface::ManagedBuffer;
+using LastFrameBuffer = interface::LastFrameBuffer;
+using ExternalBufferBase = interface::ExternalBufferBase;
 
-using SubImageSize = _details_::SubImageSize;
-using RenderPassArea = _details_::RenderPassArea;
+using SubImageSize = interface::SubImageSize;
+using RenderPassArea = interface::RenderPassArea;
 
-using BufferDescriptorInput = _details_::BufferDescriptorInput;
-using ImageDescriptorInput = _details_::ImageDescriptorInput;
-using SamplerDescriptorInput = _details_::SamplerDescriptorInput;
+using BufferDescriptorInput = interface::BufferDescriptorInput;
+using ImageDescriptorInput = interface::ImageDescriptorInput;
+using SamplerDescriptorInput = interface::SamplerDescriptorInput;
 
-template <typename Derived> using RenderGraph = _details_::RenderGraph<Derived>;
+template <typename Derived> using RenderGraph = interface::RenderGraph<Derived>;
 
 } // namespace myvk_rg
 

@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 struct RenderGraphResolver::OriginGraph {
 	enum class ExtraEdgeType : uint8_t { kNone, kWriteAfterRead, kExternalOutput, kDeleted };
@@ -511,4 +511,4 @@ void RenderGraphResolver::Resolve(const RenderGraphBase *p_render_graph) {
 	extract_resource_references();
 }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

@@ -7,12 +7,12 @@
 #include "RenderGraphResolver.hpp"
 #include "RenderGraphScheduler.hpp"
 
-#include "myvk_rg/_details_/Input.hpp"
-#include "myvk_rg/_details_/Pass.hpp"
-#include "myvk_rg/_details_/RenderGraphBase.hpp"
-#include "myvk_rg/_details_/Resource.hpp"
+#include "myvk_rg/interface/Input.hpp"
+#include "myvk_rg/interface/Pass.hpp"
+#include "myvk_rg/interface/RenderGraphBase.hpp"
+#include "myvk_rg/interface/Resource.hpp"
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 struct RenderGraphBase::Compiler {
 	RenderGraphResolver resolver;
@@ -132,4 +132,4 @@ const myvk::Ptr<myvk::RenderPass> &GraphicsPassBase::GetVkRenderPass() const {
 }
 uint32_t GraphicsPassBase::GetSubpass() const { return RenderGraphScheduler::GetSubpassID(this); }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

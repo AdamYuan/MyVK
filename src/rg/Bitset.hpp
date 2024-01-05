@@ -5,7 +5,7 @@
 #include <cinttypes>
 #include <vector>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 inline constexpr uint32_t BitsetSize(uint32_t bit_count) { return (bit_count >> 6u) + ((bit_count & 0x3f) ? 1u : 0u); }
 inline constexpr bool BitsetGet(const uint64_t *data, uint32_t bit_pos) {
@@ -63,6 +63,6 @@ public:
 	}
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

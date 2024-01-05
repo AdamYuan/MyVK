@@ -37,7 +37,7 @@ add_library(MyVK_Vulkan STATIC
         src/QueryPool.cpp
         src/FramebufferBase.cpp
         src/ImagelessFramebuffer.cpp
-        )
+)
 add_library(myvk::vulkan ALIAS MyVK_Vulkan)
 target_include_directories(MyVK_Vulkan PUBLIC include)
 target_link_libraries(MyVK_Vulkan PUBLIC MyVK_Dep_Vulkan)
@@ -50,7 +50,11 @@ add_library(MyVK_RenderGraph STATIC
         src/rg/RenderGraphDescriptor.cpp
         src/rg/RenderGraphLFInit.cpp
         src/rg/RenderGraph.cpp
-        )
+        src/rg/interface/Alias.cpp
+        src/rg/interface/Resource.cpp
+        src/rg/interface/Input.cpp
+        src/rg/interface/Object.cpp
+)
 add_library(myvk::rg ALIAS MyVK_RenderGraph)
 target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_ENABLE_RG)
 target_link_libraries(MyVK_RenderGraph PUBLIC MyVK_Vulkan)
@@ -67,7 +71,7 @@ add_library(MyVK_GLFW STATIC
         src/glfw/PhysicalDevice.cpp
         src/glfw/ImageView.cpp
         src/glfw/QueueSelector.cpp
-        )
+)
 add_library(myvk::glfw ALIAS MyVK_GLFW)
 target_compile_definitions(MyVK_GLFW PUBLIC MYVK_ENABLE_GLFW)
 target_link_libraries(MyVK_GLFW PUBLIC MyVK_Vulkan MyVK_Dep_GLFW)
@@ -75,7 +79,7 @@ target_link_libraries(MyVK_GLFW PUBLIC MyVK_Vulkan MyVK_Dep_GLFW)
 add_library(MyVK_ImGui STATIC
         src/imgui/ImGuiHelper.cpp
         src/imgui/ImGuiRenderer.cpp
-        )
+)
 add_library(myvk::imgui ALIAS MyVK_ImGui)
 target_compile_definitions(MyVK_ImGui PUBLIC MYVK_ENABLE_IMGUI)
 target_link_libraries(MyVK_ImGui PUBLIC MyVK_Vulkan MyVK_GLFW MyVK_Dep_ImGui)

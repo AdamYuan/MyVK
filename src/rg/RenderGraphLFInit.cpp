@@ -2,7 +2,7 @@
 
 #include "VkHelper.hpp"
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 void RenderGraphLFInit::InitLastFrameResources(const myvk::Ptr<myvk::Queue> &queue,
                                                const RenderGraphAllocator &allocated) {
@@ -198,4 +198,4 @@ void RenderGraphLFInit::cmd_lf_image_init(const myvk::Ptr<myvk::CommandBuffer> &
 		init_func(command_buffer, myvk_image_1);
 }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

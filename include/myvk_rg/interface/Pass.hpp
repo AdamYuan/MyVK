@@ -1,15 +1,14 @@
 #ifndef MYVK_RG_PASS_HPP
 #define MYVK_RG_PASS_HPP
 
-#include "Input.hpp"
-#include "RenderGraphBase.hpp"
-#include "Resource.hpp"
+#include "InputPool.hpp"
+#include "ResourcePool.hpp"
 
 #include <myvk/CommandBuffer.hpp>
 #include <myvk/ComputePipeline.hpp>
 #include <myvk/GraphicsPipeline.hpp>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 enum class PassType : uint8_t { kGraphics, kCompute, kTransfer, kGroup };
 
@@ -25,72 +24,14 @@ struct RenderPassArea {
 		return std::tie(extent.width, extent.height, layers) == std::tie(r.extent.width, r.extent.height, r.layers);
 	}
 };
+using RenderPassAreaFunc = std::function<RenderPassArea(const VkExtent2D &)>;
 
 class PassBase : public ObjectBase {
 private:
 	PassType m_type{};
 
-	// Pass
-	const _details_rg_pool_::InputPoolData *m_p_input_pool_data{};
-	const DescriptorSetData *m_p_descriptor_set_data{};
-	// GraphicsPass
-	const AttachmentData *m_p_attachment_data{};
-
-	using AreaFunc = std::function<RenderPassArea(const VkExtent2D &)>;
-	std::optional<RenderPassArea> m_opt_area = std::nullopt;
-	std::optional<AreaFunc> m_opt_area_func = std::nullopt;
-
-	inline std::optional<RenderPassArea> get_opt_area() const {
-		if (m_opt_area)
-			return *m_opt_area;
-		if (m_opt_area_func)
-			return (*m_opt_area_func)(GetRenderGraphPtr()->GetCanvasSize());
-		return std::nullopt;
-	}
-
-	mutable struct {
-	private:
-		uint32_t pass_order{};
-		friend class RenderGraphResolver;
-	} m_resolved_info{};
-
-	mutable struct {
-	private:
-		uint32_t pass_id{}, subpass_id{};
-		friend class RenderGraphScheduler;
-	} m_scheduled_info{};
-
-	mutable struct {
-	private:
-		bool pipeline_updated{};
-		friend class RenderGraphExecutor;
-
-		friend class GraphicsPassBase;
-		friend class ComputePassBase;
-	} m_executor_info;
-
-	friend class PassGroupBase;
-	friend class GraphicsPassBase;
-	friend class ComputePassBase;
-	friend class TransferPassBase;
-
-	friend class RenderGraphBase;
-	friend class RenderGraphResolver;
-	friend class RenderGraphScheduler;
-	friend class RenderGraphExecutor;
-	friend class RenderGraphDescriptor;
-
-	template <typename Func> inline void for_each_input(Func &&func) {
-		for (auto it = m_p_input_pool_data->pool.begin(); it != m_p_input_pool_data->pool.end(); ++it)
-			func(*(m_p_input_pool_data->ValueGet<0, Input>(it)));
-	}
-	template <typename Func> inline void for_each_input(Func &&func) const {
-		for (auto it = m_p_input_pool_data->pool.begin(); it != m_p_input_pool_data->pool.end(); ++it)
-			func(m_p_input_pool_data->ValueGet<0, Input>(it));
-	}
-
 public:
-	inline PassBase(PassType type) : m_type{type} {};
+	inline PassBase(Parent parent, PassType type) : ObjectBase(parent), m_type{type} {};
 	inline PassBase(PassBase &&) noexcept = default;
 	inline ~PassBase() override = default;
 
@@ -105,40 +46,27 @@ public:
 
 template <typename Derived> class PassPool : public Pool<Derived, PassBase> {
 private:
-	using _PassPool = Pool<Derived, PassBase>;
-
-	inline RenderGraphBase *get_render_graph_ptr() {
-		static_assert(std::is_base_of_v<ObjectBase, Derived> || std::is_base_of_v<RenderGraphBase, Derived>);
-		if constexpr (std::is_base_of_v<ObjectBase, Derived>)
-			return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
-		else
-			return static_cast<RenderGraphBase *>(static_cast<Derived *>(this));
-	}
+	using PoolBase = Pool<Derived, PassBase>;
 
 public:
 	inline PassPool() = default;
 	inline PassPool(PassPool &&) noexcept = default;
 	inline ~PassPool() override = default;
 
-protected:
-	template <typename PassType, typename... Args, typename = std::enable_if_t<std::is_base_of_v<PassBase, PassType>>>
-	inline PassType *CreatePass(const PoolKey &pass_key, Args &&...args) {
-		PassType *ret =
-		    _PassPool::template CreateAndInitialize<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
-		assert(ret);
-		get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kResolve);
-		return ret;
-	}
-	inline void DeletePass(const PoolKey &pass_key) { return PassPool::Delete(pass_key); }
+	inline const auto &GetPassPoolData() const { return PoolBase::GetPoolData(); }
 
-	template <typename PassType = PassBase,
-	          typename = std::enable_if_t<std::is_base_of_v<PassBase, PassType> || std::is_same_v<PassBase, PassType>>>
-	inline PassType *GetPass(const PoolKey &pass_key) const {
-		return _PassPool::template Get<0, PassType>(pass_key);
+protected:
+	template <typename PassType, typename... Args>
+	inline PassType *CreatePass(const PoolKey &pass_key, Args &&...args) {
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kPassChanged);
+		return PoolBase::template Construct<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
+	}
+	template <typename PassType = PassBase> inline PassType *GetPass(const PoolKey &pass_key) const {
+		return PoolBase::template Get<0, PassType>(pass_key);
 	}
 	inline void ClearPasses() {
-		_PassPool::Clear();
-		get_render_graph_ptr()->SetCompilePhrases(CompilePhrase::kResolve);
+		PoolBase::Clear();
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kPassChanged);
 	}
 };
 
@@ -147,14 +75,14 @@ class GraphicsPassBase : public PassBase,
                          public ResourcePool<GraphicsPassBase>,
                          public AttachmentInputSlot<GraphicsPassBase>,
                          public DescriptorInputSlot<GraphicsPassBase> {
+private:
+	std::optional<RenderPassArea> m_opt_area = std::nullopt;
+	std::optional<RenderPassAreaFunc> m_opt_area_func = std::nullopt;
+
 public:
 	inline constexpr PassType GetType() const { return PassType::kGraphics; }
 
-	inline GraphicsPassBase() : PassBase(PassType::kGraphics) {
-		m_p_input_pool_data = &InputPool<GraphicsPassBase>::GetPoolData();
-		m_p_descriptor_set_data = &DescriptorInputSlot<GraphicsPassBase>::GetDescriptorSetData();
-		m_p_attachment_data = &AttachmentInputSlot<GraphicsPassBase>::GetAttachmentData();
-	}
+	inline GraphicsPassBase(Parent parent) : PassBase(parent, PassType::kGraphics) {}
 	inline GraphicsPassBase(GraphicsPassBase &&) noexcept = default;
 	inline ~GraphicsPassBase() override = default;
 
@@ -163,24 +91,31 @@ public:
 
 	inline void SetRenderArea(VkExtent2D extent, uint32_t layer = 1) {
 		if (m_opt_area_func || !m_opt_area || m_opt_area != RenderPassArea{extent, layer})
-			GetRenderGraphPtr()->SetCompilePhrases(CompilePhrase::kSchedule);
+			EmitEvent(Event::kRenderAreaChanged);
 		m_opt_area = RenderPassArea{extent, layer};
 		m_opt_area_func = std::nullopt;
 	}
-	inline void SetRenderArea(const AreaFunc &area_func) {
+	inline void SetRenderArea(const RenderPassAreaFunc &area_func) {
 		if (m_opt_area || !m_opt_area_func)
-			GetRenderGraphPtr()->SetCompilePhrases(CompilePhrase::kSchedule);
+			EmitEvent(Event::kRenderAreaChanged);
 		m_opt_area = std::nullopt;
 		m_opt_area_func = area_func;
 	}
 	inline void ClearRenderArea() {
 		if (m_opt_area || m_opt_area_func)
-			GetRenderGraphPtr()->SetCompilePhrases(CompilePhrase::kSchedule);
+			EmitEvent(Event::kRenderAreaChanged);
 		m_opt_area = std::nullopt;
 		m_opt_area_func = std::nullopt;
 	}
+	inline std::optional<std::variant<RenderPassArea, RenderPassAreaFunc>> GetOptRenderArea() const {
+		if (m_opt_area)
+			return *m_opt_area;
+		if (m_opt_area_func)
+			return *m_opt_area_func;
+		return std::nullopt;
+	}
 
-	inline void UpdatePipeline() const { m_executor_info.pipeline_updated = true; }
+	inline void UpdatePipeline() const { EmitEvent(Event::kUpdatePipeline); }
 };
 
 class ComputePassBase : public PassBase,
@@ -190,39 +125,31 @@ class ComputePassBase : public PassBase,
 public:
 	inline constexpr PassType GetType() const { return PassType::kCompute; }
 
-	inline ComputePassBase() : PassBase(PassType::kCompute) {
-		m_p_input_pool_data = &InputPool<ComputePassBase>::GetPoolData();
-		m_p_descriptor_set_data = &DescriptorInputSlot<ComputePassBase>::GetDescriptorSetData();
-	}
+	inline ComputePassBase(Parent parent) : PassBase(parent, PassType::kCompute) {}
 	inline ComputePassBase(ComputePassBase &&) noexcept = default;
 	inline ~ComputePassBase() override = default;
 
-	inline void UpdatePipeline() const { m_executor_info.pipeline_updated = true; }
+	inline void UpdatePipeline() const { EmitEvent(Event::kUpdatePipeline); }
 };
 
 class TransferPassBase : public PassBase, public InputPool<TransferPassBase>, public ResourcePool<TransferPassBase> {
 public:
 	inline constexpr PassType GetType() const { return PassType::kTransfer; }
 
-	inline TransferPassBase() : PassBase(PassType::kTransfer) {
-		m_p_input_pool_data = &InputPool<TransferPassBase>::GetPoolData();
-	}
+	inline TransferPassBase(Parent parent) : PassBase(parent, PassType::kTransfer) {}
 	inline TransferPassBase(TransferPassBase &&) noexcept = default;
 	inline ~TransferPassBase() override = default;
 
 	inline void CreatePipeline() final {}
 };
 
-class PassGroupBase : public PassBase,
-                      public ResourcePool<PassGroupBase>,
-                      public PassPool<PassGroupBase>,
-                      public AliasOutputPool<PassGroupBase> {
+class PassGroupBase : public PassBase, public ResourcePool<PassGroupBase>, public PassPool<PassGroupBase> {
 public:
 	inline constexpr PassType GetType() const { return PassType::kGroup; }
 
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &) const final {}
 
-	inline PassGroupBase() : PassBase(PassType::kGroup) {}
+	inline PassGroupBase(Parent parent) : PassBase(parent, PassType::kGroup) {}
 	inline PassGroupBase(PassGroupBase &&) noexcept = default;
 	inline ~PassGroupBase() override = default;
 
@@ -261,6 +188,6 @@ template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> Pa
 	return visitor(static_cast<const GraphicsPassBase *>(nullptr));
 }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

@@ -10,7 +10,7 @@
 #include <iostream>
 #endif
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 struct RenderGraphExecutor::SubpassDependencies {
 	struct SubpassDependencyKey {
@@ -1037,4 +1037,4 @@ void RenderGraphExecutor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &comma
 	cmd_pipeline_barriers(m_post_barrier_info);
 }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

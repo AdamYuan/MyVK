@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_RENDER_GRAPH_ALLOCATOR_HPP
 #define MYVK_RG_RENDER_GRAPH_ALLOCATOR_HPP
 
-#include <myvk_rg/_details_/Resource.hpp>
+#include <myvk_rg/interface/Resource.hpp>
 
 #include <myvk/BufferBase.hpp>
 #include <myvk/ImageBase.hpp>
@@ -10,7 +10,7 @@
 #include "Bitset.hpp"
 #include "RenderGraphResolver.hpp"
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 class RenderGraphAllocation;
 
@@ -145,7 +145,7 @@ public:
 	inline static const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ExternalImageBase *image, bool db) {
 		return image->GetVkImageView();
 	}
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageAlias *image, bool db) const {
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView(const ImageAliasBase *image, bool db) const {
 		return image->GetPointedResource()->Visit(
 		    [this, db](const auto *image) -> const myvk::Ptr<myvk::ImageView> & { return GetVkImageView(image, db); });
 	}
@@ -163,7 +163,7 @@ public:
 	inline static const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ExternalImageBase *image, bool db) {
 		return image->GetVkImageView()->GetImagePtr();
 	}
-	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageAlias *image, bool db) const {
+	inline const myvk::Ptr<myvk::ImageBase> &GetVkImage(const ImageAliasBase *image, bool db) const {
 		return image->GetPointedResource()->Visit(
 		    [this, db](const auto *image) -> const myvk::Ptr<myvk::ImageBase> & { return GetVkImage(image, db); });
 	}
@@ -181,7 +181,7 @@ public:
 	inline static const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const ExternalBufferBase *buffer, bool db) {
 		return buffer->GetVkBuffer();
 	}
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferAlias *buffer, bool db) const {
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const BufferAliasBase *buffer, bool db) const {
 		return buffer->GetPointedResource()->Visit(
 		    [this, db](const auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return GetVkBuffer(buffer, db); });
 	}
@@ -195,6 +195,6 @@ public:
 	}
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

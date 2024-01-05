@@ -11,7 +11,7 @@
 #include <tuple>
 #include <vector>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 class PoolKey {
 public:
@@ -58,6 +58,9 @@ public:
 		return std::string{GetName()} + (m_id == std::numeric_limits<IDType>::max() ? "" : ":" + std::to_string(m_id));
 	}
 
+	inline bool Empty() const { return *this == PoolKey{}; }
+	inline void Clear() { *this = PoolKey{}; }
+
 	inline bool operator<(const PoolKey &r) const { return _32_ < r._32_; }
 	inline bool operator>(const PoolKey &r) const { return _32_ > r._32_; }
 	inline bool operator==(const PoolKey &r) const { return _32_ == r._32_; }
@@ -95,12 +98,13 @@ public:
 			    f += key.Format() + '.';
 			    return std::move(f);
 		    });
-		str.pop_back();
+		if (!str.empty())
+			str.pop_back();
 		return str;
 	}
 };
 static_assert(std::is_move_constructible_v<GlobalKey>);
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif // MYVK_RG_KEY_HPP

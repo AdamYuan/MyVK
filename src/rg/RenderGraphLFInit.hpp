@@ -5,7 +5,7 @@
 #include "RenderGraphAllocator.hpp"
 #include "RenderGraphScheduler.hpp"
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 class RenderGraphLFInit {
 private:
@@ -24,4 +24,4 @@ public:
 	void InitLastFrameResources(const myvk::Ptr<myvk::Queue> &queue, const RenderGraphAllocator &allocated);
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

@@ -1,11 +1,12 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
-#include "../../include/myvk_rg/_details_/Key.hpp"
-#include "../../include/myvk_rg/_details_/Pool.hpp"
-using namespace myvk_rg::_details_;
+#include "../../include/myvk_rg/interface/Key.hpp"
+#include "../../include/myvk_rg/interface/Pool.hpp"
 
 TEST_CASE("Test Key") {
+	using myvk_rg::interface::GlobalKey;
+	using myvk_rg::interface::PoolKey;
 	PoolKey key0 = {"pass", 0};
 	PoolKey key1 = {"albedo_tex"};
 	GlobalKey global_key0 = GlobalKey{GlobalKey{key0}, key1};
@@ -17,8 +18,8 @@ TEST_CASE("Test Key") {
 	CHECK((global_key0 == global_key1));
 }
 
-template <typename T> using Wrapper = _details_rg_pool_::Wrapper<T>;
 TEST_CASE("Test Pool Data") {
+	using myvk_rg::interface::Wrapper;
 	Wrapper<int> int_wrapper;
 	CHECK_EQ(*int_wrapper.Construct<int>(10), 10);
 	CHECK_EQ(*int_wrapper.Get<int>(), 10);
@@ -35,4 +36,11 @@ TEST_CASE("Test Pool Data") {
 	CHECK_EQ(var_wrapper.Get<std::istringstream>(), nullptr);
 	CHECK(var_wrapper.Get<std::istream>());
 	CHECK(var_wrapper.Get<std::ifstream>());
+
+	CHECK_EQ(*var_wrapper.Construct<int>(2), 2);
+	CHECK_EQ(var_wrapper.Get<std::istream>(), nullptr);
+	CHECK_EQ(var_wrapper.Get<double>(), nullptr);
+	CHECK_EQ(*var_wrapper.Get<int>(), 2);
+	*var_wrapper.Get<int>() = 3;
+	CHECK_EQ(*var_wrapper.Get<int>(), 3);
 }

@@ -1,27 +1,26 @@
 #ifndef MYVK_RG_BASE_HPP
 #define MYVK_RG_BASE_HPP
 
+#include "Event.hpp"
 #include "Key.hpp"
 
 #include <variant>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
-// helper type for the visitor #4
 template <class... Ts> struct overloaded : Ts... {
 	using Ts::operator()...;
 };
-// explicit deduction guide (not needed as of C++20)
 template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 class RenderGraphBase;
-class ObjectBase {
-public:
-	struct Parent {
-		const PoolKey *p_pool_key;
-		std::variant<RenderGraphBase *, const ObjectBase *> p_var_parent;
-	};
+class ObjectBase;
+struct Parent {
+	const PoolKey *p_pool_key;
+	std::variant<RenderGraphBase *, const ObjectBase *> p_var_parent;
+};
 
+class ObjectBase {
 private:
 	RenderGraphBase *m_p_render_graph{};
 	const ObjectBase *m_p_parent_object{};
@@ -43,12 +42,13 @@ public:
 	inline GlobalKey GetGlobalKey() const {
 		return m_p_parent_object ? GlobalKey{m_p_parent_object->GetGlobalKey(), *m_p_key} : GlobalKey{*m_p_key};
 	}
+	void EmitEvent(Event event) const;
 
 	// Disable Copy
 	inline ObjectBase(ObjectBase &&r) noexcept = default;
 	// inline ObjectBase &operator=(ObjectBase &&r) noexcept = default;
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

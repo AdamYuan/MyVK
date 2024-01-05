@@ -6,7 +6,7 @@
 #include <iostream>
 #endif
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 struct RenderGraphScheduler::RenderPassMergeInfo {
 	RenderPassArea area{};
@@ -394,4 +394,4 @@ void RenderGraphScheduler::Schedule(const RenderGraphResolver &resolved) {
 #endif
 }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

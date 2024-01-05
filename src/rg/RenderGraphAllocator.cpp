@@ -8,7 +8,7 @@
 #include <iostream>
 #endif
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 // TODO: Alloc Double-Buffering Images
 class RenderGraphImage final : public myvk::ImageBase {
@@ -618,4 +618,4 @@ void RenderGraphAllocator::Allocate(const myvk::Ptr<myvk::Device> &device, const
 #endif
 }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

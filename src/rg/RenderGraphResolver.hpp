@@ -6,11 +6,11 @@
 
 #include "Bitset.hpp"
 
-#include <myvk_rg/_details_/Pass.hpp>
-#include <myvk_rg/_details_/RenderGraphBase.hpp>
-#include <myvk_rg/_details_/Resource.hpp>
+#include <myvk_rg/interface/Pass.hpp>
+#include <myvk_rg/interface/RenderGraphBase.hpp>
+#include <myvk_rg/interface/Resource.hpp>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 enum class DependencyType : uint8_t { kDependency, kValidation, kExternal, kLastFrame };
 
@@ -143,7 +143,7 @@ public:
 	// Get Internal Buffer ID
 	inline static uint32_t GetIntBufferID(const ManagedBuffer *buffer) { return buffer->m_resolved_info.buffer_id; }
 	inline static uint32_t GetIntBufferID(const ExternalBufferBase *) { return -1; }
-	inline static uint32_t GetIntBufferID(const BufferAlias *buffer) {
+	inline static uint32_t GetIntBufferID(const BufferAliasBase *buffer) {
 		return buffer->GetPointedResource()->Visit(
 		    [](const auto *buffer) -> uint32_t { return GetIntBufferID(buffer); });
 	}
@@ -159,7 +159,7 @@ public:
 		return image->m_resolved_info.image_view_id;
 	}
 	inline static uint32_t GetIntImageViewID(const ExternalImageBase *) { return -1; }
-	inline static uint32_t GetIntImageViewID(const ImageAlias *image) {
+	inline static uint32_t GetIntImageViewID(const ImageAliasBase *image) {
 		return image->GetPointedResource()->Visit(
 		    [](const auto *image) -> uint32_t { return GetIntImageViewID(image); });
 	}
@@ -176,7 +176,7 @@ public:
 	inline static uint32_t GetIntImageID(const LastFrameImage *image) {
 		return GetIntImageID(image->GetCurrentResource());
 	}
-	inline static uint32_t GetIntImageID(const ImageAlias *image) {
+	inline static uint32_t GetIntImageID(const ImageAliasBase *image) {
 		return image->GetPointedResource()->Visit([](const auto *image) -> uint32_t { return GetIntImageID(image); });
 	}
 	inline static uint32_t GetIntImageID(const ImageBase *image) {
@@ -188,7 +188,7 @@ public:
 		return GetIntBufferID(buffer) + GetIntImageCount();
 	}
 	inline static uint32_t GetIntResourceID(const ExternalBufferBase *) { return -1; }
-	inline uint32_t GetIntResourceID(const BufferAlias *buffer) const {
+	inline uint32_t GetIntResourceID(const BufferAliasBase *buffer) const {
 		return buffer->GetPointedResource()->Visit(
 		    [this](const auto *buffer) -> uint32_t { return GetIntResourceID(buffer); });
 	}
@@ -241,6 +241,6 @@ public:
 	}*/
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

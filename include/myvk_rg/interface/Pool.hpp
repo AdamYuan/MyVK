@@ -1,8 +1,7 @@
 #ifndef MYVK_RG_POOL_HPP
 #define MYVK_RG_POOL_HPP
 
-#include "Macro.hpp"
-#include "ObjectBase.hpp"
+#include "Object.hpp"
 
 #include <cinttypes>
 #include <cstdio>
@@ -12,10 +11,7 @@
 #include <unordered_map>
 #include <variant>
 
-namespace myvk_rg::_details_ {
-
-// Pool
-namespace _details_rg_pool_ {
+namespace myvk_rg::interface {
 
 // Value Wrapper
 template <typename Type> class Value {
@@ -145,12 +141,9 @@ public:
 // Pool Data
 template <typename... Types> using PoolData = std::unordered_map<PoolKey, WrapperTuple<Types...>, PoolKey::Hash>;
 
-} // namespace _details_rg_pool_
-
 template <typename Derived, typename... Types> class Pool {
 private:
-	using PoolData = _details_rg_pool_::PoolData<Types...>;
-	PoolData m_data;
+	PoolData<Types...> m_data;
 
 public:
 	inline Pool() = default;
@@ -158,26 +151,21 @@ public:
 	inline virtual ~Pool() = default;
 
 protected:
-	inline const PoolData &GetPoolData() const { return m_data; }
+	inline const PoolData<Types...> &GetPoolData() const { return m_data; }
 
 	template <std::size_t Index, typename TypeToCons, typename... Args>
 	inline TypeToCons *Construct(const PoolKey &key, Args &&...args) {
-		auto it = m_data.insert({key, _details_rg_pool_::WrapperTuple<Types...>{}});
+		auto it = m_data.insert({key, WrapperTuple<Types...>{}});
 		if constexpr (std::is_base_of_v<ObjectBase, TypeToCons>) {
-			ObjectBase::Parent parent{.p_pool_key = &it.first};
-			if constexpr (std::is_base_of_v<RenderGraphBase, Derived>)
-				parent.p_var_parent = (RenderGraphBase *)static_cast<const Derived *>(this);
-			else if constexpr (std::is_base_of_v<ObjectBase, Derived>)
-				parent.p_var_parent = (ObjectBase *)static_cast<const Derived *>(this);
-			else
-				static_assert(false);
-
-			return it->second.template Construct<Index, TypeToCons>(parent, std::forward<Args>(args)...);
+			static_assert(std::is_base_of_v<ObjectBase, Derived>);
+			return it->second.template Construct<Index, TypeToCons>(
+			    Parent{.p_pool_key = &it.first, .p_var_parent = (ObjectBase *)static_cast<const Derived *>(this)},
+			    std::forward<Args>(args)...);
 		} else
 			return it->second.template Construct<Index, TypeToCons>(std::forward<Args>(args)...);
 	}
 	inline bool Exist(const PoolKey &key) const { return m_data.count(key); }
-	inline void Delete(const PoolKey &key) { m_data.pool.erase(key); }
+	inline void Delete(const PoolKey &key) { m_data.erase(key); }
 	template <std::size_t Index, typename Type> inline Type *Get(const PoolKey &key) const {
 		auto it = m_data.find(key);
 		return it == m_data.end() ? nullptr : it->second.template Get<Index, Type>();
@@ -185,6 +173,6 @@ protected:
 	inline void Clear() { m_data.clear(); }
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

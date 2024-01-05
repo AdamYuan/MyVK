@@ -5,7 +5,7 @@
 
 #include <span>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 class RenderGraphScheduler {
 public:
@@ -89,6 +89,6 @@ public:
 	}
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 class RenderGraphExecutor {
 private:
@@ -99,6 +99,6 @@ public:
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, bool flip) const;
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

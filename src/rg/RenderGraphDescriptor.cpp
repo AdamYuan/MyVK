@@ -3,9 +3,9 @@
 #include <algorithm>
 
 #include "VkHelper.hpp"
-#include "myvk_rg/_details_/Input.hpp"
+#include "myvk_rg/interface/Input.hpp"
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 void RenderGraphDescriptor::Create(const myvk::Ptr<myvk::Device> &device, const RenderGraphResolver &resolved) {
 	m_device_ptr = device;
@@ -265,4 +265,4 @@ void RenderGraphDescriptor::ExecutionBind(bool flip) {
 	vkUpdateDescriptorSets(m_device_ptr->GetHandle(), writer.writes.size(), writer.writes.data(), 0, nullptr);
 }
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface

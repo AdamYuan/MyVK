@@ -7,7 +7,7 @@
 
 #include <myvk/DescriptorPool.hpp>
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 class RenderGraphDescriptor {
 private:
@@ -54,6 +54,6 @@ public:
 	}
 };
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif

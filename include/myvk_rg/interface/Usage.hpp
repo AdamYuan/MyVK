@@ -29,7 +29,7 @@ enum class Usage {
 };
 }
 
-namespace myvk_rg::_details_ {
+namespace myvk_rg::interface {
 
 struct UsageInfo {
 	VkAccessFlags2 read_access_flags, write_access_flags;
@@ -348,7 +348,7 @@ inline constexpr VkFlags UsageGetCreationUsages(Usage usage) { return kUsageInfo
 
 // Input Usage Operation
 /*using UsageClass = bool(Usage);
-namespace _details_rg_input_usage_op_ {
+namespace interfacerg_input_usage_op_ {
 template <UsageClass... Args> struct Union;
 template <UsageClass X, UsageClass... Args> struct Union<X, Args...> {
     constexpr bool operator()(Usage x) const { return X(x) || Union<Args...>(x); }
@@ -363,14 +363,14 @@ template <UsageClass X, UsageClass... Args> struct Intersect<X, Args...> {
 template <> struct Intersect<> {
     constexpr bool operator()(Usage) const { return true; }
 };
-} // namespace _details_rg_input_usage_op_
+} // namespace interfacerg_input_usage_op_
 // Union: A | B
 template <UsageClass... Args> inline constexpr bool UsageUnion(Usage x) {
-    return _details_rg_input_usage_op_::Union<Args...>(x);
+    return interfacerg_input_usage_op_::Union<Args...>(x);
 }
 // Intersect: A & B
 template <UsageClass... Args> inline constexpr bool UsageIntersect(Usage x) {
-    return _details_rg_input_usage_op_::Intersect<Args...>(x);
+    return interfacerg_input_usage_op_::Intersect<Args...>(x);
 }
 // Complement: ~X
 template <UsageClass X> inline constexpr bool UsageComplement(Usage x) { return !X(x); }
@@ -379,6 +379,6 @@ template <UsageClass A, UsageClass B> inline constexpr bool UsageMinus(Usage x) 
     return UsageIntersect<A, UsageComplement<B>>(x);
 }*/
 
-} // namespace myvk_rg::_details_
+} // namespace myvk_rg::interface
 
 #endif
