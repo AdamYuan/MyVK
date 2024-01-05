@@ -4,8 +4,8 @@
 #include "RenderGraphDescriptor.hpp"
 #include "RenderGraphExecutor.hpp"
 #include "RenderGraphLFInit.hpp"
-#include "RenderGraphResolver.hpp"
 #include "RenderGraphScheduler.hpp"
+#include "Resolver.hpp"
 
 #include "myvk_rg/interface/Input.hpp"
 #include "myvk_rg/interface/Pass.hpp"

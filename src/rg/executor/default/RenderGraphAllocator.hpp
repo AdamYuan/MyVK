@@ -8,7 +8,7 @@
 #include <myvk/ImageView.hpp>
 
 #include "Bitset.hpp"
-#include "RenderGraphResolver.hpp"
+#include "Resolver.hpp"
 
 namespace myvk_rg::interface {
 

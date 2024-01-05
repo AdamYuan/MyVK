@@ -2,15 +2,16 @@
 #define MYVK_RG_RENDER_GRAPH_RESOLVER_HPP
 
 #include <cinttypes>
+#include <map>
 #include <vector>
 
-#include "Bitset.hpp"
+#include "../Bitset.hpp"
 
 #include <myvk_rg/interface/Pass.hpp>
-#include <myvk_rg/interface/RenderGraphBase.hpp>
+#include <myvk_rg/interface/RenderGraph.hpp>
 #include <myvk_rg/interface/Resource.hpp>
 
-namespace myvk_rg::interface {
+using namespace myvk_rg::interface;
 
 enum class DependencyType : uint8_t { kDependency, kValidation, kExternal, kLastFrame };
 
@@ -19,7 +20,7 @@ struct ResourceReference {
 	const PassBase *pass;
 };
 
-class RenderGraphResolver {
+class Resolver {
 public:
 	struct LFResourceInfo {
 		const ResourceBase *lf_resource;
@@ -53,6 +54,7 @@ public:
 private:
 	struct OriginGraph; // The Graph Containing Passes and Internal Resources
 
+	std::map<GlobalKey, const>;
 	std::vector<LFResourceInfo> m_last_frame_resources;
 
 	std::vector<IntImageInfo> m_internal_images;
@@ -230,17 +232,6 @@ public:
 	inline bool IsPassPrior(const PassBase *pass_0, const PassBase *pass_1) const {
 		return m_pass_prior_relation.GetRelation(GetPassOrder(pass_0), GetPassOrder(pass_1));
 	}
-
-	/*inline bool IsIntImageViewContain(uint32_t image_view_0, uint32_t image_view_1) const {
-	    return m_image_view_contain_relation.GetRelation(image_view_0, image_view_1);
-	}
-	template <typename ImageView0, typename ImageView1>
-	inline bool IsIntImageViewContain(const ImageView0 *image_view_0, const ImageView1 *image_view_1) const {
-	    return m_image_view_contain_relation.GetRelation(GetIntImageViewID(image_view_0),
-	                                                     GetIntImageViewID(image_view_1));
-	}*/
 };
-
-} // namespace myvk_rg::interface
 
 #endif

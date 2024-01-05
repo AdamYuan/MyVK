@@ -1,4 +1,4 @@
-#include "RenderGraphResolver.hpp"
+#include "Resolver.hpp"
 
 #include <algorithm>
 #include <list>

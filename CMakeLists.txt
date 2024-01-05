@@ -43,17 +43,19 @@ target_include_directories(MyVK_Vulkan PUBLIC include)
 target_link_libraries(MyVK_Vulkan PUBLIC MyVK_Dep_Vulkan)
 
 add_library(MyVK_RenderGraph STATIC
-        src/rg/RenderGraphResolver.cpp
-        src/rg/RenderGraphAllocator.cpp
-        src/rg/RenderGraphExecutor.cpp
-        src/rg/RenderGraphScheduler.cpp
-        src/rg/RenderGraphDescriptor.cpp
-        src/rg/RenderGraphLFInit.cpp
-        src/rg/RenderGraph.cpp
         src/rg/interface/Alias.cpp
         src/rg/interface/Resource.cpp
         src/rg/interface/Input.cpp
         src/rg/interface/Object.cpp
+
+        src/rg/executor/default/Executor.cpp
+        src/rg/executor/default/Resolver.cpp
+        src/rg/executor/default/RenderGraphAllocator.cpp
+        src/rg/executor/default/RenderGraphExecutor.cpp
+        src/rg/executor/default/RenderGraphScheduler.cpp
+        src/rg/executor/default/RenderGraphDescriptor.cpp
+        src/rg/executor/default/RenderGraphLFInit.cpp
+        src/rg/executor/default/RenderGraph.cpp
 )
 add_library(myvk::rg ALIAS MyVK_RenderGraph)
 target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_ENABLE_RG)

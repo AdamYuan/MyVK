@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_RENDER_GRAPH_SCHEDULER_HPP
 #define MYVK_RG_RENDER_GRAPH_SCHEDULER_HPP
 
-#include "RenderGraphResolver.hpp"
+#include "Resolver.hpp"
 
 #include <span>
 

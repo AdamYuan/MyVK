@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_RENDER_GRAPH_DESCRIPTOR_HPP
 #define MYVK_RG_RENDER_GRAPH_DESCRIPTOR_HPP
 
-#include "RenderGraphResolver.hpp"
+#include "Resolver.hpp"
 
 #include "RenderGraphAllocator.hpp"
 
