@@ -32,7 +32,6 @@ public:
 
 	inline PassType GetType() const { return m_type; }
 
-	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor);
 	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor) const;
 
 	virtual void CreatePipeline() = 0;
@@ -145,22 +144,6 @@ public:
 
 	inline void CreatePipeline() final {}
 };
-
-template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> PassBase::Visit(Visitor &&visitor) {
-	switch (GetType()) {
-	case PassType::kGraphics:
-		return visitor(static_cast<GraphicsPassBase *>(this));
-	case PassType::kCompute:
-		return visitor(static_cast<ComputePassBase *>(this));
-	case PassType::kTransfer:
-		return visitor(static_cast<TransferPassBase *>(this));
-	case PassType::kGroup:
-		return visitor(static_cast<PassGroupBase *>(this));
-	default:
-		assert(false);
-	}
-	return visitor(static_cast<GraphicsPassBase *>(nullptr));
-}
 
 template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> PassBase::Visit(Visitor &&visitor) const {
 	switch (GetType()) {

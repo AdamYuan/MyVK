@@ -27,6 +27,11 @@ public:
 	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}), m_executor(std::move(executor)) {}
 	inline ~RenderGraphBase() override = default;
 
+	RenderGraphBase(const RenderGraphBase &) = delete;
+	RenderGraphBase &operator=(const RenderGraphBase &) = delete;
+	RenderGraphBase(RenderGraphBase &&) = delete;
+	RenderGraphBase &operator=(RenderGraphBase &&) = delete;
+
 	inline void SetCanvasSize(const VkExtent2D &canvas_size) {
 		if (canvas_size.width != m_canvas_size.width || canvas_size.height != m_canvas_size.height) {
 			m_canvas_size = canvas_size;

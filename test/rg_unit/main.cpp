@@ -149,20 +149,21 @@ public:
 	}
 };
 
-#include "../../src/rg/executor/default/Collector.hpp"
+#include "../../src/rg/executor/default/Collection.hpp"
 TEST_CASE("Test Default Collector") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
-	Collector collector;
-	collector.Collect(*render_graph);
+	auto res = Collection::Create(*render_graph);
+	CHECK(res.IsOK());
+	Collection c = res.PopValue();
 	printf("PASSES:\n");
-	for (const auto &it : collector.GetPasses())
+	for (const auto &it : c.GetPasses())
 		printf("%s\n", it.first.Format().c_str());
 	printf("INPUTS:\n");
-	for (const auto &it : collector.GetInputs()) {
+	for (const auto &it : c.GetInputs()) {
 		printf("%s -> %d, %s\n", it.first.Format().c_str(), static_cast<int>(it.second->GetInput().GetState()),
-		       it.second->GetInput().GetGlobalKey().Format().c_str());
+		       it.second->GetInput().GetSourceKey().Format().c_str());
 	}
 	printf("RESOURCES:\n");
-	for (const auto &it : collector.GetResources())
+	for (const auto &it : c.GetResources())
 		printf("%s\n", it.first.Format().c_str());
 }

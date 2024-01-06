@@ -85,7 +85,7 @@ public:
 	inline TypeToCons *Construct(Args &&...args) {
 		constexpr auto kIndex = GetConstructIndex<TypeToCons>();
 		using V = Value<std::tuple_element_t<kIndex, std::tuple<Types...>>>;
-		m_variant = V{};
+		m_variant.template emplace<V>();
 		return std::visit(
 		    [&](auto &v) -> TypeToCons * {
 			    if constexpr (std::decay_t<decltype(v)>::template kCanConstruct<TypeToCons>)
@@ -131,7 +131,7 @@ protected:
 	inline const PoolData<Type> &GetPoolData() const { return m_data; }
 
 	template <typename TypeToCons, typename... Args> inline TypeToCons *Construct(const PoolKey &key, Args &&...args) {
-		auto it = m_data.insert(std::pair<PoolKey, Wrapper<Type>>{key, Wrapper<Type>{}});
+		auto it = m_data.emplace(key, Wrapper<Type>{});
 		if constexpr (std::is_base_of_v<ObjectBase, TypeToCons>) {
 			static_assert(std::is_base_of_v<ObjectBase, Derived>);
 			return it.first->second.template Construct<TypeToCons>(

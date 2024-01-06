@@ -58,7 +58,6 @@ public:
 	inline ResourceState GetState() const { return GetResourceState(m_class); }
 	inline ResourceClass GetClass() const { return m_class; }
 
-	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Visit(Visitor &&visitor) const;
 };
 
@@ -70,7 +69,6 @@ public:
 	inline explicit BufferBase(Parent parent, ResourceState state)
 	    : ResourceBase(parent, MakeResourceClass(ResourceType::kBuffer, state)) {}
 
-	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor) const;
 	inline RawBufferAlias AsInput() const { return RawBufferAlias{this}; }
 
@@ -87,7 +85,6 @@ public:
 	inline explicit ImageBase(Parent parent, ResourceState state)
 	    : ResourceBase(parent, MakeResourceClass(ResourceType::kImage, state)) {}
 
-	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
 	inline RawImageAlias AsInput() const { return RawImageAlias{this}; }
 
@@ -281,7 +278,6 @@ class InternalImageBase : public ImageBase {
 public:
 	inline explicit InternalImageBase(Parent parent, ResourceState state) : ImageBase(parent, state) {}
 
-	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
@@ -488,27 +484,6 @@ public:
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
 };
 
-template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) {
-	switch (m_class) {
-	case ResourceClass::kManagedImage:
-		return visitor(static_cast<ManagedImage *>(this));
-	case ResourceClass::kExternalImageBase:
-		return visitor(static_cast<ExternalImageBase *>(this));
-	case ResourceClass::kCombinedImage:
-		return visitor(static_cast<CombinedImage *>(this));
-	case ResourceClass::kLastFrameImage:
-		return visitor(static_cast<LastFrameImage *>(this));
-
-	case ResourceClass::kManagedBuffer:
-		return visitor(static_cast<ManagedBuffer *>(this));
-	case ResourceClass::kExternalBufferBase:
-		return visitor(static_cast<ExternalBufferBase *>(this));
-	case ResourceClass::kLastFrameBuffer:
-		return visitor(static_cast<LastFrameBuffer *>(this));
-	}
-	assert(false);
-	return visitor(static_cast<BufferAliasBase *>(nullptr));
-}
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) const {
 	switch (m_class) {
 	case ResourceClass::kManagedImage:
@@ -530,21 +505,6 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Resour
 	assert(false);
 	return visitor(static_cast<const BufferAliasBase *>(nullptr));
 }
-
-template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageBase::Visit(Visitor &&visitor) {
-	switch (GetState()) {
-	case ResourceState::kManaged:
-		return visitor(static_cast<ManagedImage *>(this));
-	case ResourceState::kExternal:
-		return visitor(static_cast<ExternalImageBase *>(this));
-	case ResourceState::kCombinedImage:
-		return visitor(static_cast<CombinedImage *>(this));
-	case ResourceState::kLastFrame:
-		return visitor(static_cast<LastFrameImage *>(this));
-	}
-	assert(false);
-	return visitor(static_cast<ImageAliasBase *>(nullptr));
-}
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
 	case ResourceState::kManaged:
@@ -559,18 +519,6 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageB
 	assert(false);
 	return visitor(static_cast<const ImageAliasBase *>(nullptr));
 }
-
-template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> InternalImageBase::Visit(Visitor &&visitor) {
-	switch (GetState()) {
-	case ResourceState::kManaged:
-		return visitor(static_cast<ManagedImage *>(this));
-	case ResourceState::kCombinedImage:
-		return visitor(static_cast<CombinedImage *>(this));
-	default:
-		assert(false);
-		return visitor(static_cast<ManagedImage *>(nullptr));
-	}
-}
 template <typename Visitor>
 std::invoke_result_t<Visitor, ManagedImage *> InternalImageBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
@@ -584,19 +532,6 @@ std::invoke_result_t<Visitor, ManagedImage *> InternalImageBase::Visit(Visitor &
 	}
 }
 
-template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> BufferBase::Visit(Visitor &&visitor) {
-	switch (GetState()) {
-	case ResourceState::kManaged:
-		return visitor(static_cast<ManagedBuffer *>(this));
-	case ResourceState::kExternal:
-		return visitor(static_cast<ExternalBufferBase *>(this));
-	case ResourceState::kLastFrame:
-		return visitor(static_cast<LastFrameBuffer *>(this));
-	default:
-		assert(false);
-	}
-	return visitor(static_cast<BufferAliasBase *>(nullptr));
-}
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> BufferBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
 	case ResourceState::kManaged:

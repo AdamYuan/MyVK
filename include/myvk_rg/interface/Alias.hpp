@@ -26,21 +26,27 @@ inline constexpr AliasState GetAliasState(AliasClass res_class) {
 }
 #undef MAKE_ALIAS_CLASS_VAL
 
+class RawImageAlias;
+class RawBufferAlias;
+
 class AliasBase {
 private:
 	AliasClass m_class{};
-	GlobalKey m_key;
+	GlobalKey m_source;
 
 public:
 	inline virtual ~AliasBase() = default;
 	inline AliasBase() = default;
-	inline AliasBase(AliasClass alias_class, GlobalKey key) : m_class{alias_class}, m_key{std::move(key)} {}
+	inline AliasBase(AliasClass alias_class, GlobalKey key) : m_class{alias_class}, m_source{std::move(key)} {}
 
 	inline ResourceType GetType() const { return GetResourceType(m_class); }
 	inline AliasState GetState() const { return GetAliasState(m_class); }
 	inline AliasClass GetClass() const { return m_class; }
 
-	inline const GlobalKey &GetGlobalKey() const { return m_key; }
+	inline const GlobalKey &GetSourceKey() const { return m_source; }
+
+	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor);
+	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor) const;
 };
 
 class ImageBase;
@@ -49,10 +55,13 @@ class ImageAliasBase : public AliasBase {
 public:
 	inline ~ImageAliasBase() override = default;
 	inline ImageAliasBase() = default;
-	inline ImageAliasBase(AliasState state, GlobalKey key)
-	    : AliasBase(MakeAliasClass(ResourceType::kImage, state), std::move(key)) {}
+	inline ImageAliasBase(AliasState state, GlobalKey source)
+	    : AliasBase(MakeAliasClass(ResourceType::kImage, state), std::move(source)) {}
 
 	inline ResourceType GetType() const { return ResourceType::kImage; }
+
+	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor);
+	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor) const;
 };
 
 class RawImageAlias final : public ImageAliasBase {
@@ -83,10 +92,13 @@ class BufferAliasBase : public AliasBase {
 public:
 	inline ~BufferAliasBase() override = default;
 	inline BufferAliasBase() = default;
-	inline BufferAliasBase(AliasState state, GlobalKey key)
-	    : AliasBase(MakeAliasClass(ResourceType::kBuffer, state), std::move(key)) {}
+	inline BufferAliasBase(AliasState state, GlobalKey source)
+	    : AliasBase(MakeAliasClass(ResourceType::kBuffer, state), std::move(source)) {}
 
 	inline ResourceType GetType() const { return ResourceType::kBuffer; }
+
+	template <typename Visitor> inline std::invoke_result_t<Visitor, RawBufferAlias *> Visit(Visitor &&visitor);
+	template <typename Visitor> inline std::invoke_result_t<Visitor, RawBufferAlias *> Visit(Visitor &&visitor) const;
 };
 
 class RawBufferAlias final : public BufferAliasBase {

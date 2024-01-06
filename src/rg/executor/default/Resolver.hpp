@@ -54,7 +54,6 @@ public:
 private:
 	struct OriginGraph; // The Graph Containing Passes and Internal Resources
 
-	std::map<GlobalKey, const>;
 	std::vector<LFResourceInfo> m_last_frame_resources;
 
 	std::vector<IntImageInfo> m_internal_images;

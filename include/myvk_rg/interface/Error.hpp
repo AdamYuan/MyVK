@@ -2,6 +2,7 @@
 #ifndef MYVK_RG_ERROR_HPP
 #define MYVK_RG_ERROR_HPP
 
+#include "Alias.hpp"
 #include "Key.hpp"
 #include <stdexcept>
 #include <variant>
@@ -11,16 +12,36 @@ namespace myvk_rg::interface {
 namespace error {
 
 struct NullResource {
-	GlobalKey key;
-	inline std::string Format() const { return "Null Resource under " + key.Format(); }
+	GlobalKey parent;
+	inline std::string Format() const { return "Null Resource in " + parent.Format(); }
 };
 struct NullInput {
-	GlobalKey key;
-	inline std::string Format() const { return "Null Input under " + key.Format(); }
+	GlobalKey parent;
+	inline std::string Format() const { return "Null Input in " + parent.Format(); }
 };
 struct NullPass {
+	GlobalKey parent;
+	inline std::string Format() const { return "Null Pass in " + parent.Format(); }
+};
+struct ResourceNotFound {
 	GlobalKey key;
-	inline std::string Format() const { return "Null Pass under " + key.Format(); }
+	inline std::string Format() const { return "Resource " + key.Format() + " not found"; }
+};
+struct InputNotFound {
+	GlobalKey key;
+	inline std::string Format() const { return "Input " + key.Format() + " not found"; }
+};
+struct PassNotFound {
+	GlobalKey key;
+	inline std::string Format() const { return "Pass " + key.Format() + " not found"; }
+};
+struct AliasNoMatch {
+	AliasBase alias;
+	ResourceType actual_type;
+	inline std::string Format() const {
+		return "Alias source " + alias.GetSourceKey().Format() + " is not matched with type " +
+		       std::to_string(static_cast<int>(actual_type));
+	}
 };
 
 } // namespace error
@@ -39,7 +60,10 @@ public:
 	}
 };
 
-using CompileError = Error<error::NullResource, error::NullInput, error::NullPass>;
+using CompileError = Error<error::NullResource, error::NullInput, error::NullPass,             //
+                           error::ResourceNotFound, error::InputNotFound, error::PassNotFound, //
+                           error::AliasNoMatch                                                 //
+                           >;
 
 template <typename Type, typename ErrorType> class Result {
 private:
