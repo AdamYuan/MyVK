@@ -17,8 +17,8 @@ namespace myvk_rg::interface {
 template <typename Type> class Value {
 private:
 	template <typename T> struct Storage {
-		alignas(T) std::byte m_buffer[sizeof(T)]{};
-		inline T &Get() const { return *(T *)(m_buffer); }
+		alignas(T) std::byte buffer[sizeof(T)]{};
+		inline T &Get() const { return *(T *)(buffer); }
 	};
 
 	inline constexpr static bool kUsePtr = !std::is_final_v<Type>;
@@ -41,10 +41,12 @@ public:
 			TypeToCons *ret = ptr.get();
 			m_value = std::move(ptr);
 			return ret;
-		} else {
-			m_value.Get() = TypeToCons(std::forward<Args>(args)...);
-			return &m_value.Get();
-		}
+		} else
+			return new (m_value.buffer) TypeToCons(std::forward<Args>(args)...);
+	}
+	inline ~Value() {
+		if constexpr (!kUsePtr)
+			m_value.Get()->~Type();
 	}
 	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>> inline TypeToGet *Get() const {
 		Type *ptr;
