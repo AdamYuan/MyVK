@@ -7,13 +7,12 @@
 
 namespace myvk_rg::interface {
 
-template <typename Derived> class ResultPool : public Pool<Derived, std::variant<OutputBufferAlias, OutputImageAlias>> {
+template <typename Derived> class ResultPool : public Pool<Derived, Variant<OutputBufferAlias, OutputImageAlias>> {
 private:
-	using PoolBase = Pool<Derived, std::variant<OutputBufferAlias, OutputImageAlias>>;
+	using PoolBase = Pool<Derived, Variant<OutputBufferAlias, OutputImageAlias>>;
 
 public:
 	inline ResultPool() = default;
-	inline ResultPool(ResultPool &&) noexcept = default;
 	inline ~ResultPool() override = default;
 
 	inline const auto &GetResultPoolData() const { return PoolBase::GetPoolData(); }

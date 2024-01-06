@@ -49,13 +49,13 @@ add_library(MyVK_RenderGraph STATIC
         src/rg/interface/Object.cpp
 
         src/rg/executor/default/Executor.cpp
-        src/rg/executor/default/Resolver.cpp
-        src/rg/executor/default/RenderGraphAllocator.cpp
-        src/rg/executor/default/RenderGraphExecutor.cpp
-        src/rg/executor/default/RenderGraphScheduler.cpp
-        src/rg/executor/default/RenderGraphDescriptor.cpp
-        src/rg/executor/default/RenderGraphLFInit.cpp
-        src/rg/executor/default/RenderGraph.cpp
+        src/rg/executor/default/Collector.cpp
+        # src/rg/executor/default/RenderGraphAllocator.cpp
+        # src/rg/executor/default/RenderGraphExecutor.cpp
+        # src/rg/executor/default/RenderGraphScheduler.cpp
+        # src/rg/executor/default/RenderGraphDescriptor.cpp
+        # src/rg/executor/default/RenderGraphLFInit.cpp
+        # src/rg/executor/default/RenderGraph.cpp
 )
 add_library(myvk::rg ALIAS MyVK_RenderGraph)
 target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_ENABLE_RG)
@@ -95,7 +95,7 @@ if (MYVK_TESTING)
     target_link_libraries(MyVK_TestRenderGraph PRIVATE myvk::vulkan myvk::glfw myvk::imgui myvk::rg)
 
     add_executable(MyVK_TestRGUnit test/rg_unit/main.cpp)
-    # target_link_libraries(MyVK_TestRGUnit PRIVATE myvk::vulkan myvk::rg)
+    target_link_libraries(MyVK_TestRGUnit PRIVATE myvk::vulkan myvk::rg)
 
     add_executable(MyVK_TestOffscreen test/offscreen/main.cpp)
     target_link_libraries(MyVK_TestOffscreen PRIVATE myvk::vulkan)

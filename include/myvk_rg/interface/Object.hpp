@@ -43,10 +43,6 @@ public:
 		return m_p_parent_object ? GlobalKey{m_p_parent_object->GetGlobalKey(), *m_p_key} : GlobalKey{*m_p_key};
 	}
 	void EmitEvent(Event event) const;
-
-	// Disable Copy
-	inline ObjectBase(ObjectBase &&r) noexcept = default;
-	// inline ObjectBase &operator=(ObjectBase &&r) noexcept = default;
 };
 
 } // namespace myvk_rg::interface

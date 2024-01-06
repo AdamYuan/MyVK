@@ -103,7 +103,7 @@ public:
 		    },
 		    m_variant);
 	}
-	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>> inline TypeToGet *Get() {
+	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>> inline TypeToGet *Get() const {
 		return std::visit(
 		    [](const auto &v) -> TypeToGet * {
 			    if constexpr (std::decay_t<decltype(v)>::template kCanGet<TypeToGet>)
@@ -119,7 +119,7 @@ public:
 template <typename Type> struct WrapperAux {
 	using T = Value<Type>;
 };
-template <typename... Types> struct WrapperAux<std::variant<Types...>> {
+template <typename... Types> struct WrapperAux<Variant<Types...>> {
 	using T = Variant<Types...>;
 };
 template <typename Type> using Wrapper = typename WrapperAux<Type>::T;
@@ -147,7 +147,6 @@ private:
 
 public:
 	inline Pool() = default;
-	inline Pool(Pool &&) noexcept = default;
 	inline virtual ~Pool() = default;
 
 protected:
@@ -158,11 +157,12 @@ protected:
 		auto it = m_data.insert({key, WrapperTuple<Types...>{}});
 		if constexpr (std::is_base_of_v<ObjectBase, TypeToCons>) {
 			static_assert(std::is_base_of_v<ObjectBase, Derived>);
-			return it->second.template Construct<Index, TypeToCons>(
-			    Parent{.p_pool_key = &it.first, .p_var_parent = (ObjectBase *)static_cast<const Derived *>(this)},
+			return it.first->second.template Construct<Index, TypeToCons>(
+			    Parent{.p_pool_key = &it.first->first,
+			           .p_var_parent = (ObjectBase *)static_cast<const Derived *>(this)},
 			    std::forward<Args>(args)...);
 		} else
-			return it->second.template Construct<Index, TypeToCons>(std::forward<Args>(args)...);
+			return it.first->second.template Construct<Index, TypeToCons>(std::forward<Args>(args)...);
 	}
 	inline bool Exist(const PoolKey &key) const { return m_data.count(key); }
 	inline void Delete(const PoolKey &key) { m_data.erase(key); }

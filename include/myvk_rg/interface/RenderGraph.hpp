@@ -15,15 +15,16 @@ class RenderGraphBase : public ObjectBase,
                         public ResourcePool<RenderGraphBase>,
                         public ResultPool<RenderGraphBase> {
 private:
-	inline static const PoolKey kRGKey = {"[RG]"}, kEXEKey = {"[EXE]"};
+	inline static const PoolKey kRGKey = {"[RG]"};
 
 	VkExtent2D m_canvas_size{};
-	std::unique_ptr<ExecutorBase> m_executor{};
+	myvk::UPtr<ExecutorBase> m_executor{};
 
 	friend class ObjectBase;
 
 public:
-	inline RenderGraphBase() : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}) {}
+	inline explicit RenderGraphBase(myvk::UPtr<ExecutorBase> executor)
+	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}), m_executor(std::move(executor)) {}
 	inline ~RenderGraphBase() override = default;
 
 	inline void SetCanvasSize(const VkExtent2D &canvas_size) {
@@ -33,19 +34,7 @@ public:
 		}
 	}
 	inline const VkExtent2D &GetCanvasSize() const { return m_canvas_size; }
-
-	template <typename RGType, typename... Args> inline static myvk::Ptr<RGType> Create(Args &&...args) {
-		static_assert(std::is_base_of_v<RenderGraphBase, RGType>);
-		return std::make_shared<RGType>(std::forward<Args>(args)...);
-	}
-	template <typename EXEType, typename... Args> inline void SetExecutor(Args &&...args) {
-		m_executor = std::make_unique<EXEType>(Parent{.p_pool_key = &kEXEKey, .p_var_parent = this},
-		                                       std::forward<Args>(args)...);
-	}
-	template <typename EXEType> inline const EXEType *GetExecutor() {
-		static_assert(std::is_base_of_v<ExecutorBase, EXEType>);
-		return static_cast<const EXEType *>(m_executor.get());
-	}
+	inline const ExecutorBase *GetExecutor() const { return m_executor.get(); }
 };
 
 } // namespace myvk_rg::interface

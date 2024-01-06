@@ -28,7 +28,6 @@ private:
 
 public:
 	inline PassBase(Parent parent, PassType type) : ObjectBase(parent), m_type{type} {};
-	inline PassBase(PassBase &&) noexcept = default;
 	inline ~PassBase() override = default;
 
 	inline PassType GetType() const { return m_type; }
@@ -46,7 +45,6 @@ private:
 
 public:
 	inline PassPool() = default;
-	inline PassPool(PassPool &&) noexcept = default;
 	inline ~PassPool() override = default;
 
 	inline const auto &GetPassPoolData() const { return PoolBase::GetPoolData(); }
@@ -79,7 +77,6 @@ public:
 	inline constexpr PassType GetType() const { return PassType::kGraphics; }
 
 	inline GraphicsPassBase(Parent parent) : PassBase(parent, PassType::kGraphics) {}
-	inline GraphicsPassBase(GraphicsPassBase &&) noexcept = default;
 	inline ~GraphicsPassBase() override = default;
 
 	uint32_t GetSubpass() const;
@@ -122,7 +119,6 @@ public:
 	inline constexpr PassType GetType() const { return PassType::kCompute; }
 
 	inline ComputePassBase(Parent parent) : PassBase(parent, PassType::kCompute) {}
-	inline ComputePassBase(ComputePassBase &&) noexcept = default;
 	inline ~ComputePassBase() override = default;
 
 	inline void UpdatePipeline() const { EmitEvent(Event::kUpdatePipeline); }
@@ -133,7 +129,6 @@ public:
 	inline constexpr PassType GetType() const { return PassType::kTransfer; }
 
 	inline TransferPassBase(Parent parent) : PassBase(parent, PassType::kTransfer) {}
-	inline TransferPassBase(TransferPassBase &&) noexcept = default;
 	inline ~TransferPassBase() override = default;
 
 	inline void CreatePipeline() final {}
@@ -146,7 +141,6 @@ public:
 	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &) const final {}
 
 	inline PassGroupBase(Parent parent) : PassBase(parent, PassType::kGroup) {}
-	inline PassGroupBase(PassGroupBase &&) noexcept = default;
 	inline ~PassGroupBase() override = default;
 
 	inline void CreatePipeline() final {}

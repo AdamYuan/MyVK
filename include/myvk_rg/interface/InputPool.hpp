@@ -7,9 +7,9 @@
 
 namespace myvk_rg::interface {
 
-template <typename Derived> class InputPool : public Pool<Derived, std::variant<BufferInput, ImageInput>> {
+template <typename Derived> class InputPool : public Pool<Derived, Variant<BufferInput, ImageInput>> {
 private:
-	using PoolBase = Pool<Derived, std::variant<BufferInput, ImageInput>>;
+	using PoolBase = Pool<Derived, Variant<BufferInput, ImageInput>>;
 
 	template <typename InputType, typename... Args> inline auto add_input(const PoolKey &input_key, Args &&...args) {
 		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kInputChanged);
@@ -21,7 +21,6 @@ private:
 
 public:
 	inline InputPool() = default;
-	inline InputPool(InputPool &&) noexcept = default;
 	inline ~InputPool() override = default;
 
 	inline const auto &GetInputPoolData() const { return PoolBase::GetPoolData(); }
@@ -206,7 +205,6 @@ private:
 
 public:
 	inline DescriptorInputSlot() = default;
-	inline DescriptorInputSlot(DescriptorInputSlot &&) noexcept = default;
 	inline ~DescriptorInputSlot() = default;
 
 	inline const DescriptorSetData &GetDescriptorSetData() const { return m_descriptor_set_data; }
@@ -352,7 +350,6 @@ private:
 
 public:
 	inline AttachmentInputSlot() = default;
-	inline AttachmentInputSlot(AttachmentInputSlot &&) noexcept = default;
 	inline ~AttachmentInputSlot() = default;
 
 	inline const AttachmentData &GetAttachmentData() const { return m_attachment_data; }

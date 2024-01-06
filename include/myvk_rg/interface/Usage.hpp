@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_RESOURCE_USAGE_HPP
 #define MYVK_RG_RESOURCE_USAGE_HPP
 
-#include "ResourceBase.hpp"
+#include "Resource.hpp"
 
 namespace myvk_rg {
 enum class Usage {
@@ -345,39 +345,6 @@ inline constexpr VkImageLayout UsageGetImageLayout(Usage usage) { return kUsageI
 template <Usage Usage> inline constexpr VkFlags kUsageGetCreationUsages = kUsageInfo<Usage>.resource_creation_usages;
 inline constexpr VkFlags UsageGetCreationUsages(Usage usage) { return kUsageInfoTable[usage].resource_creation_usages; }
 // inline constexpr bool UsageAll(Usage) { return true; }
-
-// Input Usage Operation
-/*using UsageClass = bool(Usage);
-namespace interfacerg_input_usage_op_ {
-template <UsageClass... Args> struct Union;
-template <UsageClass X, UsageClass... Args> struct Union<X, Args...> {
-    constexpr bool operator()(Usage x) const { return X(x) || Union<Args...>(x); }
-};
-template <> struct Union<> {
-    constexpr bool operator()(Usage) const { return false; }
-};
-template <bool... Args(Usage)> struct Intersect;
-template <UsageClass X, UsageClass... Args> struct Intersect<X, Args...> {
-    constexpr bool operator()(Usage x) const { return X(x) && Intersect<Args...>(x); }
-};
-template <> struct Intersect<> {
-    constexpr bool operator()(Usage) const { return true; }
-};
-} // namespace interfacerg_input_usage_op_
-// Union: A | B
-template <UsageClass... Args> inline constexpr bool UsageUnion(Usage x) {
-    return interfacerg_input_usage_op_::Union<Args...>(x);
-}
-// Intersect: A & B
-template <UsageClass... Args> inline constexpr bool UsageIntersect(Usage x) {
-    return interfacerg_input_usage_op_::Intersect<Args...>(x);
-}
-// Complement: ~X
-template <UsageClass X> inline constexpr bool UsageComplement(Usage x) { return !X(x); }
-// Minus: A & (~B)
-template <UsageClass A, UsageClass B> inline constexpr bool UsageMinus(Usage x) {
-    return UsageIntersect<A, UsageComplement<B>>(x);
-}*/
 
 } // namespace myvk_rg::interface
 

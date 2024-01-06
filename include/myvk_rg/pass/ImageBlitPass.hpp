@@ -4,20 +4,21 @@
 #include <myvk_rg/RenderGraph.hpp>
 
 namespace myvk_rg {
-class ImageBlitPass final : public myvk_rg::TransferPassBase {
+class ImageBlitPass final : public TransferPassBase {
 private:
-	myvk_rg::ImageInput m_src{}, m_dst{};
+	myvk_rg::Image m_src{}, m_dst{};
 	VkFilter m_filter{};
 
-	MYVK_RG_OBJECT_FRIENDS
-	inline void Initialize(myvk_rg::ImageInput src, myvk_rg::ImageInput dst, VkFilter filter) {
+public:
+	inline ImageBlitPass(Parent parent, const myvk_rg::Image &src, const myvk_rg::Image &dst, VkFilter filter)
+	    : TransferPassBase(parent) {
 		m_src = src, m_dst = dst;
 		m_filter = filter;
 		AddInput<myvk_rg::Usage::kTransferImageSrc, VK_PIPELINE_STAGE_2_BLIT_BIT>({"src"}, src);
 		AddInput<myvk_rg::Usage::kTransferImageDst, VK_PIPELINE_STAGE_2_BLIT_BIT>({"dst"}, dst);
 	}
+	inline ~ImageBlitPass() final = default;
 
-public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
 		command_buffer->CmdBlitImage(m_src->GetVkImageView(), m_dst->GetVkImageView(), m_filter);
 	}

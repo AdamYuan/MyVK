@@ -3,7 +3,6 @@
 #define MYVK_RG_EXECUTOR_HPP
 
 #include "Object.hpp"
-#include <myvk/CommandBuffer.hpp>
 
 namespace myvk_rg::interface {
 

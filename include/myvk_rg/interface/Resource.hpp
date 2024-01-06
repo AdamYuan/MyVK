@@ -57,7 +57,6 @@ private:
 public:
 	inline ~ResourceBase() override = default;
 	inline ResourceBase(Parent parent, ResourceClass resource_class) : ObjectBase(parent), m_class{resource_class} {}
-	inline ResourceBase(ResourceBase &&) noexcept = default;
 
 	inline ResourceType GetType() const { return GetResourceType(m_class); }
 	inline ResourceState GetState() const { return GetResourceState(m_class); }
@@ -74,13 +73,13 @@ public:
 	inline ~BufferBase() override = default;
 	inline explicit BufferBase(Parent parent, ResourceState state)
 	    : ResourceBase(parent, MakeResourceClass(ResourceType::kBuffer, state)) {}
-	inline BufferBase(BufferBase &&) noexcept = default;
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor) const;
+	inline RawBufferAlias GetAlias() const { return RawBufferAlias{this}; }
 
 	/* inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
-		return Visit([](auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return buffer->GetVkBuffer(); });
+	    return Visit([](auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return buffer->GetVkBuffer(); });
 	}; */
 };
 
@@ -91,16 +90,16 @@ public:
 	inline ~ImageBase() override = default;
 	inline explicit ImageBase(Parent parent, ResourceState state)
 	    : ResourceBase(parent, MakeResourceClass(ResourceType::kImage, state)) {}
-	inline ImageBase(ImageBase &&) noexcept = default;
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
+	inline RawImageAlias GetAlias() const { return RawImageAlias{this}; }
 
 	/* inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
-		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
+	    return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
 	};
 	inline VkFormat GetFormat() const {
-		return Visit([](auto *image) -> VkFormat { return image->GetFormat(); });
+	    return Visit([](auto *image) -> VkFormat { return image->GetFormat(); });
 	} */
 };
 
@@ -190,7 +189,6 @@ public:
 	inline VkFormat GetFormat() const { return GetVkImageView()->GetImagePtr()->GetFormat(); }
 
 	inline ExternalImageBase(Parent parent) : ImageBase(parent, ResourceState::kExternal) {}
-	inline ExternalImageBase(ExternalImageBase &&) noexcept = default;
 	inline ~ExternalImageBase() override = default;
 
 private:
@@ -221,7 +219,6 @@ public:
 	virtual const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const = 0;
 
 	inline ExternalBufferBase(Parent parent) : BufferBase(parent, ResourceState::kExternal) {}
-	inline ExternalBufferBase(ExternalBufferBase &&) noexcept = default;
 	inline ~ExternalBufferBase() override = default;
 };
 
@@ -283,7 +280,6 @@ public:
 	void *GetMappedData() const;
 
 	inline ManagedBuffer(Parent parent) : BufferBase(parent, ResourceState::kManaged) {}
-	inline ManagedBuffer(ManagedBuffer &&) noexcept = default;
 	~ManagedBuffer() override = default;
 
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
@@ -384,7 +380,6 @@ public:
 		m_view_type = view_type;
 		SetCanvasSize();
 	}
-	inline ManagedImage(ManagedImage &&) noexcept = default;
 	~ManagedImage() override = default;
 
 	inline VkImageViewType GetViewType() const { return m_view_type; }
@@ -447,7 +442,6 @@ public:
 		m_view_type = view_type;
 		m_images = std::move(images);
 	}
-	inline CombinedImage(CombinedImage &&) noexcept = default;
 	inline const std::vector<OutputImageAlias> &GetImages() const { return m_images; }
 	~CombinedImage() override = default;
 };
@@ -482,7 +476,6 @@ public:
 	inline LastFrameImage(Parent parent) : ImageBase(parent, ResourceState::kLastFrame) {}
 	inline LastFrameImage(Parent parent, const ImageAliasBase &image_alias)
 	    : ImageBase(parent, ResourceState::kLastFrame), m_pointed_image{image_alias} {}
-	inline LastFrameImage(LastFrameImage &&) noexcept = default;
 	inline ~LastFrameImage() final = default;
 
 	inline void SetCurrentResource(const ImageAliasBase &image_alias) { m_pointed_image = image_alias; }
@@ -637,7 +630,6 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 	return visitor(static_cast<const BufferAliasBase *>(nullptr));
 }
 
-namespace interfaceresource_trait_ {
 template <typename T> struct ResourceTrait;
 template <> struct ResourceTrait<ManagedImage> {
 	static constexpr ResourceType kType = ResourceType::kImage;
@@ -668,7 +660,6 @@ template <> struct ResourceTrait<LastFrameBuffer> {
 	static constexpr ResourceType kType = ResourceType::kBuffer;
 	static constexpr ResourceState kState = ResourceState::kLastFrame;
 };
-} // namespace interfaceresource_trait_
 
 // Used in Visit function
 template <typename RawType> class ResourceVisitorTrait {
@@ -676,16 +667,15 @@ private:
 	using Type = std::decay_t<std::remove_pointer_t<std::decay_t<RawType>>>;
 
 public:
-	static constexpr ResourceType kType = interfaceresource_trait_::ResourceTrait<Type>::kType;
-	static constexpr ResourceState kState = interfaceresource_trait_::ResourceTrait<Type>::kState;
+	static constexpr ResourceType kType = ResourceTrait<Type>::kType;
+	static constexpr ResourceState kState = ResourceTrait<Type>::kState;
 	static constexpr ResourceClass kClass = MakeResourceClass(kType, kState);
 	static constexpr bool kIsCombinedOrManagedImage =
-		kClass == ResourceClass::kCombinedImage || kClass == ResourceClass::kManagedImage;
+	    kClass == ResourceClass::kCombinedImage || kClass == ResourceClass::kManagedImage;
 	static constexpr bool kIsLastFrame = kState == ResourceState::kLastFrame;
 	static constexpr bool kIsInternal = kState == ResourceState::kManaged || kState == ResourceState::kCombinedImage;
 	static constexpr bool kIsExternal = kState == ResourceState::kExternal;
 };
-
 
 class ImageBase;
 class BufferBase;
