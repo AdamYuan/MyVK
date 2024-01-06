@@ -8,7 +8,7 @@ CompileResult<void> Collector::Collect(const RenderGraphBase &rg) {
 
 template <typename Container> CompileResult<void> Collector::collect_resources(const Container &pool) {
 	for (const auto &it : pool.GetResourcePoolData()) {
-		const auto *p_resource = it.second.template Get<0, ResourceBase>();
+		const auto *p_resource = it.second.template Get<ResourceBase>();
 		if (p_resource == nullptr)
 			return error::NullResource{.key = pool.GetGlobalKey()};
 		m_resources[p_resource->GetGlobalKey()] = p_resource;
@@ -18,7 +18,7 @@ template <typename Container> CompileResult<void> Collector::collect_resources(c
 
 template <typename Container> CompileResult<void> Collector::collect_inputs(const Container &pool) {
 	for (const auto &it : pool.GetInputPoolData()) {
-		const auto *p_input = it.second.template Get<0, InputBase>();
+		const auto *p_input = it.second.template Get<InputBase>();
 		if (p_input == nullptr)
 			return error::NullInput{.key = pool.GetGlobalKey()};
 		m_inputs[p_input->GetGlobalKey()] = p_input;
@@ -28,7 +28,7 @@ template <typename Container> CompileResult<void> Collector::collect_inputs(cons
 
 template <typename Container> CompileResult<void> Collector::collect_passes(const Container &pool) {
 	for (const auto &it : pool.GetPassPoolData()) {
-		const PassBase *p_pass = it.second.template Get<0, PassBase>();
+		const PassBase *p_pass = it.second.template Get<PassBase>();
 		if (p_pass == nullptr)
 			return error::NullPass{.key = pool.GetGlobalKey()};
 

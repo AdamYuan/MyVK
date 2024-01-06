@@ -53,10 +53,10 @@ protected:
 	template <typename PassType, typename... Args>
 	inline PassType *CreatePass(const PoolKey &pass_key, Args &&...args) {
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kPassChanged);
-		return PoolBase::template Construct<0, PassType, Args...>(pass_key, std::forward<Args>(args)...);
+		return PoolBase::template Construct<PassType, Args...>(pass_key, std::forward<Args>(args)...);
 	}
 	template <typename PassType = PassBase> inline PassType *GetPass(const PoolKey &pass_key) const {
-		return PoolBase::template Get<0, PassType>(pass_key);
+		return PoolBase::template Get<PassType>(pass_key);
 	}
 	inline void ClearPasses() {
 		PoolBase::Clear();

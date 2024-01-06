@@ -65,7 +65,7 @@ private:
 			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"in"}, image,
 			                                                                                              nullptr);
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img->GetAlias());
+			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img->AsInput());
 		}
 		inline ~GaussianBlurSubpass() final = default;
 		inline void CreatePipeline() final {}
@@ -99,7 +99,7 @@ public:
 	    : myvk_rg::GraphicsPassBase(parent) {
 		AddInputAttachmentInput<0, 0>({"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image->GetAlias());
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image->AsInput());
 	}
 	inline ~DimPass() final = default;
 	inline void CreatePipeline() final {}
@@ -120,7 +120,7 @@ public:
 		                                           {{1.0, 0.0, 0.0, 1.0}});
 		    }); */
 
-		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image->GetAlias(), format);
+		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image->AsInput(), format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
 
 		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass2->GetImageOutput(), format);
@@ -142,17 +142,19 @@ public:
 };
 
 #include "../../src/rg/executor/default/Collector.hpp"
-TEST_CASE("Test Default Resolver") {
+TEST_CASE("Test Default Collector") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
 	Collector collector;
 	collector.Collect(*render_graph);
 	printf("PASSES:\n");
 	for (const auto &it : collector.GetPasses())
-		printf("%s -> %p\n", it.first.Format().c_str(), it.second);
+		printf("%s\n", it.first.Format().c_str());
 	printf("INPUTS:\n");
-	for (const auto &it : collector.GetInputs())
-		printf("%s -> %p\n", it.first.Format().c_str(), it.second);
+	for (const auto &it : collector.GetInputs()) {
+		printf("%s -> %d, %s\n", it.first.Format().c_str(), static_cast<int>(it.second->GetInput().GetState()),
+		       it.second->GetInput().GetGlobalKey().Format().c_str());
+	}
 	printf("RESOURCES:\n");
 	for (const auto &it : collector.GetResources())
-		printf("%s -> %p\n", it.first.Format().c_str(), it.second);
+		printf("%s\n", it.first.Format().c_str());
 }

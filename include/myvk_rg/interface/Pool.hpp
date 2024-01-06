@@ -124,51 +124,36 @@ template <typename... Types> struct WrapperAux<Variant<Types...>> {
 };
 template <typename Type> using Wrapper = typename WrapperAux<Type>::T;
 
-// Wrapper Tuple
-template <typename... Types> class WrapperTuple {
-private:
-	std::tuple<Wrapper<Types>...> m_tuple;
-
-public:
-	template <std::size_t Index, typename TypeToCons, typename... Args> inline TypeToCons *Construct(Args &&...args) {
-		return std::get<Index>(m_tuple).template Construct<TypeToCons>(std::forward<Args>(args)...);
-	}
-	template <std::size_t Index, typename TypeToGet> inline TypeToGet *Get() const {
-		return std::get<Index>(m_tuple).template Get<TypeToGet>();
-	}
-};
-
 // Pool Data
-template <typename... Types> using PoolData = std::unordered_map<PoolKey, WrapperTuple<Types...>, PoolKey::Hash>;
+template <typename Type> using PoolData = std::unordered_map<PoolKey, Wrapper<Type>, PoolKey::Hash>;
 
-template <typename Derived, typename... Types> class Pool {
+template <typename Derived, typename Type> class Pool {
 private:
-	PoolData<Types...> m_data;
+	PoolData<Type> m_data;
 
 public:
 	inline Pool() = default;
 	inline virtual ~Pool() = default;
 
 protected:
-	inline const PoolData<Types...> &GetPoolData() const { return m_data; }
+	inline const PoolData<Type> &GetPoolData() const { return m_data; }
 
-	template <std::size_t Index, typename TypeToCons, typename... Args>
-	inline TypeToCons *Construct(const PoolKey &key, Args &&...args) {
-		auto it = m_data.insert({key, WrapperTuple<Types...>{}});
+	template <typename TypeToCons, typename... Args> inline TypeToCons *Construct(const PoolKey &key, Args &&...args) {
+		auto it = m_data.insert({key, Wrapper<Type>{}});
 		if constexpr (std::is_base_of_v<ObjectBase, TypeToCons>) {
 			static_assert(std::is_base_of_v<ObjectBase, Derived>);
-			return it.first->second.template Construct<Index, TypeToCons>(
+			return it.first->second.template Construct<TypeToCons>(
 			    Parent{.p_pool_key = &it.first->first,
 			           .p_var_parent = (ObjectBase *)static_cast<const Derived *>(this)},
 			    std::forward<Args>(args)...);
 		} else
-			return it.first->second.template Construct<Index, TypeToCons>(std::forward<Args>(args)...);
+			return it.first->second.template Construct<TypeToCons>(std::forward<Args>(args)...);
 	}
 	inline bool Exist(const PoolKey &key) const { return m_data.count(key); }
 	inline void Delete(const PoolKey &key) { m_data.erase(key); }
-	template <std::size_t Index, typename Type> inline Type *Get(const PoolKey &key) const {
+	template <typename TypeToGet> inline TypeToGet *Get(const PoolKey &key) const {
 		auto it = m_data.find(key);
-		return it == m_data.end() ? nullptr : it->second.template Get<Index, Type>();
+		return it == m_data.end() ? nullptr : it->second.template Get<TypeToGet>();
 	}
 	inline void Clear() { m_data.clear(); }
 };

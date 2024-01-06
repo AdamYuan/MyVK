@@ -50,10 +50,6 @@ class ResourceBase : public ObjectBase {
 private:
 	ResourceClass m_class{};
 
-	template <typename, typename...> friend class Pool;
-	template <typename> friend class InputPool;
-	friend class CombinedImage;
-
 public:
 	inline ~ResourceBase() override = default;
 	inline ResourceBase(Parent parent, ResourceClass resource_class) : ObjectBase(parent), m_class{resource_class} {}
@@ -76,7 +72,7 @@ public:
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor) const;
-	inline RawBufferAlias GetAlias() const { return RawBufferAlias{this}; }
+	inline RawBufferAlias AsInput() const { return RawBufferAlias{this}; }
 
 	/* inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
 	    return Visit([](auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return buffer->GetVkBuffer(); });
@@ -93,7 +89,7 @@ public:
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor);
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
-	inline RawImageAlias GetAlias() const { return RawImageAlias{this}; }
+	inline RawImageAlias AsInput() const { return RawImageAlias{this}; }
 
 	/* inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
 	    return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
@@ -256,12 +252,6 @@ public:
 
 class ManagedBuffer final : public BufferBase, public ManagedResourceInfo<ManagedBuffer, VkDeviceSize> {
 private:
-	mutable struct {
-	private:
-		uint32_t buffer_id{};
-		friend class RenderGraphResolver;
-	} m_resolved_info{};
-
 	BufferMapType m_map_type{BufferMapType::kNone};
 
 	void *get_mapped_data() const;
@@ -288,15 +278,6 @@ public:
 
 // Internal Image ( the combination of ManagedImage and CombinedImage, used in implementation )
 class InternalImageBase : public ImageBase {
-protected:
-	mutable struct {
-	private:
-		uint32_t image_id{}, image_view_id{};
-		friend class RenderGraphResolver;
-	} m_resolved_info{};
-
-	friend class RenderGraphResolver;
-
 public:
 	inline explicit InternalImageBase(Parent parent, ResourceState state) : ImageBase(parent, state) {}
 

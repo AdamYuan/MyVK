@@ -176,7 +176,7 @@ RenderGraphResolver::OriginGraph RenderGraphResolver::make_origin_graph(const Re
 	OriginGraph graph = {};
 	for (auto it = p_render_graph->m_p_result_pool_data->pool.begin();
 	     it != p_render_graph->m_p_result_pool_data->pool.end(); ++it)
-		graph.visit_resource_dep_passes(*p_render_graph->m_p_result_pool_data->ValueGet<0, const ResourceBase *>(it),
+		graph.visit_resource_dep_passes(*p_render_graph->m_p_result_pool_data->ValueGet<const ResourceBase *>(it),
 		                                nullptr, nullptr);
 	return graph;
 }

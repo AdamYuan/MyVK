@@ -20,11 +20,11 @@ public:
 protected:
 	inline void AddResult(const PoolKey &result_key, const OutputImageAlias &image) {
 		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResultChanged);
-		PoolBase::template Construct<0, OutputImageAlias>(result_key, image);
+		PoolBase::template Construct<OutputImageAlias>(result_key, image);
 	}
 	inline void AddResult(const PoolKey &result_key, const OutputBufferAlias &buffer) {
 		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResultChanged);
-		PoolBase::template Construct<0, OutputBufferAlias>(result_key, buffer);
+		PoolBase::template Construct<OutputBufferAlias>(result_key, buffer);
 	}
 	inline void ClearResults() {
 		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResultChanged);

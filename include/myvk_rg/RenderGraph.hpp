@@ -35,7 +35,9 @@ using BufferDescriptorInput = interface::BufferDescriptorInput;
 using ImageDescriptorInput = interface::ImageDescriptorInput;
 using SamplerDescriptorInput = interface::SamplerDescriptorInput;
 
-template <typename Executor = executor::DefaultExecutor> class RenderGraphBase : public interface::RenderGraphBase {
+using DefaultExecutor = executor::DefaultExecutor;
+
+template <typename Executor = DefaultExecutor> class RenderGraphBase : public interface::RenderGraphBase {
 private:
 	inline static const interface::PoolKey kEXEKey = {"[EXE]"};
 

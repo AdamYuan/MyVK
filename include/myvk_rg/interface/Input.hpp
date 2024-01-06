@@ -33,7 +33,7 @@ public:
 	inline VkPipelineStageFlags2 GetPipelineStages() const { return m_pipeline_stages; }
 	inline const auto &GetOptDescriptorBinding() const { return m_opt_descriptor_binding; }
 
-	inline const AliasBase &GetResource() const { return m_resource; }
+	inline const AliasBase &GetInput() const { return m_resource; }
 	inline ResourceType GetType() const { return m_resource.GetType(); }
 
 	template <typename Visitor> inline std::invoke_result_t<Visitor, ImageInput *> Visit(Visitor &&visitor);
@@ -52,9 +52,7 @@ public:
 	      m_opt_attachment_index{opt_attachment_index} {}
 	inline ~ImageInput() final = default;
 
-	inline const ImageAliasBase &GetResource() const {
-		return static_cast<const ImageAliasBase &>(InputBase::GetResource());
-	}
+	inline const ImageAliasBase &GetInput() const { return static_cast<const ImageAliasBase &>(InputBase::GetInput()); }
 	inline static ResourceType GetType() { return ResourceType::kImage; }
 	inline const auto &GetOptAttachmentIndex() const { return m_opt_attachment_index; }
 	inline auto GetOutput() const { return OutputImageAlias(this); }
@@ -69,8 +67,8 @@ public:
 	    : InputBase(parent, resource, usage, pipeline_stages, opt_descriptor_binding) {}
 	inline ~BufferInput() final = default;
 
-	inline const BufferAliasBase &GetResource() const {
-		return static_cast<const BufferAliasBase &>(InputBase::GetResource());
+	inline const BufferAliasBase &GetInput() const {
+		return static_cast<const BufferAliasBase &>(InputBase::GetInput());
 	}
 	inline static ResourceType GetType() { return ResourceType::kBuffer; }
 	inline auto GetOutput() const { return OutputBufferAlias(this); }

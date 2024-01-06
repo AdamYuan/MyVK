@@ -13,7 +13,7 @@ private:
 
 	template <typename InputType, typename... Args> inline auto add_input(const PoolKey &input_key, Args &&...args) {
 		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kInputChanged);
-		return PoolBase::template Construct<0, InputType>(input_key, std::forward<Args>(args)...);
+		return PoolBase::template Construct<InputType>(input_key, std::forward<Args>(args)...);
 	}
 
 	template <typename> friend class DescriptorInputSlot;
@@ -58,14 +58,14 @@ protected:
 	}
 
 	template <typename InputType = InputBase> inline const InputType *GetInput(const PoolKey &input_key) const {
-		return PoolBase::template Get<0, InputType>(input_key);
+		return PoolBase::template Get<InputType>(input_key);
 	}
 
 	inline OutputBufferAlias MakeBufferOutput(const PoolKey &input_key) {
-		return PoolBase::template Get<0, BufferInput>(input_key)->GetOutput();
+		return PoolBase::template Get<BufferInput>(input_key)->GetOutput();
 	}
 	inline OutputImageAlias MakeImageOutput(const PoolKey &input_key) {
-		return PoolBase::template Get<0, ImageInput>(input_key)->GetOutput();
+		return PoolBase::template Get<ImageInput>(input_key)->GetOutput();
 	}
 	inline void ClearInputs();
 };
@@ -86,8 +86,6 @@ public:
 class DescriptorSetData {
 private:
 	std::unordered_map<uint32_t, std::vector<DescriptorBinding>> m_bindings;
-
-	template <typename> friend class DescriptorInputSlot;
 
 public:
 	inline bool IsBindingExist(uint32_t binding) const { return m_bindings.find(binding) != m_bindings.end(); }
