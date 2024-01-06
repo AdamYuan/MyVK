@@ -17,23 +17,23 @@ namespace myvk_rg::interface {
 // Value Wrapper
 template <typename Type> class Value {
 private:
-	inline constexpr static bool kUsePtr =
-	    !std::is_final_v<Type> && (std::is_same_v<ObjectBase, Type> || std::is_base_of_v<ObjectBase, Type>);
-	std::conditional_t<kUsePtr, std::unique_ptr<Type>, std::optional<Type>> m_value;
+	inline constexpr static bool kUPtr = !std::is_final_v<Type>;
+
+	std::conditional_t<kUPtr, std::unique_ptr<Type>, std::optional<Type>> m_value;
 
 public:
 	template <typename TypeToCons>
 	inline constexpr static bool kCanConstruct =
-	    kUsePtr ? std::is_constructible_v<Type *, TypeToCons *> : std::is_same_v<Type, TypeToCons>;
+	    kUPtr ? std::is_constructible_v<Type *, TypeToCons *> : std::is_same_v<Type, TypeToCons>;
 	template <typename TypeToGet>
 	inline constexpr static bool kCanGet =
-	    kUsePtr ? (std::is_base_of_v<Type, TypeToGet> || std::is_base_of_v<TypeToGet, Type> ||
-	               std::is_same_v<Type, TypeToGet>)
-	            : (std::is_base_of_v<TypeToGet, Type> || std::is_same_v<Type, TypeToGet>);
+	    kUPtr ? (std::is_base_of_v<Type, TypeToGet> || std::is_base_of_v<TypeToGet, Type> ||
+	             std::is_same_v<Type, TypeToGet>)
+	          : (std::is_base_of_v<TypeToGet, Type> || std::is_same_v<Type, TypeToGet>);
 
 	template <typename TypeToCons, typename... Args, typename = std::enable_if_t<kCanConstruct<TypeToCons>>>
 	inline TypeToCons *Construct(Args &&...args) {
-		if constexpr (kUsePtr) {
+		if constexpr (kUPtr) {
 			auto ptr = std::make_unique<TypeToCons>(std::forward<Args>(args)...);
 			TypeToCons *ret = ptr.get();
 			m_value = std::move(ptr);
@@ -44,12 +44,7 @@ public:
 		}
 	}
 	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>> inline TypeToGet *Get() const {
-		Type *ptr;
-		if constexpr (kUsePtr)
-			ptr = m_value.get();
-		else
-			ptr = (Type *)std::addressof(*m_value);
-
+		Type *ptr = (Type *)std::addressof(*m_value);
 		if constexpr (std::is_same_v<Type, TypeToGet>)
 			return (TypeToGet *)ptr;
 		else

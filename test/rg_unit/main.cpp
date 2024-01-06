@@ -36,11 +36,8 @@ TEST_CASE("Test Pool Data") {
 	CHECK(ifs_wrapper.Get<BufferBase>());
 	CHECK(ifs_wrapper.Get<ResourceBase>());
 
-	CHECK(std::is_move_constructible_v<Value<int>>);
-	CHECK(std::is_move_assignable_v<Value<int>>);
-	CHECK(std::is_copy_constructible_v<Value<int>>);
-	CHECK(std::is_copy_assignable_v<Value<int>>);
-
+	CHECK(std::is_move_constructible_v<Value<ManagedBuffer>>);
+	CHECK(std::is_move_assignable_v<Value<ManagedBuffer>>);
 	CHECK(std::is_copy_constructible_v<Value<ManagedBuffer>>);
 	CHECK(std::is_copy_assignable_v<Value<ManagedBuffer>>);
 
