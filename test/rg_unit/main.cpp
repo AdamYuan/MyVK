@@ -2,6 +2,7 @@
 #include "doctest.h"
 
 #include <myvk_rg/executor/DefaultExecutor.hpp>
+#include <myvk_rg/interface/Input.hpp>
 #include <myvk_rg/interface/Key.hpp>
 #include <myvk_rg/interface/Pool.hpp>
 #include <myvk_rg/interface/Resource.hpp>
@@ -21,32 +22,43 @@ TEST_CASE("Test Key") {
 }
 
 TEST_CASE("Test Pool Data") {
-	using myvk_rg::interface::ExternalBufferBase;
-	using myvk_rg::interface::ManagedBuffer;
-	using myvk_rg::interface::PoolData;
-	using myvk_rg::interface::Value;
-	using myvk_rg::interface::Variant;
-	using myvk_rg::interface::Wrapper;
+	using namespace myvk_rg::interface;
 
 	Wrapper<int> int_wrapper;
 	CHECK_EQ(*int_wrapper.Construct<int>(10), 10);
 	CHECK_EQ(*int_wrapper.Get<int>(), 10);
 
-	Wrapper<std::istream> ifs_wrapper;
-	CHECK(ifs_wrapper.Construct<std::ifstream>());
-	CHECK_EQ(ifs_wrapper.Get<std::istringstream>(), nullptr);
-	CHECK(ifs_wrapper.Get<std::istream>());
-	CHECK(ifs_wrapper.Get<std::ifstream>());
+	Wrapper<int> i2{std::move(int_wrapper)};
 
-	Wrapper<Variant<int, double, std::istream>> var_wrapper;
-	CHECK(var_wrapper.Construct<std::ifstream>());
+	Wrapper<ObjectBase> ifs_wrapper;
+	CHECK(ifs_wrapper.Construct<ManagedBuffer>(Parent{}));
+	CHECK_EQ(ifs_wrapper.Get<ManagedImage>(), nullptr);
+	CHECK(ifs_wrapper.Get<BufferBase>());
+	CHECK(ifs_wrapper.Get<ResourceBase>());
+
+	CHECK(std::is_move_constructible_v<Value<int>>);
+	CHECK(std::is_move_assignable_v<Value<int>>);
+	CHECK(std::is_copy_constructible_v<Value<int>>);
+	CHECK(std::is_copy_assignable_v<Value<int>>);
+
+	CHECK(std::is_copy_constructible_v<Value<ManagedBuffer>>);
+	CHECK(std::is_copy_assignable_v<Value<ManagedBuffer>>);
+
+	CHECK(std::is_move_constructible_v<Value<ObjectBase>>);
+	CHECK(std::is_move_assignable_v<Value<ObjectBase>>);
+	// Use Pointer, so not copiable
+	CHECK_FALSE(std::is_copy_constructible_v<Value<ObjectBase>>);
+	CHECK_FALSE(std::is_copy_assignable_v<Value<ObjectBase>>);
+
+	Wrapper<Variant<int, double, ResourceBase>> var_wrapper;
+	CHECK(var_wrapper.Construct<ManagedBuffer>(Parent{}));
 	CHECK_EQ(var_wrapper.Get<int>(), nullptr);
-	CHECK_EQ(var_wrapper.Get<std::istringstream>(), nullptr);
-	CHECK(var_wrapper.Get<std::istream>());
-	CHECK(var_wrapper.Get<std::ifstream>());
+	CHECK_EQ(var_wrapper.Get<ManagedImage>(), nullptr);
+	CHECK(var_wrapper.Get<ObjectBase>());
+	CHECK(var_wrapper.Get<BufferBase>());
 
 	CHECK_EQ(*var_wrapper.Construct<int>(2), 2);
-	CHECK_EQ(var_wrapper.Get<std::istream>(), nullptr);
+	CHECK_EQ(var_wrapper.Get<BufferBase>(), nullptr);
 	CHECK_EQ(var_wrapper.Get<double>(), nullptr);
 	CHECK_EQ(*var_wrapper.Get<int>(), 2);
 	*var_wrapper.Get<int>() = 3;

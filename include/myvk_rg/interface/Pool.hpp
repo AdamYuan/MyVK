@@ -17,11 +17,13 @@ namespace myvk_rg::interface {
 template <typename Type> class Value {
 private:
 	template <typename T> struct Storage {
-		alignas(T) std::byte buffer[sizeof(T)]{};
-		inline T &Get() const { return *(T *)(buffer); }
+		alignas(T) std::byte buffer[sizeof(T)];
+		inline T *get() const { return (T *)(buffer); }
+		inline ~Storage() { get()->~Type(); }
 	};
 
-	inline constexpr static bool kUsePtr = !std::is_final_v<Type>;
+	inline constexpr static bool kUsePtr =
+	    !std::is_final_v<Type> && (std::is_same_v<ObjectBase, Type> || std::is_base_of_v<ObjectBase, Type>);
 	std::conditional_t<kUsePtr, std::unique_ptr<Type>, Storage<Type>> m_value;
 
 public:
@@ -44,17 +46,8 @@ public:
 		} else
 			return new (m_value.buffer) TypeToCons(std::forward<Args>(args)...);
 	}
-	inline ~Value() {
-		if constexpr (!kUsePtr)
-			m_value.Get()->~Type();
-	}
 	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>> inline TypeToGet *Get() const {
-		Type *ptr;
-		if constexpr (kUsePtr)
-			ptr = m_value.get();
-		else
-			ptr = &m_value.Get();
-
+		Type *ptr = m_value.get();
 		if constexpr (std::is_same_v<Type, TypeToGet>)
 			return (TypeToGet *)ptr;
 		else
@@ -141,7 +134,7 @@ protected:
 	inline const PoolData<Type> &GetPoolData() const { return m_data; }
 
 	template <typename TypeToCons, typename... Args> inline TypeToCons *Construct(const PoolKey &key, Args &&...args) {
-		auto it = m_data.insert({key, Wrapper<Type>{}});
+		auto it = m_data.insert(std::pair<PoolKey, Wrapper<Type>>{key, Wrapper<Type>{}});
 		if constexpr (std::is_base_of_v<ObjectBase, TypeToCons>) {
 			static_assert(std::is_base_of_v<ObjectBase, Derived>);
 			return it.first->second.template Construct<TypeToCons>(
