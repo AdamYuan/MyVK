@@ -6,6 +6,7 @@
 #include <cinttypes>
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
@@ -16,15 +17,9 @@ namespace myvk_rg::interface {
 // Value Wrapper
 template <typename Type> class Value {
 private:
-	template <typename T> struct Storage {
-		alignas(T) std::byte buffer[sizeof(T)];
-		inline T *get() const { return (T *)(buffer); }
-		inline ~Storage() { get()->~Type(); }
-	};
-
 	inline constexpr static bool kUsePtr =
 	    !std::is_final_v<Type> && (std::is_same_v<ObjectBase, Type> || std::is_base_of_v<ObjectBase, Type>);
-	std::conditional_t<kUsePtr, std::unique_ptr<Type>, Storage<Type>> m_value;
+	std::conditional_t<kUsePtr, std::unique_ptr<Type>, std::optional<Type>> m_value;
 
 public:
 	template <typename TypeToCons>
@@ -43,11 +38,18 @@ public:
 			TypeToCons *ret = ptr.get();
 			m_value = std::move(ptr);
 			return ret;
-		} else
-			return new (m_value.buffer) TypeToCons(std::forward<Args>(args)...);
+		} else {
+			m_value = TypeToCons(std::forward<Args>(args)...);
+			return std::addressof(*m_value);
+		}
 	}
 	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>> inline TypeToGet *Get() const {
-		Type *ptr = m_value.get();
+		Type *ptr;
+		if constexpr (kUsePtr)
+			ptr = m_value.get();
+		else
+			ptr = (Type *)std::addressof(*m_value);
+
 		if constexpr (std::is_same_v<Type, TypeToGet>)
 			return (TypeToGet *)ptr;
 		else

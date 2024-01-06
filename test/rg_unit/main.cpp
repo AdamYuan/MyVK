@@ -46,7 +46,6 @@ TEST_CASE("Test Pool Data") {
 
 	CHECK(std::is_move_constructible_v<Value<ObjectBase>>);
 	CHECK(std::is_move_assignable_v<Value<ObjectBase>>);
-	// Use Pointer, so not copiable
 	CHECK_FALSE(std::is_copy_constructible_v<Value<ObjectBase>>);
 	CHECK_FALSE(std::is_copy_assignable_v<Value<ObjectBase>>);
 
