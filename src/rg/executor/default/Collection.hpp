@@ -79,29 +79,12 @@ public:
 	}
 	/* inline CompileResult<std::variant<const ImageBase *, const ImageInput *>>
 	FindAliasSource(const ImageAliasBase &alias) const {
-
-		const InputBase *p_input;
-		UNWRAP_ASSIGN(p_input, FindInput(alias.GetSourceKey()));
-		return p_input->Visit(overloaded([](const ImageInput *i) -> CompileResult<const ImageInput *> { return i; },
-		                                 [&](const auto *r) -> CompileResult<const ImageInput *> {
-			                                 return error::AliasNoMatch{.alias = alias, .actual_type = r->GetType()};
-		                                 }));
-	}
-	inline CompileResult<const BufferBase *> FindAliasSource(const RawBufferAlias &alias) const {
-		const ResourceBase *p_resource;
-		UNWRAP_ASSIGN(p_resource, FindResource(alias.GetSourceKey()));
-		return p_resource->Visit(overloaded([](const BufferBase *i) -> CompileResult<const BufferBase *> { return i; },
-		                                    [&](const auto *r) -> CompileResult<const BufferBase *> {
-			                                    return error::AliasNoMatch{.alias = alias, .actual_type = r->GetType()};
-		                                    }));
-	}
-	inline CompileResult<const BufferInput *> FindAliasSource(const OutputBufferAlias &alias) const {
-		const InputBase *p_input;
-		UNWRAP_ASSIGN(p_input, FindInput(alias.GetSourceKey()));
-		return p_input->Visit(overloaded([](const BufferInput *i) -> CompileResult<const BufferInput *> { return i; },
-		                                 [&](const auto *r) -> CompileResult<const BufferInput *> {
-			                                 return error::AliasNoMatch{.alias = alias, .actual_type = r->GetType()};
-		                                 }));
+	    return alias.Visit(
+	        [this](const auto *alias) -> CompileResult<std::variant<const ImageBase *, const ImageInput *>> {
+	            std::variant<const ImageBase *, const ImageInput *> v;
+	            UNWRAP_ASSIGN(v, FindAliasSource(*alias));
+	            return v;
+	        });
 	} */
 };
 

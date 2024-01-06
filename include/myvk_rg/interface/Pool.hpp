@@ -43,7 +43,8 @@ public:
 			return std::addressof(*m_value);
 		}
 	}
-	template <typename TypeToGet, typename = std::enable_if_t<kCanGet<TypeToGet>>> inline TypeToGet *Get() const {
+	template <typename TypeToGet = Type, typename = std::enable_if_t<kCanGet<TypeToGet>>>
+	inline TypeToGet *Get() const {
 		Type *ptr = (Type *)std::addressof(*m_value);
 		if constexpr (std::is_same_v<Type, TypeToGet>)
 			return (TypeToGet *)ptr;
@@ -57,11 +58,13 @@ template <typename... Types> class Variant {
 private:
 	std::variant<Value<Types>...> m_variant;
 
+	template <std::size_t I> using TypeAt = std::tuple_element_t<I, std::tuple<Types...>>;
+
 	template <typename TypeToCons, size_t I = 0> inline static constexpr size_t GetConstructIndex() {
 		if constexpr (I >= sizeof...(Types)) {
 			return -1;
 		} else {
-			if constexpr (Value<std::tuple_element_t<I, std::tuple<Types...>>>::template kCanConstruct<TypeToCons>)
+			if constexpr (Value<TypeAt<I>>::template kCanConstruct<TypeToCons>)
 				return I;
 			else
 				return (GetConstructIndex<TypeToCons, I + 1>());
@@ -71,7 +74,7 @@ private:
 		if constexpr (I >= sizeof...(Types))
 			return false;
 		else {
-			if constexpr (Value<std::tuple_element_t<I, std::tuple<Types...>>>::template kCanGet<TypeToGet>)
+			if constexpr (Value<TypeAt<I>>::template kCanGet<TypeToGet>)
 				return true;
 			return CanGet<TypeToGet, I + 1>();
 		}
@@ -84,8 +87,7 @@ public:
 	template <typename TypeToCons, typename... Args, typename = std::enable_if_t<kCanConstruct<TypeToCons>>>
 	inline TypeToCons *Construct(Args &&...args) {
 		constexpr auto kIndex = GetConstructIndex<TypeToCons>();
-		using V = Value<std::tuple_element_t<kIndex, std::tuple<Types...>>>;
-		m_variant.template emplace<V>();
+		m_variant.template emplace<TypeAt<kIndex>>();
 		return std::visit(
 		    [&](auto &v) -> TypeToCons * {
 			    if constexpr (std::decay_t<decltype(v)>::template kCanConstruct<TypeToCons>)
@@ -104,6 +106,9 @@ public:
 				    return nullptr;
 		    },
 		    m_variant);
+	}
+	template <typename Visitor> inline std::invoke_result_t<Visitor, const TypeAt<0> *> Visit(Visitor &&visitor) const {
+		return std::visit([&visitor](const auto &v) { return visitor(v.template Get<>()); }, m_variant);
 	}
 };
 

@@ -2,6 +2,8 @@
 #ifndef MYVK_RG_ALIAS_HPP
 #define MYVK_RG_ALIAS_HPP
 
+#include <cassert>
+
 #include "Key.hpp"
 #include "ResourceType.hpp"
 
@@ -45,8 +47,8 @@ public:
 
 	inline const GlobalKey &GetSourceKey() const { return m_source; }
 
-	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor);
-	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor) const;
+	template <typename Visitor>
+	inline std::invoke_result_t<Visitor, const RawImageAlias *> Visit(Visitor &&visitor) const;
 };
 
 class ImageBase;
@@ -60,8 +62,8 @@ public:
 
 	inline ResourceType GetType() const { return ResourceType::kImage; }
 
-	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor);
-	template <typename Visitor> inline std::invoke_result_t<Visitor, RawImageAlias *> Visit(Visitor &&visitor) const;
+	template <typename Visitor>
+	inline std::invoke_result_t<Visitor, const RawImageAlias *> Visit(Visitor &&visitor) const;
 };
 
 class RawImageAlias final : public ImageAliasBase {
@@ -97,8 +99,8 @@ public:
 
 	inline ResourceType GetType() const { return ResourceType::kBuffer; }
 
-	template <typename Visitor> inline std::invoke_result_t<Visitor, RawBufferAlias *> Visit(Visitor &&visitor);
-	template <typename Visitor> inline std::invoke_result_t<Visitor, RawBufferAlias *> Visit(Visitor &&visitor) const;
+	template <typename Visitor>
+	inline std::invoke_result_t<Visitor, const RawBufferAlias *> Visit(Visitor &&visitor) const;
 };
 
 class RawBufferAlias final : public BufferAliasBase {
@@ -122,6 +124,46 @@ public:
 	inline AliasState GetState() const { return AliasState::kOutput; }
 	inline AliasClass GetClass() const { return AliasClass::kOutputBuffer; }
 };
+
+template <typename Visitor>
+std::invoke_result_t<Visitor, const RawImageAlias *> AliasBase::Visit(Visitor &&visitor) const {
+	switch (GetClass()) {
+	case AliasClass::kRawImage:
+		return visitor(static_cast<const RawImageAlias *>(this));
+	case AliasClass::kRawBuffer:
+		return visitor(static_cast<const RawBufferAlias *>(this));
+	case AliasClass::kOutputImage:
+		return visitor(static_cast<const OutputImageAlias *>(this));
+	case AliasClass::kOutputBuffer:
+		return visitor(static_cast<const OutputBufferAlias *>(this));
+	}
+	assert(false);
+	return visitor(static_cast<const RawImageAlias *>(nullptr));
+}
+
+template <typename Visitor>
+std::invoke_result_t<Visitor, const RawImageAlias *> ImageAliasBase::Visit(Visitor &&visitor) const {
+	switch (GetState()) {
+	case AliasState::kRaw:
+		return visitor(static_cast<const RawImageAlias *>(this));
+	case AliasState::kOutput:
+		return visitor(static_cast<const OutputImageAlias *>(this));
+	}
+	assert(false);
+	return visitor(static_cast<const RawImageAlias *>(nullptr));
+}
+
+template <typename Visitor>
+std::invoke_result_t<Visitor, const RawBufferAlias *> BufferAliasBase::Visit(Visitor &&visitor) const {
+	switch (GetState()) {
+	case AliasState::kRaw:
+		return visitor(static_cast<const RawBufferAlias *>(this));
+	case AliasState::kOutput:
+		return visitor(static_cast<const OutputBufferAlias *>(this));
+	}
+	assert(false);
+	return visitor(static_cast<const RawBufferAlias *>(nullptr));
+}
 
 } // namespace myvk_rg::interface
 
