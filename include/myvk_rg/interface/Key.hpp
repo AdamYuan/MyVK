@@ -78,12 +78,16 @@ private:
 
 public:
 	inline GlobalKey() = default;
+	inline GlobalKey(std::vector<PoolKey> &&keys) : m_keys{std::move(keys)} {}
 	inline GlobalKey(const PoolKey &pool_key) { m_keys.push_back(pool_key); }
 	inline GlobalKey(const GlobalKey &global_key, const PoolKey &pool_key) : m_keys(global_key.m_keys) {
 		m_keys.push_back(pool_key);
 	}
 	inline GlobalKey(GlobalKey &&global_key, const PoolKey &pool_key) : m_keys(std::move(global_key.m_keys)) {
 		m_keys.push_back(pool_key);
+	}
+	inline GlobalKey GetPrefix() const {
+		return m_keys.empty() ? GlobalKey{} : GlobalKey{{m_keys.begin(), m_keys.end() - 1}};
 	}
 	inline bool operator<(const GlobalKey &r) const { return m_keys < r.m_keys; }
 	inline bool operator>(const GlobalKey &r) const { return m_keys > r.m_keys; }

@@ -24,9 +24,13 @@ protected:
 	template <typename Type, typename... Args,
 	          typename = std::enable_if_t<std::is_base_of_v<BufferBase, Type> || std::is_base_of_v<ImageBase, Type>>>
 	inline Type *CreateResource(const PoolKey &resource_key, Args &&...args) {
+		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResourceChanged);
 		return PoolBase::template Construct<Type>(resource_key, std::forward<Args>(args)...);
 	}
-	inline void DeleteResource(const PoolKey &resource_key) { return PoolBase::Delete(resource_key); }
+	inline void DeleteResource(const PoolKey &resource_key) {
+		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResourceChanged);
+		return PoolBase::Delete(resource_key);
+	}
 
 	template <typename BufferType = BufferBase, typename = std::enable_if_t<std::is_base_of_v<BufferBase, BufferType> ||
 	                                                                        std::is_same_v<BufferBase, BufferType>>>
@@ -44,7 +48,10 @@ protected:
 	inline ResourceType *GetResource(const PoolKey &resource_image_key) const {
 		return PoolBase::template Get<ResourceType>(resource_image_key);
 	}
-	inline void ClearResources() { PoolBase::Clear(); }
+	inline void ClearResources() {
+		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResourceChanged);
+		PoolBase::Clear();
+	}
 };
 
 } // namespace myvk_rg::interface

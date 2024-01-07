@@ -7,58 +7,60 @@
 #include <myvk_rg/interface/Pool.hpp>
 #include <myvk_rg/interface/Resource.hpp>
 
-TEST_CASE("Test Key") {
-	using myvk_rg::interface::GlobalKey;
-	using myvk_rg::interface::PoolKey;
-	PoolKey key0 = {"pass", 0};
-	PoolKey key1 = {"albedo_tex"};
-	GlobalKey global_key0 = GlobalKey{GlobalKey{key0}, key1};
-	GlobalKey global_key1 = GlobalKey{GlobalKey{key0}, key1};
-	CHECK_EQ(global_key0.Format(), "pass:0.albedo_tex");
-	CHECK_EQ(key0.Format(), "pass:0");
-	CHECK((key0 != key1));
-	CHECK((GlobalKey{global_key0, key0} != global_key0));
-	CHECK((global_key0 == global_key1));
-}
+TEST_SUITE("Interface") {
+	TEST_CASE("Test Key") {
+		using myvk_rg::interface::GlobalKey;
+		using myvk_rg::interface::PoolKey;
+		PoolKey key0 = {"pass", 0};
+		PoolKey key1 = {"albedo_tex"};
+		GlobalKey global_key0 = GlobalKey{GlobalKey{key0}, key1};
+		GlobalKey global_key1 = GlobalKey{GlobalKey{key0}, key1};
+		CHECK_EQ(global_key0.Format(), "pass:0.albedo_tex");
+		CHECK_EQ(key0.Format(), "pass:0");
+		CHECK((key0 != key1));
+		CHECK((GlobalKey{global_key0, key0} != global_key0));
+		CHECK((global_key0 == global_key1));
+	}
 
-TEST_CASE("Test Pool Data") {
-	using namespace myvk_rg::interface;
+	TEST_CASE("Test Pool Data") {
+		using namespace myvk_rg::interface;
 
-	Wrapper<int> int_wrapper;
-	CHECK_EQ(*int_wrapper.Construct<int>(10), 10);
-	CHECK_EQ(*int_wrapper.Get<int>(), 10);
+		Wrapper<int> int_wrapper;
+		CHECK_EQ(*int_wrapper.Construct<int>(10), 10);
+		CHECK_EQ(*int_wrapper.Get<int>(), 10);
 
-	Wrapper<int> i2{std::move(int_wrapper)};
+		Wrapper<int> i2{std::move(int_wrapper)};
 
-	Wrapper<ObjectBase> ifs_wrapper;
-	CHECK(ifs_wrapper.Construct<ManagedBuffer>(Parent{}));
-	CHECK_EQ(ifs_wrapper.Get<ManagedImage>(), nullptr);
-	CHECK(ifs_wrapper.Get<BufferBase>());
-	CHECK(ifs_wrapper.Get<ResourceBase>());
+		Wrapper<ObjectBase> ifs_wrapper;
+		CHECK(ifs_wrapper.Construct<ManagedBuffer>(Parent{}));
+		CHECK_EQ(ifs_wrapper.Get<ManagedImage>(), nullptr);
+		CHECK(ifs_wrapper.Get<BufferBase>());
+		CHECK(ifs_wrapper.Get<ResourceBase>());
 
-	CHECK(std::is_move_constructible_v<Value<ManagedBuffer>>);
-	CHECK(std::is_move_assignable_v<Value<ManagedBuffer>>);
-	CHECK(std::is_copy_constructible_v<Value<ManagedBuffer>>);
-	CHECK(std::is_copy_assignable_v<Value<ManagedBuffer>>);
+		CHECK(std::is_move_constructible_v<Value<ManagedBuffer>>);
+		CHECK(std::is_move_assignable_v<Value<ManagedBuffer>>);
+		CHECK(std::is_copy_constructible_v<Value<ManagedBuffer>>);
+		CHECK(std::is_copy_assignable_v<Value<ManagedBuffer>>);
 
-	CHECK(std::is_move_constructible_v<Value<ObjectBase>>);
-	CHECK(std::is_move_assignable_v<Value<ObjectBase>>);
-	CHECK_FALSE(std::is_copy_constructible_v<Value<ObjectBase>>);
-	CHECK_FALSE(std::is_copy_assignable_v<Value<ObjectBase>>);
+		CHECK(std::is_move_constructible_v<Value<ObjectBase>>);
+		CHECK(std::is_move_assignable_v<Value<ObjectBase>>);
+		CHECK_FALSE(std::is_copy_constructible_v<Value<ObjectBase>>);
+		CHECK_FALSE(std::is_copy_assignable_v<Value<ObjectBase>>);
 
-	Wrapper<Variant<int, double, ResourceBase>> var_wrapper;
-	CHECK(var_wrapper.Construct<ManagedBuffer>(Parent{}));
-	CHECK_EQ(var_wrapper.Get<int>(), nullptr);
-	CHECK_EQ(var_wrapper.Get<ManagedImage>(), nullptr);
-	CHECK(var_wrapper.Get<ObjectBase>());
-	CHECK(var_wrapper.Get<BufferBase>());
+		Wrapper<Variant<int, double, ResourceBase>> var_wrapper;
+		CHECK(var_wrapper.Construct<ManagedBuffer>(Parent{}));
+		CHECK_EQ(var_wrapper.Get<int>(), nullptr);
+		CHECK_EQ(var_wrapper.Get<ManagedImage>(), nullptr);
+		CHECK(var_wrapper.Get<ObjectBase>());
+		CHECK(var_wrapper.Get<BufferBase>());
 
-	CHECK_EQ(*var_wrapper.Construct<int>(2), 2);
-	CHECK_EQ(var_wrapper.Get<BufferBase>(), nullptr);
-	CHECK_EQ(var_wrapper.Get<double>(), nullptr);
-	CHECK_EQ(*var_wrapper.Get<int>(), 2);
-	*var_wrapper.Get<int>() = 3;
-	CHECK_EQ(*var_wrapper.Get<int>(), 3);
+		CHECK_EQ(*var_wrapper.Construct<int>(2), 2);
+		CHECK_EQ(var_wrapper.Get<BufferBase>(), nullptr);
+		CHECK_EQ(var_wrapper.Get<double>(), nullptr);
+		CHECK_EQ(*var_wrapper.Get<int>(), 2);
+		*var_wrapper.Get<int>() = 3;
+		CHECK_EQ(*var_wrapper.Get<int>(), 3);
+	}
 }
 
 #include <myvk_rg/RenderGraph.hpp>
@@ -133,7 +135,7 @@ public:
 
 		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass2->GetImageOutput(), format);
 
-		lf_image->SetCurrentResource(dim_pass->GetImageOutput());
+		lf_image->SetPointedAlias(dim_pass->GetImageOutput());
 
 		AddResult({"final"}, dim_pass->GetImageOutput());
 	}
@@ -150,20 +152,44 @@ public:
 };
 
 #include "../../src/rg/executor/default/Collection.hpp"
-TEST_CASE("Test Default Collector") {
+#include "../../src/rg/executor/default/Graph.hpp"
+TEST_SUITE("Default Executor") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
-	auto res = Collection::Create(*render_graph);
-	CHECK(res.IsOK());
-	Collection c = res.PopValue();
-	printf("PASSES:\n");
-	for (const auto &it : c.GetPasses())
-		printf("%s\n", it.first.Format().c_str());
-	printf("INPUTS:\n");
-	for (const auto &it : c.GetInputs()) {
-		printf("%s -> %d, %s\n", it.first.Format().c_str(), static_cast<int>(it.second->GetInput().GetState()),
-		       it.second->GetInput().GetSourceKey().Format().c_str());
+
+	Collection collection;
+	TEST_CASE("Test Collection") {
+		auto res = Collection::Create(*render_graph);
+		CHECK_MESSAGE(res.IsOK(), res.PopError().Format());
+		collection = res.PopValue();
+		printf("PASSES:\n");
+		for (const auto &it : collection.GetPasses())
+			printf("%s\n", it.first.Format().c_str());
+		printf("INPUTS:\n");
+		for (const auto &it : collection.GetInputs()) {
+			printf("%s -> %d, %s\n", it.first.Format().c_str(), static_cast<int>(it.second->GetInputAlias().GetState()),
+			       it.second->GetInputAlias().GetSourceKey().Format().c_str());
+		}
+		printf("RESOURCES:\n");
+		for (const auto &it : collection.GetResources())
+			printf("%s\n", it.first.Format().c_str());
 	}
-	printf("RESOURCES:\n");
-	for (const auto &it : c.GetResources())
-		printf("%s\n", it.first.Format().c_str());
+
+	Graph graph;
+	TEST_CASE("Test Graph") {
+		auto res = Graph::Create({.render_graph = *render_graph, .collection = collection});
+		CHECK_MESSAGE(res.IsOK(), res.PopError().Format());
+		graph = res.PopValue();
+
+		printf("PASS NODES:\n");
+		for (const auto &it : graph.GetPassNodes()) {
+			printf("\t%s:\n", it.first->GetGlobalKey().Format().c_str());
+			printf("\tInputs:\n");
+			for (const auto &in : it.second.input_nodes)
+				printf("\t\t%zu, %s\n", in->source_node.index(),
+				       in->p_input->GetInputAlias().GetSourceKey().Format().c_str());
+			printf("\tOutputs:\n");
+			for (const auto &in : it.second.output_nodes)
+				printf("\t\t%s\n", in->p_input->GetInputAlias().GetSourceKey().Format().c_str());
+		}
+	}
 }

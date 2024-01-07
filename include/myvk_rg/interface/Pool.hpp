@@ -87,7 +87,7 @@ public:
 	template <typename TypeToCons, typename... Args, typename = std::enable_if_t<kCanConstruct<TypeToCons>>>
 	inline TypeToCons *Construct(Args &&...args) {
 		constexpr auto kIndex = GetConstructIndex<TypeToCons>();
-		m_variant.template emplace<TypeAt<kIndex>>();
+		m_variant.template emplace<Value<TypeAt<kIndex>>>();
 		return std::visit(
 		    [&](auto &v) -> TypeToCons * {
 			    if constexpr (std::decay_t<decltype(v)>::template kCanConstruct<TypeToCons>)

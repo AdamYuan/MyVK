@@ -83,6 +83,8 @@ public:
 	inline OutputImageAlias() = default;
 	OutputImageAlias(const ImageInput *image_input);
 
+	inline GlobalKey GetSourcePassKey() const { return GetSourceKey().GetPrefix(); }
+
 	inline ResourceType GetType() const { return ResourceType::kImage; }
 	inline AliasState GetState() const { return AliasState::kOutput; }
 	inline AliasClass GetClass() const { return AliasClass::kOutputImage; }
@@ -119,6 +121,8 @@ public:
 	inline ~OutputBufferAlias() final = default;
 	inline OutputBufferAlias() = default;
 	OutputBufferAlias(const BufferInput *buffer_input);
+
+	inline GlobalKey GetSourcePassKey() const { return GetSourceKey().GetPrefix(); }
 
 	inline ResourceType GetType() const { return ResourceType::kBuffer; }
 	inline AliasState GetState() const { return AliasState::kOutput; }
@@ -164,6 +168,12 @@ std::invoke_result_t<Visitor, const RawBufferAlias *> BufferAliasBase::Visit(Vis
 	assert(false);
 	return visitor(static_cast<const RawBufferAlias *>(nullptr));
 }
+
+template <typename T>
+concept RawAlias = std::same_as<T, RawBufferAlias> || std::same_as<T, RawImageAlias>;
+
+template <typename T>
+concept OutputAlias = std::same_as<T, OutputBufferAlias> || std::same_as<T, OutputImageAlias>;
 
 } // namespace myvk_rg::interface
 

@@ -11,6 +11,8 @@ enum class Event {
 
 	kPassChanged,
 
+	kResourceChanged,
+
 	kRenderAreaChanged,
 
 	kUpdatePipeline,

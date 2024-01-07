@@ -1,6 +1,8 @@
 #ifndef MYVK_RG_PASS_HPP
 #define MYVK_RG_PASS_HPP
 
+#include <concepts>
+
 #include "InputPool.hpp"
 #include "ResourcePool.hpp"
 
@@ -160,6 +162,9 @@ template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> Pa
 	}
 	return visitor(static_cast<const GraphicsPassBase *>(nullptr));
 }
+
+template <typename T>
+concept PassWithInput = !std::same_as<T, PassGroupBase>;
 
 } // namespace myvk_rg::interface
 
