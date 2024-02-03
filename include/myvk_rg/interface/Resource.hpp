@@ -419,7 +419,7 @@ public:
 		m_view_type = view_type;
 		m_images = std::move(images);
 	}
-	inline const std::vector<OutputImageAlias> &GetImages() const { return m_images; }
+	inline const std::vector<OutputImageAlias> &GetSubImages() const { return m_images; }
 	~CombinedImage() override = default;
 };
 
@@ -546,66 +546,8 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 	return visitor(static_cast<const BufferAliasBase *>(nullptr));
 }
 
-template <typename T> struct ResourceTrait;
-template <> struct ResourceTrait<ManagedImage> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kManaged;
-};
-template <> struct ResourceTrait<ExternalImageBase> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kExternal;
-};
-template <> struct ResourceTrait<CombinedImage> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kCombinedImage;
-};
-template <> struct ResourceTrait<LastFrameImage> {
-	static constexpr ResourceType kType = ResourceType::kImage;
-	static constexpr ResourceState kState = ResourceState::kLastFrame;
-};
-
-template <> struct ResourceTrait<ManagedBuffer> {
-	static constexpr ResourceType kType = ResourceType::kBuffer;
-	static constexpr ResourceState kState = ResourceState::kManaged;
-};
-template <> struct ResourceTrait<ExternalBufferBase> {
-	static constexpr ResourceType kType = ResourceType::kBuffer;
-	static constexpr ResourceState kState = ResourceState::kExternal;
-};
-template <> struct ResourceTrait<LastFrameBuffer> {
-	static constexpr ResourceType kType = ResourceType::kBuffer;
-	static constexpr ResourceState kState = ResourceState::kLastFrame;
-};
-
-// Used in Visit function
-template <typename RawType> class ResourceVisitorTrait {
-private:
-	using Type = std::decay_t<std::remove_pointer_t<std::decay_t<RawType>>>;
-
-public:
-	static constexpr ResourceType kType = ResourceTrait<Type>::kType;
-	static constexpr ResourceState kState = ResourceTrait<Type>::kState;
-	static constexpr ResourceClass kClass = MakeResourceClass(kType, kState);
-	static constexpr bool kIsCombinedOrManagedImage =
-	    kClass == ResourceClass::kCombinedImage || kClass == ResourceClass::kManagedImage;
-	static constexpr bool kIsLastFrame = kState == ResourceState::kLastFrame;
-	static constexpr bool kIsInternal = kState == ResourceState::kManaged || kState == ResourceState::kCombinedImage;
-	static constexpr bool kIsExternal = kState == ResourceState::kExternal;
-};
-
-class ImageBase;
-class BufferBase;
-template <typename RawType> class ResourceTrait {
-private:
-	using Type = std::decay_t<std::remove_pointer_t<std::decay_t<RawType>>>;
-	template <typename Base>
-	static constexpr bool kIsBaseOf = std::is_same_v<Base, Type> || std::is_base_of_v<Base, Type>;
-
-public:
-	static constexpr bool kIsResource = kIsBaseOf<ResourceBase>;
-	static constexpr bool kIsImage = kIsBaseOf<ImageBase>;
-	static constexpr bool kIsBuffer = kIsBaseOf<BufferBase>;
-};
+template <typename T>
+concept LastFrameResource = std::same_as<T, LastFrameBuffer> || std::same_as<T, LastFrameImage>;
 
 } // namespace myvk_rg::interface
 

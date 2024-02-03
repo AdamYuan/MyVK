@@ -152,7 +152,7 @@ public:
 };
 
 #include "../../src/rg/executor/default/Collection.hpp"
-#include "../../src/rg/executor/default/Graph.hpp"
+#include "../../src/rg/executor/default/Dependency.hpp"
 TEST_SUITE("Default Executor") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
 
@@ -174,9 +174,9 @@ TEST_SUITE("Default Executor") {
 			printf("%s\n", it.first.Format().c_str());
 	}
 
-	Graph graph;
+	Dependency graph;
 	TEST_CASE("Test Graph") {
-		auto res = Graph::Create({.render_graph = *render_graph, .collection = collection});
+		auto res = Dependency::Create({.render_graph = *render_graph, .collection = collection});
 		CHECK_MESSAGE(res.IsOK(), res.PopError().Format());
 		graph = res.PopValue();
 

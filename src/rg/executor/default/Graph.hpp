@@ -1,55 +1,43 @@
+//
+// Created by adamyuan on 2/4/24.
+//
+
 #pragma once
-#ifndef MYVK_RG_EXE_DEFAULT_GRAPH_HPP
-#define MYVK_RG_EXE_DEFAULT_GRAPH_HPP
+#ifndef MYVK_GRAPH_HPP
+#define MYVK_GRAPH_HPP
 
-#include "Collection.hpp"
-
+#include <cinttypes>
+#include <optional>
 #include <unordered_map>
-#include <variant>
+#include <vector>
 
+template <typename VertexID_T, typename Edge_T, template <typename, typename> typename Map = std::unordered_map>
 class Graph {
-public:
-	struct Args {
-		const RenderGraphBase &render_graph;
-		const Collection &collection;
-	};
-
-	struct PassNode;
-	struct ResourceNode;
-	struct AccessNode {
-		const InputBase *p_input;
-
-		std::variant<const PassNode *, const ResourceNode *> source_node;
-		const PassNode *dest_node;
-	};
-	struct PassNode {
-		const PassBase *p_pass;
-
-		std::vector<const AccessNode *> input_nodes, output_nodes;
-	};
-	struct ResourceNode {
-		const ResourceBase *p_resource;
-
-		const ResourceNode *opt_parent_node;
-		std::vector<const ResourceNode *> child_nodes;
-
-		const AccessNode *opt_lf_node;
-		std::vector<const AccessNode *> init_nodes;
-	};
-
 private:
-	std::unordered_map<const ResourceBase *, ResourceNode> m_resource_nodes;
-	std::unordered_map<const PassBase *, PassNode> m_pass_nodes;
-	std::unordered_map<const InputBase *, AccessNode> m_access_nodes;
-
-	CompileResult<PassNode *> fetch_passes(const Args &args, const PassBase *p_pass);
+	struct VertexInfo {
+		std::vector<std::size_t> in, out;
+	};
+	struct EdgeInfo {
+		Edge_T e;
+		VertexID_T from, to;
+	};
+	Map<VertexID_T, VertexInfo> m_vertices;
+	std::vector<std::optional<EdgeInfo>> m_edges;
 
 public:
-	static CompileResult<Graph> Create(const Args &args);
-
-	inline const auto &GetResourceNodes() const { return m_resource_nodes; }
-	inline const auto &GetPassNodes() const { return m_pass_nodes; }
-	inline const auto &GetAccessNodes() const { return m_access_nodes; }
+	std::size_t AddEdge(VertexID_T from, VertexID_T to, Edge_T edge) {
+		std::size_t edge_id = m_edges.size();
+		m_edges.push_back(EdgeInfo{
+		    .e = std::move(edge),
+		    .from = from,
+		    .to = to,
+		});
+		m_vertices[from].out.push_back(edge_id);
+		m_vertices[to].in.push_back(edge_id);
+		return edge_id;
+	}
+	void RemoveEdge(std::size_t edge_id) { m_edges[edge_id] = std::nullopt; }
+	bool HasVertex(VertexID_T vertex) const { return m_vertices.count(vertex); }
 };
 
 #endif // MYVK_GRAPH_HPP
