@@ -174,22 +174,45 @@ TEST_SUITE("Default Executor") {
 			printf("%s\n", it.first.Format().c_str());
 	}
 
-	Dependency graph;
-	TEST_CASE("Test Graph") {
+	Dependency dependency;
+	TEST_CASE("Test Dependency") {
 		auto res = Dependency::Create({.render_graph = *render_graph, .collection = collection});
 		CHECK_MESSAGE(res.IsOK(), res.PopError().Format());
-		graph = res.PopValue();
+		dependency = res.PopValue();
 
-		printf("PASS NODES:\n");
-		for (const auto &it : graph.GetPassNodes()) {
-			printf("\t%s:\n", it.first->GetGlobalKey().Format().c_str());
-			printf("\tInputs:\n");
-			for (const auto &in : it.second.input_nodes)
-				printf("\t\t%zu, %s\n", in->source_node.index(),
-				       in->p_input->GetInputAlias().GetSourceKey().Format().c_str());
-			printf("\tOutputs:\n");
-			for (const auto &in : it.second.output_nodes)
-				printf("\t\t%s\n", in->p_input->GetInputAlias().GetSourceKey().Format().c_str());
+		dependency.GetPassGraph().WriteGraphViz(
+		    std::cout, [](const PassBase *p_pass) { return p_pass ? p_pass->GetGlobalKey().Format() : "start"; },
+		    [](const Dependency::PassEdge &e) {
+			    return e.p_resource->GetGlobalKey().Format() + (e.type == Dependency::EdgeType::kLocal ? "" : "(LF)");
+		    });
+
+		dependency.GetResourceGraph().WriteGraphViz(
+		    std::cout, [](const ResourceBase *p_resource) { return p_resource->GetGlobalKey().Format(); },
+		    [](const Dependency::ResourceEdge &e) { return e.type == Dependency::EdgeType::kLocal ? "" : "LF"; });
+
+		{
+			auto kahn_result = dependency.GetPassGraph().KahnTopologicalSort(
+			    [](const Dependency::PassEdge &e) { return e.type == Dependency::EdgeType::kLocal; });
+			CHECK(kahn_result.is_dag);
+			CHECK_EQ(kahn_result.sorted[0], nullptr);
+			for (const auto p_pass : kahn_result.sorted) {
+				std::cout << (p_pass ? p_pass->GetGlobalKey().Format() : "start") << std::endl;
+			}
 		}
+		{
+			auto kahn_result =
+			    dependency.GetPassGraph().KahnTopologicalSort([](const Dependency::PassEdge &e) { return true; });
+			CHECK(!kahn_result.is_dag);
+		}
+		/* for (const auto &it : graph.GetPassNodes()) {
+		    printf("\t%s:\n", it.first->GetGlobalKey().Format().c_str());
+		    printf("\tInputs:\n");
+		    for (const auto &in : it.second.input_nodes)
+		        printf("\t\t%zu, %s\n", in->source_node.index(),
+		               in->p_input->GetInputAlias().GetSourceKey().Format().c_str());
+		    printf("\tOutputs:\n");
+		    for (const auto &in : it.second.output_nodes)
+		        printf("\t\t%s\n", in->p_input->GetInputAlias().GetSourceKey().Format().c_str());
+		} */
 	}
 }

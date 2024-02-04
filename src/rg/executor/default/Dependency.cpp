@@ -7,21 +7,14 @@ CompileResult<Dependency> Dependency::Create(const Args &args) {
 		UNWRAP(it.second.Visit([&](const auto *p_alias) -> CompileResult<void> {
 			const PassBase *p_pass;
 			UNWRAP_ASSIGN(p_pass, args.collection.FindPass(p_alias->GetSourcePassKey()));
-			UNWRAP(g.fetch_passes(args, p_pass));
+			UNWRAP(g.traverse_pass(args, p_pass));
 			return {};
 		}));
 	}
-	for (auto &it : g.m_resource_nodes)
-		UNWRAP(g.fetch_res_relations(args, &(it.second)));
 	return g;
 }
 
-CompileResult<void> Dependency::fetch_res_relations(const Dependency::Args &args,
-                                                    Dependency::ResourceNode *p_res_node) const {
-	return p_res_node->p_resource->Visit(resource_visitor);
-}
-
-CompileResult<void> Dependency::fetch_passes(const Args &args, const PassBase *p_pass) {
+CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 	if (m_pass_graph.HasVertex(p_pass))
 		return {};
 	const auto pass_visitor = overloaded(
@@ -36,15 +29,20 @@ CompileResult<void> Dependency::fetch_passes(const Args &args, const PassBase *p
 				        const InputBase *p_src_input;
 				        UNWRAP_ASSIGN(p_src_input, args.collection.FindInput(p_output_alias->GetSourceKey()));
 
-				        UNWRAP(fetch_passes(args, p_src_pass));
+				        UNWRAP(traverse_pass(args, p_src_pass));
+				        const ResourceBase *p_resource = m_input_2_resource.at(p_src_input);
+				        m_input_2_resource[p_input] = p_resource;
 
-				        m_pass_graph.AddEdge(p_src_pass, p_pass, PassEdge{p_src_input, p_input, nullptr});
+				        m_pass_graph.AddEdge(p_src_pass, p_pass,
+				                             PassEdge{p_src_input, p_input, p_resource, EdgeType::kLocal});
 
 				        return {};
 			        },
 			        [&](const RawAlias auto *p_raw_alias) -> CompileResult<void> {
 				        const ResourceBase *p_resource;
 				        UNWRAP_ASSIGN(p_resource, args.collection.FindResource(p_raw_alias->GetSourceKey()));
+				        m_resource_graph.AddVertex(p_resource);
+				        m_input_2_resource[p_input] = p_resource;
 
 				        UNWRAP(p_resource->Visit(overloaded(
 				            [&](const CombinedImage *p_combined_image) -> CompileResult<void> {
@@ -54,22 +52,40 @@ CompileResult<void> Dependency::fetch_passes(const Args &args, const PassBase *p
 						            const InputBase *p_src_input;
 						            UNWRAP_ASSIGN(p_src_input, args.collection.FindInput(src_alias.GetSourceKey()));
 
-						            UNWRAP(fetch_passes(args, p_src_pass));
+						            UNWRAP(traverse_pass(args, p_src_pass));
+						            const ResourceBase *p_sub_image = m_input_2_resource.at(p_src_input);
 
-						            m_pass_graph.AddEdge(p_src_pass, p_pass, PassEdge{p_src_input, p_input, nullptr});
+						            m_pass_graph.AddEdge(p_src_pass, p_pass,
+						                                 PassEdge{p_src_input, p_input, p_sub_image, EdgeType::kLocal});
+						            m_resource_graph.AddEdge(p_resource, p_sub_image, {EdgeType::kLocal});
 					            }
 					            return {};
 				            },
 				            [&](const LastFrameResource auto *p_lf_resource) -> CompileResult<void> {
-					            m_pass_graph.AddEdge(nullptr, p_pass, PassEdge{nullptr, p_input, p_resource});
+					            m_pass_graph.AddEdge(nullptr, p_pass,
+					                                 PassEdge{nullptr, p_input, p_resource, EdgeType::kLocal});
+
+					            const auto &src_alias = p_lf_resource->GetPointedAlias();
+					            const PassBase *p_src_pass;
+					            UNWRAP_ASSIGN(p_src_pass, args.collection.FindPass(src_alias.GetSourcePassKey()));
+					            const InputBase *p_src_input;
+					            UNWRAP_ASSIGN(p_src_input, args.collection.FindInput(src_alias.GetSourceKey()));
+
+					            UNWRAP(traverse_pass(args, p_src_pass));
+					            const ResourceBase *p_src_resource = m_input_2_resource.at(p_src_input);
+
+					            // Last Frame Edges
+					            m_pass_graph.AddEdge(
+					                p_src_pass, p_pass,
+					                PassEdge{p_src_input, p_input, p_src_resource, EdgeType::kLastFrame});
+					            m_resource_graph.AddEdge(p_resource, p_src_resource, {EdgeType::kLastFrame});
 					            return {};
 				            },
 				            [&](auto &&) -> CompileResult<void> {
-					            m_pass_graph.AddEdge(nullptr, p_pass, PassEdge{nullptr, p_input, p_resource});
+					            m_pass_graph.AddEdge(nullptr, p_pass,
+					                                 PassEdge{nullptr, p_input, p_resource, EdgeType::kLocal});
 					            return {};
 				            })));
-
-				        // TODO: Fetch Combined & LF Resources
 
 				        return {};
 			        })));

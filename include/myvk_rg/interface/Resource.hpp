@@ -479,7 +479,7 @@ public:
 
 	inline void SetPointedAlias(const OutputBufferAlias &buffer_alias) { m_pointed_buffer = buffer_alias; }
 
-	inline const auto &GetCurrentResource() const { return m_pointed_buffer; }
+	inline const auto &GetPointedAlias() const { return m_pointed_buffer; }
 
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
 };

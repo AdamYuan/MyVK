@@ -14,32 +14,33 @@ public:
 		const Collection &collection;
 	};
 
-	struct PassNode;
-	struct ResourceNode;
+	enum class EdgeType { kLocal, kLastFrame };
+
 	struct PassEdge {
 		const InputBase *opt_p_src_input, *p_dst_input;
 		const ResourceBase *p_resource;
+		EdgeType type;
 	};
-	struct ResourceNode {
-		const ResourceBase *p_resource;
-
-		const ResourceNode *opt_parent_node, *opt_lf_node;
-		std::vector<const ResourceNode *> child_nodes;
+	struct ResourceEdge {
+		EdgeType type;
 	};
-
 
 private:
 	Graph<const PassBase *, PassEdge> m_pass_graph;
-	std::unordered_map<const ResourceBase *, ResourceNode> m_resource_nodes;
+	Graph<const ResourceBase *, ResourceEdge> m_resource_graph;
+	std::unordered_map<const InputBase *, const ResourceBase *> m_input_2_resource;
 
-	CompileResult<void> fetch_passes(const Args &args, const PassBase *p_pass);
-	CompileResult<void> fetch_res_relations(const Args &args, ResourceNode *p_res_node) const;
+	CompileResult<void> traverse_pass(const Args &args, const PassBase *p_pass);
+	// CompileResult<void> fetch_res_relations(const Args &args, ResourceNode *p_res_node) const;
 
 public:
 	static CompileResult<Dependency> Create(const Args &args);
 
-	inline const auto &GetResourceNodes() const { return m_resource_nodes; }
+	inline const auto &GetResourceGraph() const { return m_resource_graph; }
 	inline const auto &GetPassGraph() const { return m_pass_graph; }
+	inline const ResourceBase *GetInputResource(const InputBase *p_input) const {
+		return m_input_2_resource.at(p_input);
+	}
 };
 
 #endif // MYVK_GRAPH_HPP
