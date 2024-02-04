@@ -81,6 +81,10 @@ public:
 		return GetEdges([](auto &&) -> bool { return true; });
 	}
 
+	VertexID_T GetFromVertex(std::size_t edge_id) const { return m_edges[edge_id]->from; }
+	VertexID_T GetToVertex(std::size_t edge_id) const { return m_edges[edge_id]->to; }
+	const Edge_T GetEdge(std::size_t edge_id) const { return m_edges[edge_id]->e; }
+
 	auto GetVertices(auto &&filter) const {
 		return m_vertices | std::views::transform([](const std::pair<VertexID_T, VertexInfo> &pair) -> VertexID_T {
 			       return pair.first;

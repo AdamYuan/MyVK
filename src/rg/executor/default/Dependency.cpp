@@ -11,6 +11,7 @@ CompileResult<Dependency> Dependency::Create(const Args &args) {
 			return {};
 		}));
 	}
+	UNWRAP(g.add_war_edges());
 	return g;
 }
 
@@ -95,5 +96,57 @@ CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *
 	    [](const auto *) -> CompileResult<void> { return {}; });
 
 	UNWRAP(p_pass->Visit(pass_visitor));
+	return {};
+}
+
+struct AccessEdgeInfo {
+	std::vector<std::size_t> reads;
+	std::optional<std::size_t> opt_write;
+};
+CompileResult<void> Dependency::add_war_edges() {
+	for (const PassBase *p_pass : m_pass_graph.GetVertices()) {
+		std::unordered_map<const ResourceBase *, AccessEdgeInfo> access_edges;
+
+		for (auto [_, e, edge_id] :
+		     m_pass_graph.GetOutEdges(p_pass, [](const PassEdge &e) { return e.type == EdgeType::kLocal; })) {
+
+			auto &info = access_edges[e.p_resource];
+			if (UsageIsReadOnly(e.p_dst_input->GetUsage()))
+				info.reads.push_back(edge_id);
+			else {
+				// Forbid multiple writes
+				if (info.opt_write)
+					return error::MultipleWrite{.alias = e.p_dst_input->GetInputAlias()};
+				// Forbid writes to last frame resource
+				if (e.p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame)
+					return error::WriteToLastFrame{.alias = e.p_dst_input->GetInputAlias(),
+					                               .pass_key = p_pass->GetGlobalKey()};
+
+				info.opt_write = edge_id;
+			}
+		}
+
+		for (const auto &[p_resource, info] : access_edges) {
+			// If no writes or no reads, skip
+			if (!info.opt_write || info.reads.empty())
+				continue;
+
+			std::size_t write_id = *info.opt_write;
+
+			// Remove direct write edge
+			m_pass_graph.RemoveEdge(write_id);
+
+			// Add edges from read to write
+			for (std::size_t read_id : info.reads) {
+				m_pass_graph.AddEdge(m_pass_graph.GetToVertex(read_id), m_pass_graph.GetToVertex(write_id),
+				                     PassEdge{
+				                         .opt_p_src_input = m_pass_graph.GetEdge(read_id).p_dst_input,
+				                         .p_dst_input = m_pass_graph.GetEdge(write_id).p_dst_input,
+				                         .p_resource = p_resource,
+				                         .type = EdgeType::kLocal,
+				                     });
+			}
+		}
+	}
 	return {};
 }

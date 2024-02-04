@@ -31,6 +31,7 @@ private:
 	std::unordered_map<const InputBase *, const ResourceBase *> m_input_2_resource;
 
 	CompileResult<void> traverse_pass(const Args &args, const PassBase *p_pass);
+	CompileResult<void> add_war_edges(); // Write-After-Read Edges
 	// CompileResult<void> fetch_res_relations(const Args &args, ResourceNode *p_res_node) const;
 
 public:

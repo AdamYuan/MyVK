@@ -43,6 +43,19 @@ struct AliasNoMatch {
 		       std::to_string(static_cast<int>(actual_type));
 	}
 };
+struct WriteToLastFrame {
+	AliasBase alias;
+	GlobalKey pass_key;
+	inline std::string Format() const {
+		return "Write to last frame source " + alias.GetSourceKey().Format() + " in pass " + pass_key.Format();
+	}
+};
+struct MultipleWrite {
+	AliasBase alias;
+	inline std::string Format() const {
+		return "Alias souce " + alias.GetSourceKey().Format() + " is written multiple times";
+	}
+};
 
 } // namespace error
 
@@ -62,7 +75,7 @@ public:
 
 using CompileError = Error<error::NullResource, error::NullInput, error::NullPass,             //
                            error::ResourceNotFound, error::InputNotFound, error::PassNotFound, //
-                           error::AliasNoMatch                                                 //
+                           error::AliasNoMatch, error::WriteToLastFrame, error::MultipleWrite  //
                            >;
 
 template <typename Type, typename ErrorType> class Result {
