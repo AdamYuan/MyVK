@@ -7,6 +7,8 @@
 #include "../ErrorMacro.hpp"
 #include <myvk_rg/interface/RenderGraph.hpp>
 
+#include "Info.hpp"
+
 using namespace myvk_rg::interface;
 
 class Collection {
@@ -14,10 +16,13 @@ private:
 	std::map<GlobalKey, const PassBase *> m_passes;
 	std::map<GlobalKey, const InputBase *> m_inputs;
 	std::map<GlobalKey, const ResourceBase *> m_resources;
+	std::vector<PassInfo> m_pass_infos;
+	std::vector<ResourceInfo> m_resource_infos;
 
 	template <typename Container> CompileResult<void> collect_resources(const Container &pool);
 	template <typename Container> CompileResult<void> collect_passes(const Container &pool);
 	template <typename Container> CompileResult<void> collect_inputs(const Container &pool);
+	void make_infos();
 
 public:
 	static CompileResult<Collection> Create(const RenderGraphBase &rg);

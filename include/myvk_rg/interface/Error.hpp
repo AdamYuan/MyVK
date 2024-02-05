@@ -56,6 +56,9 @@ struct MultipleWrite {
 		return "Alias souce " + alias.GetSourceKey().Format() + " is written multiple times";
 	}
 };
+struct CycleExist {
+	inline std::string Format() const { return "Cycle dependencies in Render Graph"; }
+};
 
 } // namespace error
 
@@ -75,8 +78,8 @@ public:
 
 using CompileError = Error<error::NullResource, error::NullInput, error::NullPass,             //
                            error::ResourceNotFound, error::InputNotFound, error::PassNotFound, //
-                           error::AliasNoMatch, error::WriteToLastFrame, error::MultipleWrite  //
-                           >;
+                           error::AliasNoMatch, error::WriteToLastFrame, error::MultipleWrite, //
+                           error::CycleExist>;
 
 template <typename Type, typename ErrorType> class Result {
 private:

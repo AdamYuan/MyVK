@@ -25,6 +25,7 @@ private:
 	RenderGraphBase *m_p_render_graph{};
 	const ObjectBase *m_p_parent_object{};
 	const PoolKey *m_p_key{};
+	mutable void *m_p_executor_info{};
 
 public:
 	inline explicit ObjectBase(Parent parent) : m_p_key{parent.p_pool_key} {
@@ -43,6 +44,9 @@ public:
 		return m_p_parent_object ? GlobalKey{m_p_parent_object->GetGlobalKey(), *m_p_key} : GlobalKey{*m_p_key};
 	}
 	void EmitEvent(Event event) const;
+
+	inline void __SetPExecutorInfo(void *p_info) const { m_p_executor_info = p_info; }
+	template <typename T> inline T *__GetPExecutorInfo() const { return (T *)m_p_executor_info; }
 };
 
 } // namespace myvk_rg::interface

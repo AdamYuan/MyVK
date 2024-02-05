@@ -12,6 +12,8 @@ CompileResult<Dependency> Dependency::Create(const Args &args) {
 		}));
 	}
 	UNWRAP(g.add_war_edges());
+	UNWRAP(g.topo_sort_pass());
+
 	return g;
 }
 
@@ -107,9 +109,7 @@ CompileResult<void> Dependency::add_war_edges() {
 	for (const PassBase *p_pass : m_pass_graph.GetVertices()) {
 		std::unordered_map<const ResourceBase *, AccessEdgeInfo> access_edges;
 
-		for (auto [_, e, edge_id] :
-		     m_pass_graph.GetOutEdges(p_pass, [](const PassEdge &e) { return e.type == EdgeType::kLocal; })) {
-
+		for (auto [_, e, edge_id] : m_pass_graph.GetOutEdges(p_pass, kLocalEdgeFilter)) {
 			auto &info = access_edges[e.p_resource];
 			if (UsageIsReadOnly(e.p_dst_input->GetUsage()))
 				info.reads.push_back(edge_id);
@@ -148,5 +148,23 @@ CompileResult<void> Dependency::add_war_edges() {
 			}
 		}
 	}
+	return {};
+}
+
+CompileResult<void> Dependency::topo_sort_pass() {
+	auto kahn_result = m_pass_graph.KahnTopologicalSort(
+	    [](const Dependency::PassEdge &e) { return e.type == Dependency::EdgeType::kLocal; },
+	    std::initializer_list<const PassBase *>{nullptr});
+
+	if (!kahn_result.is_dag)
+		return error::CycleExist{};
+
+	m_topo_sorted_passes = std::move(kahn_result.sorted);
+	m_topo_sorted_passes.erase(m_topo_sorted_passes.begin()); // Delete the first nullptr pass
+
+	// Assign topo-order to passes
+	for (uint32_t topo_order = 0; const PassBase *p_pass : m_topo_sorted_passes)
+		GetPassInfo(p_pass).dependency.topo_order = topo_order++;
+
 	return {};
 }

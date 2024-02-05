@@ -181,7 +181,12 @@ TEST_SUITE("Default Executor") {
 		dependency = res.PopValue();
 
 		dependency.GetPassGraph().WriteGraphViz(
-		    std::cout, [](const PassBase *p_pass) { return p_pass ? p_pass->GetGlobalKey().Format() : "start"; },
+		    std::cout,
+		    [](const PassBase *p_pass) {
+			    return p_pass ? p_pass->GetGlobalKey().Format() + ";" +
+			                        std::to_string(Dependency::GetPassTopoOrder(p_pass))
+			                  : "start";
+		    },
 		    [](const Dependency::PassEdge &e) {
 			    return e.p_resource->GetGlobalKey().Format() + (e.type == Dependency::EdgeType::kLocal ? "" : "(LF)");
 		    });
@@ -192,7 +197,8 @@ TEST_SUITE("Default Executor") {
 
 		{
 			auto kahn_result = dependency.GetPassGraph().KahnTopologicalSort(
-			    [](const Dependency::PassEdge &e) { return e.type == Dependency::EdgeType::kLocal; });
+			    [](const Dependency::PassEdge &e) { return e.type == Dependency::EdgeType::kLocal; },
+			    std::initializer_list<const PassBase *>{nullptr});
 			CHECK(kahn_result.is_dag);
 			CHECK_EQ(kahn_result.sorted[0], nullptr);
 			for (const auto p_pass : kahn_result.sorted) {
@@ -200,8 +206,8 @@ TEST_SUITE("Default Executor") {
 			}
 		}
 		{
-			auto kahn_result =
-			    dependency.GetPassGraph().KahnTopologicalSort([](const Dependency::PassEdge &e) { return true; });
+			auto kahn_result = dependency.GetPassGraph().KahnTopologicalSort(
+			    [](const Dependency::PassEdge &e) { return true; }, std::initializer_list<const PassBase *>{nullptr});
 			CHECK(!kahn_result.is_dag);
 		}
 		/* for (const auto &it : graph.GetPassNodes()) {

@@ -14,7 +14,7 @@ void Graph<VertexID_T, Edge_T>::WriteGraphViz(std::ostream &out, auto &&vertex_n
 
 template <typename VertexID_T, typename Edge_T>
 Graph<VertexID_T, Edge_T>::KahnTopologicalSortResult
-Graph<VertexID_T, Edge_T>::KahnTopologicalSort(auto &&edge_filter) const {
+Graph<VertexID_T, Edge_T>::KahnTopologicalSort(auto &&edge_filter, std::span<const VertexID_T> start_vertices) const {
 	std::vector<VertexID_T> sorted;
 
 	Map<VertexID_T, std::size_t> in_degrees;
@@ -25,9 +25,15 @@ Graph<VertexID_T, Edge_T>::KahnTopologicalSort(auto &&edge_filter) const {
 	}
 
 	std::queue<VertexID_T> queue;
-	for (auto it : in_degrees)
-		if (it.second == 0)
-			queue.push(it.first);
+	if (start_vertices.empty()) {
+		for (auto [vert, in_deg] : in_degrees)
+			if (in_deg == 0)
+				queue.push(vert);
+	} else {
+		for (auto vert : start_vertices)
+			if (in_degrees.at(vert) == 0)
+				queue.push(vert);
+	}
 
 	while (!queue.empty()) {
 		VertexID_T vertex = queue.front();

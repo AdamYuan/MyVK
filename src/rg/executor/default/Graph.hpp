@@ -83,7 +83,8 @@ public:
 
 	VertexID_T GetFromVertex(std::size_t edge_id) const { return m_edges[edge_id]->from; }
 	VertexID_T GetToVertex(std::size_t edge_id) const { return m_edges[edge_id]->to; }
-	const Edge_T GetEdge(std::size_t edge_id) const { return m_edges[edge_id]->e; }
+	const Edge_T &GetEdge(std::size_t edge_id) const { return m_edges[edge_id]->e; }
+	Edge_T &GetEdge(std::size_t edge_id) { return m_edges[edge_id]->e; }
 
 	auto GetVertices(auto &&filter) const {
 		return m_vertices | std::views::transform([](const std::pair<VertexID_T, VertexInfo> &pair) -> VertexID_T {
@@ -103,7 +104,8 @@ public:
 		std::vector<VertexID_T> sorted;
 		bool is_dag;
 	};
-	KahnTopologicalSortResult KahnTopologicalSort(auto &&edge_filter) const;
+	KahnTopologicalSortResult KahnTopologicalSort(auto &&edge_filter,
+	                                              std::span<const VertexID_T> start_vertices = {}) const;
 };
 
 #include "Graph.tpp"
