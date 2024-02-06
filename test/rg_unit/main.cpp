@@ -156,6 +156,12 @@ public:
 TEST_SUITE("Default Executor") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
 
+	using default_executor::Collection;
+	using default_executor::Dependency;
+
+	using myvk_rg::interface::PassBase;
+	using myvk_rg::interface::ResourceBase;
+
 	Collection collection;
 	TEST_CASE("Test Collection") {
 		auto res = Collection::Create(*render_graph);

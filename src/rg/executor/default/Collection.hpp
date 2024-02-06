@@ -9,6 +9,8 @@
 
 #include "Info.hpp"
 
+namespace default_executor {
+
 using namespace myvk_rg::interface;
 
 class Collection {
@@ -92,5 +94,7 @@ public:
 	        });
 	} */
 };
+
+} // namespace myvk_rg::executor
 
 #endif

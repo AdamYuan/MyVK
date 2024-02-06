@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <vector>
 
+namespace myvk_rg::executor {
+
 template <typename VertexID_T, typename Edge_T> class Graph {
 private:
 	template <typename K, typename V> using Map = std::unordered_map<K, V>;
@@ -107,6 +109,8 @@ public:
 	KahnTopologicalSortResult KahnTopologicalSort(auto &&edge_filter,
 	                                              std::span<const VertexID_T> start_vertices = {}) const;
 };
+
+} // namespace myvk_rg::executor
 
 #include "Graph.tpp"
 

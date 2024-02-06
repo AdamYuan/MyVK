@@ -1,11 +1,16 @@
 #ifndef MYVK_RG_EXE_DEFAULT_GRAPH_HPP
 #define MYVK_RG_EXE_DEFAULT_GRAPH_HPP
 
+#include "../Graph.hpp"
 #include "Collection.hpp"
-#include "Graph.hpp"
 
 #include <unordered_map>
 #include <variant>
+
+namespace default_executor {
+
+using namespace myvk_rg::interface;
+using namespace myvk_rg::executor;
 
 class Dependency {
 public:
@@ -46,8 +51,15 @@ public:
 	inline const ResourceBase *GetInputResource(const InputBase *p_input) const {
 		return m_input_2_resource.at(p_input);
 	}
-	static inline uint32_t GetPassTopoOrder(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency.topo_order; }
-	inline const PassBase *GetTopoOrderPass(uint32_t topo_order) const { return m_topo_sorted_passes[topo_order]; }
+	static inline uint32_t GetPassTopoOrder(const PassBase *p_pass) {
+		return GetPassInfo(p_pass).dependency.topo_order;
+	}
+	inline const PassBase *GetTopoOrderPass(uint32_t topo_order) const {
+		// +1 to skip the first nullptr
+		return m_topo_sorted_passes[topo_order + 1u];
+	}
 };
+
+} // namespace default_executor
 
 #endif // MYVK_GRAPH_HPP

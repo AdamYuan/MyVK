@@ -1,4 +1,7 @@
 #include <queue>
+#include <iostream>
+
+namespace myvk_rg::executor {
 
 template <typename VertexID_T, typename Edge_T>
 void Graph<VertexID_T, Edge_T>::WriteGraphViz(std::ostream &out, auto &&vertex_name, auto &&edge_label) const {
@@ -52,3 +55,5 @@ Graph<VertexID_T, Edge_T>::KahnTopologicalSort(auto &&edge_filter, std::span<con
 	    .is_dag = is_dag,
 	};
 }
+
+} // namespace myvk_rg::executor

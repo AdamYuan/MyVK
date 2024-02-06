@@ -1,5 +1,7 @@
 #include "Collection.hpp"
 
+namespace default_executor {
+
 CompileResult<Collection> Collection::Create(const RenderGraphBase &rg) {
 	Collection c;
 	UNWRAP(c.collect_resources(rg));
@@ -61,4 +63,6 @@ template <typename Container> CompileResult<void> Collection::collect_passes(con
 		    })));
 	}
 	return {};
+}
+
 }

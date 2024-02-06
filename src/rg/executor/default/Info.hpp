@@ -8,6 +8,8 @@
 
 #include <myvk_rg/interface/RenderGraph.hpp>
 
+namespace default_executor {
+
 using namespace myvk_rg::interface;
 
 struct PassInfo {
@@ -23,5 +25,7 @@ inline PassInfo &GetPassInfo(const PassBase *p_pass) { return *p_pass->__GetPExe
 inline ResourceInfo &GetResourceInfo(const ResourceBase *p_resource) {
 	return *p_resource->__GetPExecutorInfo<ResourceInfo>();
 }
+
+} // namespace myvk_rg::executor
 
 #endif // MYVK_INFO_HPP
