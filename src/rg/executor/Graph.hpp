@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Relation.hpp"
+
 namespace myvk_rg::executor {
 
 template <typename VertexID_T, typename Edge_T> class Graph {
@@ -108,6 +110,8 @@ public:
 	};
 	KahnTopologicalSortResult KahnTopologicalSort(auto &&edge_filter,
 	                                              std::span<const VertexID_T> start_vertices = {}) const;
+
+	Relation TransitiveClosure(auto &&edge_filter, auto &&get_vertex_topo_order, auto &&get_topo_order_vertex) const;
 };
 
 } // namespace myvk_rg::executor

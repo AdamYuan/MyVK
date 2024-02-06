@@ -65,4 +65,4 @@ template <typename Container> CompileResult<void> Collection::collect_passes(con
 	return {};
 }
 
-}
+} // namespace default_executor

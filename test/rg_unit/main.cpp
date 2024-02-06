@@ -167,17 +167,17 @@ TEST_SUITE("Default Executor") {
 		auto res = Collection::Create(*render_graph);
 		CHECK_MESSAGE(res.IsOK(), res.PopError().Format());
 		collection = res.PopValue();
-		printf("PASSES:\n");
+		/* printf("PASSES:\n");
 		for (const auto &it : collection.GetPasses())
-			printf("%s\n", it.first.Format().c_str());
+		    printf("%s\n", it.first.Format().c_str());
 		printf("INPUTS:\n");
 		for (const auto &it : collection.GetInputs()) {
-			printf("%s -> %d, %s\n", it.first.Format().c_str(), static_cast<int>(it.second->GetInputAlias().GetState()),
-			       it.second->GetInputAlias().GetSourceKey().Format().c_str());
+		    printf("%s -> %d, %s\n", it.first.Format().c_str(), static_cast<int>(it.second->GetInputAlias().GetState()),
+		           it.second->GetInputAlias().GetSourceKey().Format().c_str());
 		}
 		printf("RESOURCES:\n");
 		for (const auto &it : collection.GetResources())
-			printf("%s\n", it.first.Format().c_str());
+		    printf("%s\n", it.first.Format().c_str()); */
 	}
 
 	Dependency dependency;
@@ -194,16 +194,19 @@ TEST_SUITE("Default Executor") {
 			                  : "start";
 		    },
 		    [](const Dependency::PassEdge &e) {
-			    return e.p_resource->GetGlobalKey().Format() + (e.type == Dependency::EdgeType::kLocal ? "" : "(LF)");
+			    return e.p_resource->GetGlobalKey().Format() +
+			           (e.type == Dependency::PassEdgeType::kLocal ? "" : "(LF)");
 		    });
 
 		dependency.GetResourceGraph().WriteGraphViz(
 		    std::cout, [](const ResourceBase *p_resource) { return p_resource->GetGlobalKey().Format(); },
-		    [](const Dependency::ResourceEdge &e) { return e.type == Dependency::EdgeType::kLocal ? "" : "LF"; });
+		    [](const Dependency::ResourceEdge &e) {
+			    return e.type == Dependency::ResourceEdgeType::kSubResource ? "SUB" : "LF";
+		    });
 
 		{
 			auto kahn_result = dependency.GetPassGraph().KahnTopologicalSort(
-			    [](const Dependency::PassEdge &e) { return e.type == Dependency::EdgeType::kLocal; },
+			    Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kLocal>,
 			    std::initializer_list<const PassBase *>{nullptr});
 			CHECK(kahn_result.is_dag);
 			CHECK_EQ(kahn_result.sorted[0], nullptr);
@@ -215,6 +218,14 @@ TEST_SUITE("Default Executor") {
 			auto kahn_result = dependency.GetPassGraph().KahnTopologicalSort(
 			    [](const Dependency::PassEdge &e) { return true; }, std::initializer_list<const PassBase *>{nullptr});
 			CHECK(!kahn_result.is_dag);
+		}
+		{
+			printf("Pass Prior:\n");
+			for (std::size_t i = 0; i < dependency.GetPassCount(); ++i) {
+				for (std::size_t j = 0; j < dependency.GetPassCount(); ++j)
+					printf(dependency.IsPassPrior(i, j) ? "1" : "0");
+				printf("\n");
+			}
 		}
 		/* for (const auto &it : graph.GetPassNodes()) {
 		    printf("\t%s:\n", it.first->GetGlobalKey().Format().c_str());

@@ -1,5 +1,5 @@
-#include <queue>
 #include <iostream>
+#include <queue>
 
 namespace myvk_rg::executor {
 
@@ -54,6 +54,23 @@ Graph<VertexID_T, Edge_T>::KahnTopologicalSort(auto &&edge_filter, std::span<con
 	    .sorted = std::move(sorted),
 	    .is_dag = is_dag,
 	};
+}
+
+template <typename VertexID_T, typename Edge_T>
+Relation Graph<VertexID_T, Edge_T>::TransitiveClosure(auto &&edge_filter, auto &&get_vertex_topo_order,
+                                                      auto &&get_topo_order_vertex) const {
+	Relation relation{m_vertices.size(), m_vertices.size()};
+
+	for (std::size_t topo_order = m_vertices.size() - 1; ~topo_order; --topo_order) {
+		for (auto [from, _, _1] : GetInEdges(get_topo_order_vertex(topo_order), edge_filter)) {
+			std::size_t from_topo_order = get_vertex_topo_order(from);
+			// assert(from_topo_order < topo_order)
+			relation.Add(from_topo_order, topo_order);   // from -> cur
+			relation.Apply(topo_order, from_topo_order); // forall x, cur -> x ==> from -> x
+		}
+	}
+
+	return relation;
 }
 
 } // namespace myvk_rg::executor

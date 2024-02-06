@@ -14,7 +14,8 @@ CompileResult<Dependency> Dependency::Create(const Args &args) {
 		}));
 	}
 	UNWRAP(g.add_war_edges());
-	UNWRAP(g.topo_sort_pass());
+	UNWRAP(g.tag_passes());
+	UNWRAP(g.get_pass_relation());
 
 	return g;
 }
@@ -39,7 +40,7 @@ CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *
 				        m_input_2_resource[p_input] = p_resource;
 
 				        m_pass_graph.AddEdge(p_src_pass, p_pass,
-				                             PassEdge{p_src_input, p_input, p_resource, EdgeType::kLocal});
+				                             PassEdge{p_src_input, p_input, p_resource, PassEdgeType::kLocal});
 
 				        return {};
 			        },
@@ -60,15 +61,16 @@ CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *
 						            UNWRAP(traverse_pass(args, p_src_pass));
 						            const ResourceBase *p_sub_image = m_input_2_resource.at(p_src_input);
 
-						            m_pass_graph.AddEdge(p_src_pass, p_pass,
-						                                 PassEdge{p_src_input, p_input, p_sub_image, EdgeType::kLocal});
-						            m_resource_graph.AddEdge(p_resource, p_sub_image, {EdgeType::kLocal});
+						            m_pass_graph.AddEdge(
+						                p_src_pass, p_pass,
+						                PassEdge{p_src_input, p_input, p_sub_image, PassEdgeType::kLocal});
+						            m_resource_graph.AddEdge(p_resource, p_sub_image, {ResourceEdgeType::kSubResource});
 					            }
 					            return {};
 				            },
 				            [&](const LastFrameResource auto *p_lf_resource) -> CompileResult<void> {
 					            m_pass_graph.AddEdge(nullptr, p_pass,
-					                                 PassEdge{nullptr, p_input, p_resource, EdgeType::kLocal});
+					                                 PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
 
 					            const auto &src_alias = p_lf_resource->GetPointedAlias();
 					            const PassBase *p_src_pass;
@@ -82,13 +84,13 @@ CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *
 					            // Last Frame Edges
 					            m_pass_graph.AddEdge(
 					                p_src_pass, p_pass,
-					                PassEdge{p_src_input, p_input, p_src_resource, EdgeType::kLastFrame});
-					            m_resource_graph.AddEdge(p_resource, p_src_resource, {EdgeType::kLastFrame});
+					                PassEdge{p_src_input, p_input, p_src_resource, PassEdgeType::kLastFrame});
+					            m_resource_graph.AddEdge(p_resource, p_src_resource, {ResourceEdgeType::kLastFrame});
 					            return {};
 				            },
 				            [&](auto &&) -> CompileResult<void> {
 					            m_pass_graph.AddEdge(nullptr, p_pass,
-					                                 PassEdge{nullptr, p_input, p_resource, EdgeType::kLocal});
+					                                 PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
 					            return {};
 				            })));
 
@@ -111,7 +113,7 @@ CompileResult<void> Dependency::add_war_edges() {
 	for (const PassBase *p_pass : m_pass_graph.GetVertices()) {
 		std::unordered_map<const ResourceBase *, AccessEdgeInfo> access_edges;
 
-		for (auto [_, e, edge_id] : m_pass_graph.GetOutEdges(p_pass, kLocalEdgeFilter)) {
+		for (auto [_, e, edge_id] : m_pass_graph.GetOutEdges(p_pass, kPassEdgeFilter<PassEdgeType::kLocal>)) {
 			auto &info = access_edges[e.p_resource];
 			if (UsageIsReadOnly(e.p_dst_input->GetUsage()))
 				info.reads.push_back(edge_id);
@@ -145,7 +147,7 @@ CompileResult<void> Dependency::add_war_edges() {
 				                         .opt_p_src_input = m_pass_graph.GetEdge(read_id).p_dst_input,
 				                         .p_dst_input = m_pass_graph.GetEdge(write_id).p_dst_input,
 				                         .p_resource = p_resource,
-				                         .type = EdgeType::kLocal,
+				                         .type = PassEdgeType::kLocal,
 				                     });
 			}
 		}
@@ -153,21 +155,51 @@ CompileResult<void> Dependency::add_war_edges() {
 	return {};
 }
 
-CompileResult<void> Dependency::topo_sort_pass() {
-	auto kahn_result = m_pass_graph.KahnTopologicalSort(
-	    [](const Dependency::PassEdge &e) { return e.type == Dependency::EdgeType::kLocal; },
-	    std::initializer_list<const PassBase *>{nullptr});
+CompileResult<void> Dependency::tag_passes() {
+	auto kahn_result = m_pass_graph.KahnTopologicalSort(kPassEdgeFilter<PassEdgeType::kLocal>,
+	                                                    std::initializer_list<const PassBase *>{nullptr});
 
 	if (!kahn_result.is_dag)
-		return error::CycleExist{};
+		return error::PassCycleExist{};
 
-	m_topo_sorted_passes = std::move(kahn_result.sorted);
-
-	// Assign topo-order to passes
-	for (uint32_t topo_order = 0; const PassBase *p_pass : std::span{m_topo_sorted_passes}.subspan<1>())
+	m_topo_order_passes = std::move(kahn_result.sorted);
+	// Assign topo-order to passes, (skip first nullptr pass)
+	for (std::size_t topo_order = 1u; const PassBase *p_pass : std::span{m_topo_order_passes}.subspan<1>())
 		GetPassInfo(p_pass).dependency.topo_order = topo_order++;
 
 	return {};
 }
 
+CompileResult<void> Dependency::tag_resources() {
+	for (std::size_t id = 0; const ResourceBase *p_resource : m_resource_graph.GetVertices()) {
+		GetResourceInfo(p_resource).dependency.id = id++;
+
+		auto in_edges = m_resource_graph.GetInEdges(p_resource);
+		std::size_t in_edge_count = 0, sub_resource_in_edge_count = 0;
+		for (auto [_, e, _1] : in_edges) {
+			++in_edge_count;
+			sub_resource_in_edge_count += e.type == ResourceEdgeType::kSubResource;
+		}
+
+		if (sub_resource_in_edge_count > 1) {
+			// Resource should not be shared by multiple CombinedImage
+			return error::ResourceMultiParent{.key = p_resource->GetGlobalKey()};
+		}
+		if (p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame && in_edge_count) {
+			// LastFrame Resource should not have parent resource
+			return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
+		}
+	}
+
+	return {};
 }
+
+CompileResult<void> Dependency::get_pass_relation() {
+	m_pass_relation = m_pass_graph.TransitiveClosure(
+	    kPassEdgeFilter<PassEdgeType::kLocal>,
+	    [](const PassBase *p_pass) { return p_pass ? GetPassInfo(p_pass).dependency.topo_order : 0; },
+	    [this](std::size_t topo_order) { return m_topo_order_passes[topo_order]; });
+	return {};
+}
+
+} // namespace default_executor

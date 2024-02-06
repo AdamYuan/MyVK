@@ -29,10 +29,6 @@ private:
 public:
 	static CompileResult<Collection> Create(const RenderGraphBase &rg);
 
-	inline const auto &GetPasses() const { return m_passes; }
-	inline const auto &GetInputs() const { return m_inputs; }
-	inline const auto &GetResources() const { return m_resources; }
-
 	inline CompileResult<const PassBase *> FindPass(const GlobalKey &key) const {
 		auto it = m_passes.find(key);
 		if (it == m_passes.end())
