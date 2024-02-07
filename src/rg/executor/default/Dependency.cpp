@@ -14,8 +14,10 @@ CompileResult<Dependency> Dependency::Create(const Args &args) {
 		}));
 	}
 	UNWRAP(g.add_war_edges());
-	UNWRAP(g.tag_passes());
+	UNWRAP(g.sort_passes());
 	UNWRAP(g.get_pass_relation());
+
+	UNWRAP(g.tag_resources());
 
 	return g;
 }
@@ -110,10 +112,12 @@ struct AccessEdgeInfo {
 	std::optional<std::size_t> opt_write;
 };
 CompileResult<void> Dependency::add_war_edges() {
-	for (const PassBase *p_pass : m_pass_graph.GetVertices()) {
+	auto view = m_pass_graph.MakeView(kAnyFilter, kPassEdgeFilter<PassEdgeType::kLocal>);
+
+	for (const PassBase *p_pass : view.GetVertices()) {
 		std::unordered_map<const ResourceBase *, AccessEdgeInfo> access_edges;
 
-		for (auto [_, e, edge_id] : m_pass_graph.GetOutEdges(p_pass, kPassEdgeFilter<PassEdgeType::kLocal>)) {
+		for (auto [_, e, edge_id] : view.GetOutEdges(p_pass)) {
 			auto &info = access_edges[e.p_resource];
 			if (UsageIsReadOnly(e.p_dst_input->GetUsage()))
 				info.reads.push_back(edge_id);
@@ -155,50 +159,77 @@ CompileResult<void> Dependency::add_war_edges() {
 	return {};
 }
 
-CompileResult<void> Dependency::tag_passes() {
-	auto kahn_result = m_pass_graph.KahnTopologicalSort(kPassEdgeFilter<PassEdgeType::kLocal>,
-	                                                    std::initializer_list<const PassBase *>{nullptr});
+CompileResult<void> Dependency::sort_passes() {
+	// Exclude nullptr Pass, use Local edges only
+	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; },
+	                                  kPassEdgeFilter<PassEdgeType::kLocal>);
+
+	auto kahn_result = view.KahnTopologicalSort();
 
 	if (!kahn_result.is_dag)
 		return error::PassCycleExist{};
 
+	// Assign topo-order to passes
 	m_topo_order_passes = std::move(kahn_result.sorted);
-	// Assign topo-order to passes, (skip first nullptr pass)
-	for (std::size_t topo_order = 1u; const PassBase *p_pass : std::span{m_topo_order_passes}.subspan<1>())
+	for (std::size_t topo_order = 0; const PassBase *p_pass : m_topo_order_passes)
 		GetPassInfo(p_pass).dependency.topo_order = topo_order++;
 
 	return {};
 }
 
 CompileResult<void> Dependency::tag_resources() {
-	for (std::size_t id = 0; const ResourceBase *p_resource : m_resource_graph.GetVertices()) {
-		GetResourceInfo(p_resource).dependency.id = id++;
-
-		auto in_edges = m_resource_graph.GetInEdges(p_resource);
+	/* auto find_trees_result = m_resource_graph.FindTrees(
+	    kResourceEdgeFilter<ResourceEdgeType::kSubResource>, ) for (const ResourceBase *p_resource :
+	                                                                m_resource_graph.GetVertices()) {
 		std::size_t in_edge_count = 0, sub_resource_in_edge_count = 0;
-		for (auto [_, e, _1] : in_edges) {
-			++in_edge_count;
-			sub_resource_in_edge_count += e.type == ResourceEdgeType::kSubResource;
+
+		{ // Get Input Edge Counts
+			auto in_edges = m_resource_graph.GetInEdges(p_resource);
+			for (auto [_, e, _1] : in_edges) {
+				++in_edge_count;
+				sub_resource_in_edge_count += e.type == ResourceEdgeType::kSubResource;
+			}
 		}
 
-		if (sub_resource_in_edge_count > 1) {
+		{ // Validate
 			// Resource should not be shared by multiple CombinedImage
-			return error::ResourceMultiParent{.key = p_resource->GetGlobalKey()};
-		}
-		if (p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame && in_edge_count) {
+			if (sub_resource_in_edge_count > 1)
+				return error::ResourceMultiParent{.key = p_resource->GetGlobalKey()};
+
 			// LastFrame Resource should not have parent resource
-			return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
+			if (p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame && in_edge_count)
+				return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
+		}
+
+		// Assign Physical ID
+		if (sub_resource_in_edge_count == 0) {
+			GetResourceInfo(p_resource).dependency.phys_id = m_phys_id_resources.size();
+			m_phys_id_resources.push_back(p_resource);
+		} else
+			GetResourceInfo(p_resource).dependency.phys_id = -1;
+
+		// Assign Last Frame Pointer
+		if (p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame) {
+			auto [to, _, _1] = m_resource_graph.GetOutEdges(p_resource).front();
+			GetResourceInfo(p_resource).dependency.p_lf_resource = to;
 		}
 	}
+
+	// Assign Root Pointers
+	for (const ResourceBase *p_resource : m_phys_id_resources) {
+	} */
 
 	return {};
 }
 
 CompileResult<void> Dependency::get_pass_relation() {
-	m_pass_relation = m_pass_graph.TransitiveClosure(
-	    kPassEdgeFilter<PassEdgeType::kLocal>,
-	    [](const PassBase *p_pass) { return p_pass ? GetPassInfo(p_pass).dependency.topo_order : 0; },
-	    [this](std::size_t topo_order) { return m_topo_order_passes[topo_order]; });
+	// Exclude nullptr Pass, use Local edges only
+	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; },
+	                                  kPassEdgeFilter<PassEdgeType::kLocal>);
+
+	m_pass_relation =
+	    view.TransitiveClosure([](const PassBase *p_pass) { return GetPassTopoOrder(p_pass); },
+	                           [this](std::size_t topo_order) { return m_topo_order_passes[topo_order]; });
 	return {};
 }
 

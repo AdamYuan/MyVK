@@ -205,9 +205,9 @@ TEST_SUITE("Default Executor") {
 		    });
 
 		{
-			auto kahn_result = dependency.GetPassGraph().KahnTopologicalSort(
-			    Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kLocal>,
-			    std::initializer_list<const PassBase *>{nullptr});
+			auto view = dependency.GetPassGraph().MakeView(
+			    Dependency::kAnyFilter, Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kLocal>);
+			auto kahn_result = view.KahnTopologicalSort();
 			CHECK(kahn_result.is_dag);
 			CHECK_EQ(kahn_result.sorted[0], nullptr);
 			for (const auto p_pass : kahn_result.sorted) {
@@ -215,8 +215,8 @@ TEST_SUITE("Default Executor") {
 			}
 		}
 		{
-			auto kahn_result = dependency.GetPassGraph().KahnTopologicalSort(
-			    [](const Dependency::PassEdge &e) { return true; }, std::initializer_list<const PassBase *>{nullptr});
+			auto view = dependency.GetPassGraph().MakeView(Dependency::kAnyFilter, Dependency::kAnyFilter);
+			auto kahn_result = view.KahnTopologicalSort();
 			CHECK(!kahn_result.is_dag);
 		}
 		{

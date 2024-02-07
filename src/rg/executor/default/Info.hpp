@@ -21,8 +21,8 @@ struct PassInfo {
 
 struct ResourceInfo {
 	struct {
-		std::size_t id{};
-		bool is_top_resource{};
+		std::size_t phys_id = -1;
+		const ResourceBase *p_root_resource{}, *p_lf_resource{};
 		friend class Dependency;
 	} dependency;
 };

@@ -35,13 +35,13 @@ private:
 	Graph<const ResourceBase *, ResourceEdge> m_resource_graph;
 	std::unordered_map<const InputBase *, const ResourceBase *> m_input_2_resource;
 	std::vector<const PassBase *> m_topo_order_passes;
-	std::vector<const ResourceBase *> m_id_resources;
+	std::vector<const ResourceBase *> m_phys_id_resources;
 
 	Relation m_pass_relation;
 
 	CompileResult<void> traverse_pass(const Args &args, const PassBase *p_pass);
 	CompileResult<void> add_war_edges(); // Write-After-Read Edges
-	CompileResult<void> tag_passes();
+	CompileResult<void> sort_passes();
 	CompileResult<void> tag_resources();
 	CompileResult<void> get_pass_relation();
 
@@ -52,6 +52,7 @@ public:
 	inline static const auto kEdgeFilter = [](const auto &e) { return e.type == Type; };
 	template <PassEdgeType Type> inline static const auto kPassEdgeFilter = kEdgeFilter<PassEdgeType, Type>;
 	template <ResourceEdgeType Type> inline static const auto kResourceEdgeFilter = kEdgeFilter<ResourceEdgeType, Type>;
+	inline static const auto kAnyFilter = [](auto &&) { return true; };
 
 	inline const auto &GetResourceGraph() const { return m_resource_graph; }
 	inline const auto &GetPassGraph() const { return m_pass_graph; }
@@ -62,31 +63,31 @@ public:
 	}
 
 	// Counts
-	inline std::size_t GetPassCount() const {
-		// -1 to exclude nullptr pass
-		return m_pass_graph.GetVertices().size() - 1;
-	}
+	inline std::size_t GetPassCount() const { return m_topo_order_passes.size(); }
 	inline std::size_t GetResourceCount() const { return m_resource_graph.GetVertices().size(); }
+	inline std::size_t GetPhysResourceCount() const {
+		// Physical Resource Count
+		return m_phys_id_resources.size();
+	}
 
 	// Topological Order for Passes
 	static inline std::size_t GetPassTopoOrder(const PassBase *p_pass) {
-		return GetPassInfo(p_pass).dependency.topo_order - 1;
+		return GetPassInfo(p_pass).dependency.topo_order;
 	}
-	inline const PassBase *GetTopoOrderPass(std::size_t topo_order) const {
-		// +1 to skip the first nullptr
-		return m_topo_order_passes[topo_order + 1];
-	}
+	inline const PassBase *GetTopoOrderPass(std::size_t topo_order) const { return m_topo_order_passes[topo_order]; }
 
-	// Resource IDs
+	// Resource Physical IDs
+	static inline std::size_t GetResourcePhysID(const ResourceBase *p_resource) {
+		return GetResourceInfo(p_resource).dependency.phys_id;
+	}
+	inline const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
 
 	// Relations
 	inline bool IsPassPrior(const PassBase *p_pass_l, const PassBase *p_pass_r) const {
-		std::size_t topo_order_l = GetPassInfo(p_pass_l).dependency.topo_order;
-		std::size_t topo_order_r = GetPassInfo(p_pass_r).dependency.topo_order;
-		return m_pass_relation.Get(topo_order_l, topo_order_r);
+		return m_pass_relation.Get(GetPassTopoOrder(p_pass_l), GetPassTopoOrder(p_pass_r));
 	}
 	inline bool IsPassPrior(std::size_t pass_topo_order_l, std::size_t pass_topo_order_r) const {
-		return m_pass_relation.Get(pass_topo_order_l + 1, pass_topo_order_r + 1);
+		return m_pass_relation.Get(pass_topo_order_l, pass_topo_order_r);
 	}
 };
 
