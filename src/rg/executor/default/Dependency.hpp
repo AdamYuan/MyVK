@@ -34,7 +34,7 @@ private:
 	Graph<const PassBase *, PassEdge> m_pass_graph;
 	Graph<const ResourceBase *, ResourceEdge> m_resource_graph;
 	std::unordered_map<const InputBase *, const ResourceBase *> m_input_2_resource;
-	std::vector<const PassBase *> m_topo_order_passes;
+	std::vector<const PassBase *> m_topo_id_passes;
 	std::vector<const ResourceBase *> m_phys_id_resources;
 
 	Relation m_pass_relation;
@@ -48,10 +48,11 @@ private:
 public:
 	static CompileResult<Dependency> Create(const Args &args);
 
-	template <typename TypeEnum, TypeEnum Type>
-	inline static const auto kEdgeFilter = [](const auto &e) { return e.type == Type; };
-	template <PassEdgeType Type> inline static const auto kPassEdgeFilter = kEdgeFilter<PassEdgeType, Type>;
-	template <ResourceEdgeType Type> inline static const auto kResourceEdgeFilter = kEdgeFilter<ResourceEdgeType, Type>;
+	template <typename TypeEnum, TypeEnum... Types>
+	inline static const auto kEdgeFilter = [](const auto &e) { return ((e.type == Types) || ...); };
+	template <PassEdgeType... Types> inline static const auto kPassEdgeFilter = kEdgeFilter<PassEdgeType, Types...>;
+	template <ResourceEdgeType... Types>
+	inline static const auto kResourceEdgeFilter = kEdgeFilter<ResourceEdgeType, Types...>;
 	inline static const auto kAnyFilter = [](auto &&) { return true; };
 
 	inline const auto &GetResourceGraph() const { return m_resource_graph; }
@@ -63,28 +64,25 @@ public:
 	}
 
 	// Counts
-	inline std::size_t GetPassCount() const { return m_topo_order_passes.size(); }
-	inline std::size_t GetResourceCount() const { return m_resource_graph.GetVertices().size(); }
-	inline std::size_t GetPhysResourceCount() const {
-		// Physical Resource Count
-		return m_phys_id_resources.size();
-	}
+	inline std::size_t GetSortedPassCount() const { return m_topo_id_passes.size(); }
+	inline std::size_t GetPhysResourceCount() const { return m_phys_id_resources.size(); }
 
-	// Topological Order for Passes
-	static inline std::size_t GetPassTopoOrder(const PassBase *p_pass) {
-		return GetPassInfo(p_pass).dependency.topo_order;
-	}
-	inline const PassBase *GetTopoOrderPass(std::size_t topo_order) const { return m_topo_order_passes[topo_order]; }
+	// Topological Ordered ID for Passes
+	static std::size_t GetPassTopoID(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency.topo_id; }
+	const PassBase *GetTopoIDPass(std::size_t topo_order) const { return m_topo_id_passes[topo_order]; }
 
 	// Resource Physical IDs
-	static inline std::size_t GetResourcePhysID(const ResourceBase *p_resource) {
+	static std::size_t GetResourcePhysID(const ResourceBase *p_resource) {
 		return GetResourceInfo(p_resource).dependency.phys_id;
 	}
-	inline const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
+	static bool IsResourceRoot(const ResourceBase *p_resource) {
+		return GetResourceInfo(p_resource).dependency.p_root_resource == p_resource;
+	}
+	const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
 
 	// Relations
 	inline bool IsPassPrior(const PassBase *p_pass_l, const PassBase *p_pass_r) const {
-		return m_pass_relation.Get(GetPassTopoOrder(p_pass_l), GetPassTopoOrder(p_pass_r));
+		return m_pass_relation.Get(GetPassTopoID(p_pass_l), GetPassTopoID(p_pass_r));
 	}
 	inline bool IsPassPrior(std::size_t pass_topo_order_l, std::size_t pass_topo_order_r) const {
 		return m_pass_relation.Get(pass_topo_order_l, pass_topo_order_r);

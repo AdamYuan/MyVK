@@ -46,9 +46,8 @@ public:
 		}
 		sorted.reserve(vertex_count);
 
-		for (auto [_, to, _1, _2] : get()->GetEdges()) {
+		for (auto [_, to, _1, _2] : get()->GetEdges())
 			++in_degrees[to];
-		}
 
 		std::queue<VertexID_T> queue;
 		for (auto [vert, in_deg] : in_degrees)
@@ -77,15 +76,17 @@ public:
 		std::vector<VertexID_T> roots;
 		bool is_forest;
 	};
-	FindTreesResult FindTrees() const {
+	FindTreesResult FindTrees(auto &&visitor) const {
 		std::vector<VertexID_T> roots;
 		std::unordered_set<VertexID_T> visit_set;
 
-		const auto visit_tree = [&](VertexID_T vertex) -> bool {
+		const auto visit_tree = [&](VertexID_T root) -> bool {
 			const auto visit_tree_impl = [&](VertexID_T vertex, auto &&visit_tree_impl) -> bool {
 				if (visit_set.contains(vertex))
 					return false;
 				visit_set.insert(vertex);
+
+				visitor(root, vertex);
 
 				for (auto [to, _, _1] : get()->GetOutEdges(vertex))
 					if (visit_tree_impl(to, visit_tree_impl) == false)
@@ -93,7 +94,7 @@ public:
 
 				return true;
 			};
-			return visit_tree_impl(vertex, visit_tree_impl);
+			return visit_tree_impl(root, visit_tree_impl);
 		};
 
 		std::size_t vertex_count = 0;

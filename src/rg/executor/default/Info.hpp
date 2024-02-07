@@ -14,7 +14,7 @@ using namespace myvk_rg::interface;
 
 struct PassInfo {
 	struct {
-		std::size_t topo_order{};
+		std::size_t topo_id{};
 		friend class Dependency;
 	} dependency;
 };

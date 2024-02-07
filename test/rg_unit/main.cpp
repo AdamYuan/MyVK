@@ -189,9 +189,9 @@ TEST_SUITE("Default Executor") {
 		dependency.GetPassGraph().WriteGraphViz(
 		    std::cout,
 		    [](const PassBase *p_pass) {
-			    return p_pass ? p_pass->GetGlobalKey().Format() + ";" +
-			                        std::to_string(Dependency::GetPassTopoOrder(p_pass))
-			                  : "start";
+			    return p_pass
+			               ? p_pass->GetGlobalKey().Format() + ";" + std::to_string(Dependency::GetPassTopoID(p_pass))
+			               : "start";
 		    },
 		    [](const Dependency::PassEdge &e) {
 			    return e.p_resource->GetGlobalKey().Format() +
@@ -199,7 +199,11 @@ TEST_SUITE("Default Executor") {
 		    });
 
 		dependency.GetResourceGraph().WriteGraphViz(
-		    std::cout, [](const ResourceBase *p_resource) { return p_resource->GetGlobalKey().Format(); },
+		    std::cout,
+		    [](const ResourceBase *p_resource) {
+			    return p_resource->GetGlobalKey().Format() + ";" +
+			           std::to_string(Dependency::GetResourcePhysID(p_resource));
+		    },
 		    [](const Dependency::ResourceEdge &e) {
 			    return e.type == Dependency::ResourceEdgeType::kSubResource ? "SUB" : "LF";
 		    });
@@ -221,8 +225,8 @@ TEST_SUITE("Default Executor") {
 		}
 		{
 			printf("Pass Prior:\n");
-			for (std::size_t i = 0; i < dependency.GetPassCount(); ++i) {
-				for (std::size_t j = 0; j < dependency.GetPassCount(); ++j)
+			for (std::size_t i = 0; i < dependency.GetSortedPassCount(); ++i) {
+				for (std::size_t j = 0; j < dependency.GetSortedPassCount(); ++j)
 					printf(dependency.IsPassPrior(i, j) ? "1" : "0");
 				printf("\n");
 			}

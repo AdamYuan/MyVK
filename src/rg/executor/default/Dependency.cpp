@@ -167,57 +167,56 @@ CompileResult<void> Dependency::sort_passes() {
 	auto kahn_result = view.KahnTopologicalSort();
 
 	if (!kahn_result.is_dag)
-		return error::PassCycleExist{};
+		return error::PassNotDAG{};
 
-	// Assign topo-order to passes
-	m_topo_order_passes = std::move(kahn_result.sorted);
-	for (std::size_t topo_order = 0; const PassBase *p_pass : m_topo_order_passes)
-		GetPassInfo(p_pass).dependency.topo_order = topo_order++;
+	// Assign topo-id to passes
+	m_topo_id_passes = std::move(kahn_result.sorted);
+	for (std::size_t topo_id = 0; const PassBase *p_pass : m_topo_id_passes)
+		GetPassInfo(p_pass).dependency.topo_id = topo_id++;
 
 	return {};
 }
 
 CompileResult<void> Dependency::tag_resources() {
-	/* auto find_trees_result = m_resource_graph.FindTrees(
-	    kResourceEdgeFilter<ResourceEdgeType::kSubResource>, ) for (const ResourceBase *p_resource :
-	                                                                m_resource_graph.GetVertices()) {
-		std::size_t in_edge_count = 0, sub_resource_in_edge_count = 0;
+	// Exclude LastFrame Resources and LastFrame Edges
+	auto view = m_resource_graph.MakeView(
+	    [](const ResourceBase *p_resource) -> bool {
+		    return p_resource->GetState() != myvk_rg::interface::ResourceState::kLastFrame;
+	    },
+	    kResourceEdgeFilter<ResourceEdgeType::kSubResource>);
 
-		{ // Get Input Edge Counts
-			auto in_edges = m_resource_graph.GetInEdges(p_resource);
-			for (auto [_, e, _1] : in_edges) {
-				++in_edge_count;
-				sub_resource_in_edge_count += e.type == ResourceEdgeType::kSubResource;
-			}
-		}
+	auto find_trees_result = view.FindTrees([](const ResourceBase *p_root, const ResourceBase *p_sub) {
+		GetResourceInfo(p_sub).dependency.p_root_resource = p_root;
+	});
 
-		{ // Validate
-			// Resource should not be shared by multiple CombinedImage
-			if (sub_resource_in_edge_count > 1)
-				return error::ResourceMultiParent{.key = p_resource->GetGlobalKey()};
+	if (!find_trees_result.is_forest)
+		return error::ResourceNotTree{};
 
-			// LastFrame Resource should not have parent resource
-			if (p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame && in_edge_count)
-				return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
-		}
+	// Assign physical-id to resources
+	m_phys_id_resources = std::move(find_trees_result.roots);
+	for (std::size_t phys_id = 0; const ResourceBase *p_resource : m_phys_id_resources)
+		GetResourceInfo(p_resource).dependency.phys_id = phys_id++;
 
-		// Assign Physical ID
-		if (sub_resource_in_edge_count == 0) {
-			GetResourceInfo(p_resource).dependency.phys_id = m_phys_id_resources.size();
-			m_phys_id_resources.push_back(p_resource);
-		} else
-			GetResourceInfo(p_resource).dependency.phys_id = -1;
-
-		// Assign Last Frame Pointer
-		if (p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame) {
-			auto [to, _, _1] = m_resource_graph.GetOutEdges(p_resource).front();
-			GetResourceInfo(p_resource).dependency.p_lf_resource = to;
-		}
+	for (const ResourceBase *p_resource : view.GetVertices()) {
+		auto &info = GetResourceInfo(p_resource);
+		info.dependency.phys_id = GetResourcePhysID(info.dependency.p_root_resource);
 	}
 
-	// Assign Root Pointers
-	for (const ResourceBase *p_resource : m_phys_id_resources) {
-	} */
+	// Validate and Tag LastFrame Resources
+	for (const ResourceBase *p_resource : m_resource_graph.GetVertices()) {
+		if (p_resource->GetState() != myvk_rg::interface::ResourceState::kLastFrame)
+			continue;
+
+		// LastFrame Resource should not have parent resource
+		if (!m_resource_graph.GetInEdges(p_resource).empty())
+			return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
+
+		// Assign Last Frame Pointer and Physical ID
+		auto &info = GetResourceInfo(p_resource);
+		auto [to, _, _1] = m_resource_graph.GetOutEdges(p_resource).front();
+		info.dependency.p_lf_resource = to;
+		info.dependency.phys_id = GetResourcePhysID(to);
+	}
 
 	return {};
 }
@@ -228,8 +227,7 @@ CompileResult<void> Dependency::get_pass_relation() {
 	                                  kPassEdgeFilter<PassEdgeType::kLocal>);
 
 	m_pass_relation =
-	    view.TransitiveClosure([](const PassBase *p_pass) { return GetPassTopoOrder(p_pass); },
-	                           [this](std::size_t topo_order) { return m_topo_order_passes[topo_order]; });
+	    view.TransitiveClosure(GetPassTopoID, [this](std::size_t topo_id) { return GetTopoIDPass(topo_id); });
 	return {};
 }
 

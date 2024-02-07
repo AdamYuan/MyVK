@@ -56,12 +56,11 @@ struct MultipleWrite {
 		return "Alias souce " + alias.GetSourceKey().Format() + " is written multiple times";
 	}
 };
-struct PassCycleExist {
+struct PassNotDAG {
 	inline std::string Format() const { return "Pass cycle dependencies in Render Graph"; }
 };
-struct ResourceMultiParent {
-	GlobalKey key;
-	inline std::string Format() const { return "Resource " + key.Format() + " has multiple parents"; }
+struct ResourceNotTree {
+	inline std::string Format() const { return "Resources are not tree structured"; }
 };
 struct ResourceLFParent {
 	GlobalKey key;
@@ -86,10 +85,10 @@ public:
 	}
 };
 
-using CompileError = Error<error::NullResource, error::NullInput, error::NullPass,                    //
-                           error::ResourceNotFound, error::InputNotFound, error::PassNotFound,        //
-                           error::AliasNoMatch, error::WriteToLastFrame, error::MultipleWrite,        //
-                           error::PassCycleExist, error::ResourceMultiParent, error::ResourceLFParent //
+using CompileError = Error<error::NullResource, error::NullInput, error::NullPass,             //
+                           error::ResourceNotFound, error::InputNotFound, error::PassNotFound, //
+                           error::AliasNoMatch, error::WriteToLastFrame, error::MultipleWrite, //
+                           error::PassNotDAG, error::ResourceNotTree, error::ResourceLFParent  //
                            >;
 
 template <typename Type, typename ErrorType> class Result {
