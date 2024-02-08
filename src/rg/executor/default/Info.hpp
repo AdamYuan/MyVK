@@ -25,7 +25,7 @@ struct ResourceInfo {
 	struct {
 		std::size_t phys_id{};
 		const ResourceBase *p_root_resource{}, *p_lf_resource{};
-		Bitset access_passes, lf_access_passes;
+		Bitset access_passes;
 		friend class Dependency;
 	} dependency;
 };

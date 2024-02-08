@@ -234,8 +234,8 @@ TEST_SUITE("Default Executor") {
 		}
 		{
 			printf("Resource Less:\n");
-			for (std::size_t i = 0; i < dependency.GetPhysResourceCount() * 2; ++i) {
-				for (std::size_t j = 0; j < dependency.GetPhysResourceCount() * 2; ++j)
+			for (std::size_t i = 0; i < dependency.GetPhysResourceCount(); ++i) {
+				for (std::size_t j = 0; j < dependency.GetPhysResourceCount(); ++j)
 					printf(dependency.IsResourceLess(i, j) ? "1" : "0");
 				printf("\n");
 			}

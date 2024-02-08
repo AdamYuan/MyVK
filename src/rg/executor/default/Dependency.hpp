@@ -46,6 +46,9 @@ private:
 	CompileResult<void> get_pass_relation();
 	CompileResult<void> get_resource_relation();
 
+	static auto &get_dep_info(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency; }
+	static auto &get_dep_info(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).dependency; }
+
 public:
 	static CompileResult<Dependency> Create(const Args &args);
 
@@ -72,13 +75,11 @@ public:
 	static std::size_t GetPassTopoID(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency.topo_id; }
 	const PassBase *GetTopoIDPass(std::size_t topo_order) const { return m_topo_id_passes[topo_order]; }
 
-	// Resource Physical IDs and Extended IDs
+	// Physical ID for Resources
 	static std::size_t GetResourcePhysID(const ResourceBase *p_resource) {
 		return GetResourceInfo(p_resource).dependency.phys_id;
 	}
 	const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
-	static std::size_t GetResourceExtID(const ResourceBase *p_resource) { return GetResourcePhysID(p_resource) << 1; }
-	static std::size_t GetResourceLFExtID(const ResourceBase *p_resource) { return GetResourceExtID(p_resource) | 1; }
 
 	// Resource Root
 	static const ResourceBase *GetResourceRoot(const ResourceBase *p_resource) {
@@ -92,11 +93,20 @@ public:
 	inline bool IsPassLess(std::size_t topo_id_l, std::size_t topo_id_r) const {
 		return m_pass_relation.Get(topo_id_l, topo_id_r);
 	}
-	/* inline bool IsPassPrior(const PassBase *p_l, const PassBase *p_r) const {
-	    return IsPassPrior(GetPassTopoID(p_l), GetPassTopoID(p_r));
-	} */
-	inline bool IsResourceLess(std::size_t ext_id_l, std::size_t ext_id_r) const {
-		return m_resource_relation.Get(ext_id_l, ext_id_r);
+	inline bool IsPassLess(const PassBase *p_l, const PassBase *p_r) const {
+		return IsPassLess(GetPassTopoID(p_l), GetPassTopoID(p_r));
+	}
+	inline bool IsResourceLess(std::size_t phys_id_l, std::size_t phys_id_r) const {
+		return m_resource_relation.Get(phys_id_l, phys_id_r);
+	}
+	inline bool IsResourceLess(const ResourceBase *p_l, const ResourceBase *p_r) const {
+		return IsResourceLess(GetResourcePhysID(p_l), GetResourcePhysID(p_r));
+	}
+	inline bool IsResourceConflicted(std::size_t phys_id_0, std::size_t phys_id_1) const {
+		return !IsResourceLess(phys_id_0, phys_id_1) && !IsResourceLess(phys_id_1, phys_id_0);
+	}
+	inline bool IsResourceConflicted(const ResourceBase *p_0, const ResourceBase *p_1) const {
+		return IsResourceConflicted(GetResourcePhysID(p_0), GetResourcePhysID(p_1));
 	}
 };
 
