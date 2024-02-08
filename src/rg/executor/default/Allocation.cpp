@@ -26,27 +26,30 @@ CompileResult<void> Allocation::fetch_alloc_sizes(const Args &args) {
 
 	const auto combine_size = [&](const CombinedImage *p_combined_image) -> CompileResult<void> {
 		const auto combine_size_impl = [&](const LocalInternalImage auto *p_image,
-		                                   auto &&combine_size_impl) -> CompileResult<void> {
+		                                   auto &&combine_size) -> CompileResult<void> {
 			UNWRAP_ASSIGN( //
 			    get_image_alloc(p_image).size,
 			    overloaded(
+			        // Combined Image
 			        [&](const CombinedImage *p_combined_image) -> CompileResult<SubImageSize> {
 				        SubImageSize size = {};
 				        for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image)) {
+					        // Foreach Sub-Image
 					        UNWRAP(p_sub->Visit(overloaded(
 					            [&](const LocalInternalImage auto *p_sub) -> CompileResult<void> {
-						            return combine_size_impl(p_sub, combine_size_impl);
+						            return combine_size(p_sub, combine_size);
 					            },
 					            [](auto &&) -> CompileResult<void> { return {}; })));
 
-					        const auto &to_size = get_image_alloc(p_sub).size;
-					        if (!size.Merge(to_size))
+					        const auto &sub_size = get_image_alloc(p_sub).size;
+					        if (!size.Merge(sub_size))
 						        return error::ImageNotMerge{.key = p_combined_image->GetGlobalKey()};
 
-					        get_image_alloc(p_sub).base_layer = size.GetArrayLayers() - to_size.GetArrayLayers();
+					        get_image_alloc(p_sub).base_layer = size.GetArrayLayers() - sub_size.GetArrayLayers();
 				        }
 				        return size;
 			        },
+			        // Managed Image
 			        [&](const ManagedImage *p_managed_image) -> CompileResult<SubImageSize> {
 				        return get_size(p_managed_image->GetSize());
 			        })(p_image));
@@ -54,15 +57,15 @@ CompileResult<void> Allocation::fetch_alloc_sizes(const Args &args) {
 		};
 		UNWRAP(combine_size_impl(p_combined_image, combine_size_impl));
 
-		const auto combine_base_impl = [&](const CombinedImage *p_combined_image, auto &&combine_base_impl) -> void {
+		const auto accumulate_base_impl = [&](const CombinedImage *p_combined_image, auto &&accumulate_base) -> void {
 			for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image)) {
 				get_image_alloc(p_sub).base_layer += get_image_alloc(p_combined_image).base_layer;
 
-				p_sub->Visit(overloaded(
-				    [&](const CombinedImage *p_sub) { combine_base_impl(p_sub, combine_base_impl); }, [](auto &&) {}));
+				p_sub->Visit(overloaded([&](const CombinedImage *p_sub) { accumulate_base(p_sub, accumulate_base); },
+				                        [](auto &&) {}));
 			}
 		};
-		combine_base_impl(p_combined_image, combine_base_impl);
+		accumulate_base_impl(p_combined_image, accumulate_base_impl);
 
 		return {};
 	};
