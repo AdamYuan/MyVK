@@ -179,23 +179,22 @@ CompileResult<void> Dependency::sort_passes() {
 }
 
 CompileResult<void> Dependency::tag_resources() {
-	// Validate and Tag LastFrame Resources
+	// Validate and Tag Resources
 	for (const ResourceBase *p_resource : m_resource_graph.GetVertices()) {
-		if (p_resource->GetState() != myvk_rg::interface::ResourceState::kLastFrame)
-			continue;
+		if (p_resource->GetState() == ResourceState::kLastFrame) {
+			// Assign LF Pointers
+			auto [to, _, _1] = m_resource_graph.GetOutEdges(p_resource).front();
+			get_dep_info(p_resource).p_lf_resource = to;
+			get_dep_info(to).p_lf_resource = p_resource;
 
-		// Assign LF Pointers
-		auto [to, _, _1] = m_resource_graph.GetOutEdges(p_resource).front();
-		get_dep_info(p_resource).p_lf_resource = to;
-		get_dep_info(to).p_lf_resource = p_resource;
-
-		// LastFrame Resource should not be used on External Resource
-		if (to->GetState() == myvk_rg::interface::ResourceState::kExternal)
-			return error::ResourceLFExternal{.key = p_resource->GetGlobalKey()};
-
-		// LastFrame Resource should not have parent resource
-		if (!m_resource_graph.GetInEdges(p_resource).empty())
-			return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
+			// LastFrame Resource should not have parent resource
+			if (!m_resource_graph.GetInEdges(p_resource).empty())
+				return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
+		} else if (p_resource->GetState() == ResourceState::kExternal) {
+			// External Resource should not have parent resource
+			if (!m_resource_graph.GetInEdges(p_resource).empty())
+				return error::ResourceExtParent{.key = p_resource->GetGlobalKey()};
+		}
 	}
 
 	// Resolve Resource Tree
@@ -234,30 +233,22 @@ CompileResult<void> Dependency::get_pass_relation() {
 }
 
 CompileResult<void> Dependency::get_resource_relation() {
-	// Tag access bits of physical resources
-	for (const ResourceBase *p_root : m_phys_id_resources)
-		GetResourceInfo(p_root).dependency.access_passes.Reset(GetSortedPassCount());
-	{
+	{ // Tag access bits of physical resources
+		for (const ResourceBase *p_root : m_phys_id_resources)
+			get_dep_info(p_root).access_passes.Reset(GetSortedPassCount());
+
 		// Exclude LastFrame edges
 		auto view = m_pass_graph.MakeView(kAnyFilter, kPassEdgeFilter<PassEdgeType::kLocal>);
 		for (auto [_, to, e, _1] : view.GetEdges())
 			get_dep_info(GetResourceRoot(e.p_resource)).access_passes.Add(GetPassTopoID(to));
 	}
 
-	/* printf("ACCESS\n");
-	for (const ResourceBase *p_root : m_phys_id_resources) {
-	    printf("%s:\n", p_root->GetGlobalKey().Format().c_str());
-	    for (std::size_t i = 0; i < GetSortedPassCount(); ++i)
-	        printf("%d", GetResourceInfo(p_root).dependency.access_passes.Get(i));
-	    printf("\n");
-	} */
-
 	// Pass < Resource
 	Relation pass_resource_relation{GetSortedPassCount(), GetPhysResourceCount()};
 	for (std::size_t res_phys_id = 0; const ResourceBase *p_root : m_phys_id_resources) {
 		for (std::size_t pass_topo_id = 0; pass_topo_id < GetSortedPassCount(); ++pass_topo_id) {
 			// Pass < Resource <==> forall x in Resource Access Passes, Pass < x
-			if (m_pass_relation.All(pass_topo_id, GetResourceInfo(p_root).dependency.access_passes))
+			if (m_pass_relation.All(pass_topo_id, get_dep_info(p_root).access_passes))
 				pass_resource_relation.Add(pass_topo_id, res_phys_id);
 		}
 		++res_phys_id;
@@ -266,20 +257,12 @@ CompileResult<void> Dependency::get_resource_relation() {
 	// Resource > Pass
 	Relation resource_pass_relation = pass_resource_relation.GetInversed();
 
-	/* printf("Resource > Pass\n");
-	for (const ResourceBase *p_root : m_phys_id_resources) {
-	    printf("%s:\n", p_root->GetGlobalKey().Format().c_str());
-	    for (std::size_t i = 0; i < GetSortedPassCount(); ++i)
-	        printf("%d", resource_pass_relation.Get(GetResourcePhysID(p_root), i));
-	    printf("\n");
-	} */
-
 	// Resource < Resource
 	m_resource_relation.Reset(GetPhysResourceCount(), GetPhysResourceCount());
 	for (std::size_t l_phys_id = 0; const ResourceBase *p_root : m_phys_id_resources) {
 		for (std::size_t r_phys_id = 0; r_phys_id < GetPhysResourceCount(); ++r_phys_id) {
 			// Resource_L < Resource_R <==> forall x in Resource_L Access Passes, Resource_R > x
-			if (resource_pass_relation.All(r_phys_id, GetResourceInfo(p_root).dependency.access_passes))
+			if (resource_pass_relation.All(r_phys_id, get_dep_info(p_root).access_passes))
 				m_resource_relation.Add(l_phys_id, r_phys_id);
 		}
 		++l_phys_id;

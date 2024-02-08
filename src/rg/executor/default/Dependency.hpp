@@ -74,12 +74,14 @@ public:
 	// Topological Ordered ID for Passes
 	static std::size_t GetPassTopoID(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency.topo_id; }
 	const PassBase *GetTopoIDPass(std::size_t topo_order) const { return m_topo_id_passes[topo_order]; }
+	const auto &GetTopoIDPasses() const { return m_topo_id_passes; }
 
 	// Physical ID for Resources
 	static std::size_t GetResourcePhysID(const ResourceBase *p_resource) {
 		return GetResourceInfo(p_resource).dependency.phys_id;
 	}
 	const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
+	const auto &GetPhysIDResources() const { return m_phys_id_resources; }
 
 	// Resource Root
 	static const ResourceBase *GetResourceRoot(const ResourceBase *p_resource) {

@@ -132,8 +132,12 @@ public:
 
 		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image->AsInput(), format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
+		auto combined_image = CreateResource<myvk_rg::CombinedImage>(
+		    {"combined"}, VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+		    std::vector{blur_pass->GetImageOutput(), blur_pass2->GetImageOutput()});
+		auto blur_pass3 = CreatePass<GaussianBlurPass>({"blur_pass3"}, combined_image->AsInput(), format);
 
-		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass2->GetImageOutput(), format);
+		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass3->GetImageOutput(), format);
 
 		lf_image->SetPointedAlias(dim_pass->GetImageOutput());
 

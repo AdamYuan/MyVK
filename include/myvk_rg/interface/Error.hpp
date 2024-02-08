@@ -62,15 +62,21 @@ struct PassNotDAG {
 struct ResourceNotTree {
 	inline std::string Format() const { return "Resources are not tree structured"; }
 };
-struct ResourceLFExternal {
-	GlobalKey key;
-	inline std::string Format() const { return "Last frame resource " + key.Format() + " created on external image"; }
-};
 struct ResourceLFParent {
 	GlobalKey key;
 	inline std::string Format() const {
 		return "Last frame resource " + key.Format() + " is referenced by another resource";
 	}
+};
+struct ResourceExtParent {
+	GlobalKey key;
+	inline std::string Format() const {
+		return "External resource " + key.Format() + " is referenced by another resource";
+	}
+};
+struct ImageNotMerge {
+	GlobalKey key;
+	inline std::string Format() const { return "Image " + key.Format() + " failed to merge"; }
 };
 
 } // namespace error
@@ -89,11 +95,11 @@ public:
 	}
 };
 
-using CompileError = Error<error::NullResource, error::NullInput, error::NullPass,               //
-                           error::ResourceNotFound, error::InputNotFound, error::PassNotFound,   //
-                           error::AliasNoMatch, error::WriteToLastFrame, error::MultipleWrite,   //
-                           error::PassNotDAG, error::ResourceNotTree, error::ResourceLFExternal, //
-                           error::ResourceLFParent                                               //
+using CompileError = Error<error::NullResource, error::NullInput, error::NullPass,             //
+                           error::ResourceNotFound, error::InputNotFound, error::PassNotFound, //
+                           error::AliasNoMatch, error::WriteToLastFrame, error::MultipleWrite, //
+                           error::PassNotDAG, error::ResourceNotTree, error::ResourceLFParent, //
+                           error::ResourceExtParent, error::ImageNotMerge                      //
                            >;
 
 template <typename Type, typename ErrorType> class Result {

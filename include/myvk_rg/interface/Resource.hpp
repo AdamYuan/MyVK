@@ -318,26 +318,23 @@ public:
 	inline uint32_t GetMipLevels() const { return m_mip_levels; }
 	inline uint32_t GetArrayLayers() const { return m_layers; }
 
-	inline void Merge(const SubImageSize &r) {
+	inline bool Merge(const SubImageSize &r) {
 		if (m_layers == 0)
 			*this = r;
 		else {
-			assert(std::tie(m_extent.width, m_extent.height, m_extent.depth) ==
-			       std::tie(r.m_extent.width, r.m_extent.height, r.m_extent.depth));
+			if (std::tie(m_extent.width, m_extent.height, m_extent.depth) !=
+			    std::tie(r.m_extent.width, r.m_extent.height, r.m_extent.depth))
+				return false;
 
 			if (m_layers == r.m_layers && m_base_mip_level + m_mip_levels == r.m_base_mip_level)
 				m_mip_levels += r.m_mip_levels; // Merge MipMap
 			else if (m_base_mip_level == r.m_base_mip_level && m_mip_levels == r.m_mip_levels)
 				m_layers += r.m_layers; // Merge Layer
 			else
-				assert(false);
+				return false;
 		}
+		return true;
 	}
-
-	// TODO: Implement this
-	// inline void Merge1D(const ImageSize &r) {}
-	// inline void Merge2D(const ImageSize &r) {}
-	// inline bool Merge3D(const ImageSize &r) {}
 };
 
 class ManagedImage final : public InternalImageBase,
@@ -548,6 +545,21 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 
 template <typename T>
 concept LastFrameResource = std::same_as<T, LastFrameBuffer> || std::same_as<T, LastFrameImage>;
+
+template <typename T>
+concept InternalImage =
+    std::same_as<T, ManagedImage> || std::same_as<T, CombinedImage> || std::same_as<T, LastFrameImage>;
+template <typename T>
+concept InternalBuffer = std::same_as<T, ManagedBuffer> || std::same_as<T, LastFrameBuffer>;
+template <typename T>
+concept InternalResource = InternalImage<T> || InternalBuffer<T>;
+
+template <typename T>
+concept LocalInternalImage = InternalImage<T> && !LastFrameResource<T>;
+template <typename T>
+concept LocalInternalBuffer = InternalBuffer<T> && !LastFrameResource<T>;
+template <typename T>
+concept LocalInternalResource = InternalResource<T> && !LastFrameResource<T>;
 
 } // namespace myvk_rg::interface
 
