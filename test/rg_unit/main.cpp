@@ -194,7 +194,8 @@ TEST_SUITE("Default Executor") {
 			               : "start";
 		    },
 		    [](const Dependency::PassEdge &e) {
-			    return e.p_resource->GetGlobalKey().Format() +
+			    return e.p_resource->GetGlobalKey().Format() + ";" +
+			           std::to_string(Dependency::GetResourcePhysID(e.p_resource)) +
 			           (e.type == Dependency::PassEdgeType::kLocal ? "" : "(LF)");
 		    });
 
@@ -224,10 +225,18 @@ TEST_SUITE("Default Executor") {
 			CHECK(!kahn_result.is_dag);
 		}
 		{
-			printf("Pass Prior:\n");
+			printf("Pass Less:\n");
 			for (std::size_t i = 0; i < dependency.GetSortedPassCount(); ++i) {
 				for (std::size_t j = 0; j < dependency.GetSortedPassCount(); ++j)
-					printf(dependency.IsPassPrior(i, j) ? "1" : "0");
+					printf(dependency.IsPassLess(i, j) ? "1" : "0");
+				printf("\n");
+			}
+		}
+		{
+			printf("Resource Less:\n");
+			for (std::size_t i = 0; i < dependency.GetPhysResourceCount() * 2; ++i) {
+				for (std::size_t j = 0; j < dependency.GetPhysResourceCount() * 2; ++j)
+					printf(dependency.IsResourceLess(i, j) ? "1" : "0");
 				printf("\n");
 			}
 		}

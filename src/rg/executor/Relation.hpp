@@ -37,15 +37,27 @@ public:
 		for (std::size_t i = 0; i < m_size_r; ++i)
 			GetRowData(l_dst)[i] |= src_relation.GetRowData(l_src)[i];
 	}
+	inline void Apply(const Bitset &src, std::size_t l_dst) {
+		// assert(m_size_r == src.m_size)
+		for (std::size_t i = 0; i < m_size_r; ++i)
+			GetRowData(l_dst)[i] |= src.GetData()[i];
+	}
+	inline bool All(std::size_t l, const Bitset &r_set) const {
+		// assert(m_size_r == r_set.m_size)
+		for (std::size_t i = 0; i < m_size_r; ++i) {
+			if ((GetRowData(l)[i] & r_set.GetData()[i]) != r_set.GetData()[i])
+				return false;
+		}
+		return true;
+	}
 	inline bool Get(std::size_t l, std::size_t r) const { return BitsetGet(GetRowData(l), r); }
 
 	inline uint64_t *GetRowData(std::size_t l) { return m_bit_matrix.data() + l * m_size_r; }
 	inline const uint64_t *GetRowData(std::size_t l) const { return m_bit_matrix.data() + l * m_size_r; }
 	inline std::size_t GetRowSize() const { return m_size_r; }
 
-	inline Relation GetTransposed() const {
-		Relation trans;
-		trans.Reset(m_count_r, m_count_l);
+	inline Relation GetInversed() const {
+		Relation trans{m_count_r, m_count_l};
 		for (std::size_t r = 0; r < m_count_r; ++r)
 			for (std::size_t l = 0; l < m_count_l; ++l)
 				if (Get(l, r))

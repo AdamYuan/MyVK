@@ -7,10 +7,12 @@
 #define MYVK_INFO_HPP
 
 #include <myvk_rg/interface/RenderGraph.hpp>
+#include "../Bitset.hpp"
 
 namespace default_executor {
 
 using namespace myvk_rg::interface;
+using namespace myvk_rg::executor;
 
 struct PassInfo {
 	struct {
@@ -21,8 +23,9 @@ struct PassInfo {
 
 struct ResourceInfo {
 	struct {
-		std::size_t phys_id = -1;
+		std::size_t phys_id{};
 		const ResourceBase *p_root_resource{}, *p_lf_resource{};
+		Bitset access_passes, lf_access_passes;
 		friend class Dependency;
 	} dependency;
 };

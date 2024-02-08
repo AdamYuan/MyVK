@@ -37,13 +37,14 @@ private:
 	std::vector<const PassBase *> m_topo_id_passes;
 	std::vector<const ResourceBase *> m_phys_id_resources;
 
-	Relation m_pass_relation;
+	Relation m_pass_relation, m_resource_relation;
 
 	CompileResult<void> traverse_pass(const Args &args, const PassBase *p_pass);
 	CompileResult<void> add_war_edges(); // Write-After-Read Edges
 	CompileResult<void> sort_passes();
 	CompileResult<void> tag_resources();
 	CompileResult<void> get_pass_relation();
+	CompileResult<void> get_resource_relation();
 
 public:
 	static CompileResult<Dependency> Create(const Args &args);
@@ -71,21 +72,31 @@ public:
 	static std::size_t GetPassTopoID(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency.topo_id; }
 	const PassBase *GetTopoIDPass(std::size_t topo_order) const { return m_topo_id_passes[topo_order]; }
 
-	// Resource Physical IDs
+	// Resource Physical IDs and Extended IDs
 	static std::size_t GetResourcePhysID(const ResourceBase *p_resource) {
 		return GetResourceInfo(p_resource).dependency.phys_id;
+	}
+	const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
+	static std::size_t GetResourceExtID(const ResourceBase *p_resource) { return GetResourcePhysID(p_resource) << 1; }
+	static std::size_t GetResourceLFExtID(const ResourceBase *p_resource) { return GetResourceExtID(p_resource) | 1; }
+
+	// Resource Root
+	static const ResourceBase *GetResourceRoot(const ResourceBase *p_resource) {
+		return GetResourceInfo(p_resource).dependency.p_root_resource;
 	}
 	static bool IsResourceRoot(const ResourceBase *p_resource) {
 		return GetResourceInfo(p_resource).dependency.p_root_resource == p_resource;
 	}
-	const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
 
 	// Relations
-	inline bool IsPassPrior(const PassBase *p_pass_l, const PassBase *p_pass_r) const {
-		return m_pass_relation.Get(GetPassTopoID(p_pass_l), GetPassTopoID(p_pass_r));
+	inline bool IsPassLess(std::size_t topo_id_l, std::size_t topo_id_r) const {
+		return m_pass_relation.Get(topo_id_l, topo_id_r);
 	}
-	inline bool IsPassPrior(std::size_t pass_topo_order_l, std::size_t pass_topo_order_r) const {
-		return m_pass_relation.Get(pass_topo_order_l, pass_topo_order_r);
+	/* inline bool IsPassPrior(const PassBase *p_l, const PassBase *p_r) const {
+	    return IsPassPrior(GetPassTopoID(p_l), GetPassTopoID(p_r));
+	} */
+	inline bool IsResourceLess(std::size_t ext_id_l, std::size_t ext_id_r) const {
+		return m_resource_relation.Get(ext_id_l, ext_id_r);
 	}
 };
 
