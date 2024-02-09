@@ -33,7 +33,8 @@ private:
 	void create_vk_resources();
 	static std::tuple<VkDeviceSize, uint32_t> fetch_memory_requirements(std::ranges::input_range auto &&resources);
 	void alloc_naive(std::ranges::input_range auto &&resources, const VmaAllocationCreateInfo &create_info);
-	void alloc_optimal(const Args &args, std::ranges::input_range auto &&resources, const VmaAllocationCreateInfo &create_info);
+	void alloc_optimal(const Args &args, std::ranges::input_range auto &&resources,
+	                   const VmaAllocationCreateInfo &create_info);
 	void create_vk_allocations(const Args &args);
 	void bind_vk_resources();
 	void create_vk_image_views();
@@ -45,17 +46,24 @@ public:
 	static std::size_t GetResourceAllocID(const ResourceBase *p_resource) {
 		return get_alloc_info(p_resource).alloc_id;
 	}
-	const ResourceBase *GetAllocIDResource(std::size_t alloc_id) const { return m_alloc_id_resources[alloc_id]; }
+	inline const ResourceBase *GetAllocIDResource(std::size_t alloc_id) const { return m_alloc_id_resources[alloc_id]; }
 	static const ResourceBase *GetAllocResource(const ResourceBase *p_resource) {
 		return get_alloc_info(p_resource).p_alloc_resource;
 	}
 	static bool IsAllocResource(const ResourceBase *p_resource) {
 		return get_alloc_info(p_resource).p_alloc_resource == p_resource;
 	}
+	// Resource Alias Relationship
+	inline bool IsResourceAliased(std::size_t alloc_id_l, std::size_t alloc_id_r) const {
+		return m_resource_alias_relation.Get(alloc_id_l, alloc_id_r);
+	}
+	inline bool IsResourceAliased(const ResourceBase *p_l, const ResourceBase *p_r) const {
+		return IsResourceAliased(GetResourceAllocID(p_l), GetResourceAllocID(p_r));
+	}
 
 	// View ID (Internal & Local Resources)
 	static std::size_t GetResourceViewID(const ResourceBase *p_resource) { return get_alloc_info(p_resource).view_id; }
-	const ResourceBase *GetViewIDResource(std::size_t view_id) const { return m_view_id_resources[view_id]; }
+	inline const ResourceBase *GetViewIDResource(std::size_t view_id) const { return m_view_id_resources[view_id]; }
 	static const ResourceBase *GetViewResource(const ResourceBase *p_resource) {
 		return get_alloc_info(p_resource).p_view_resource;
 	}
