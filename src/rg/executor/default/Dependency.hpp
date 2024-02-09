@@ -92,6 +92,11 @@ public:
 		return get_dep_info(p_resource).p_lf_resource;
 	}
 
+	// Resource Accesses
+	static auto GetResourceAccessPassBitset(const ResourceBase *p_resource) {
+		return get_dep_info(p_resource).access_passes;
+	}
+
 	// Relations
 	inline bool IsPassLess(std::size_t topo_id_l, std::size_t topo_id_r) const {
 		return m_pass_relation.Get(topo_id_l, topo_id_r);

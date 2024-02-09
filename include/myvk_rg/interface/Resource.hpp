@@ -273,21 +273,6 @@ public:
 	template <typename T = void> inline T *GetMappedData() const { return reinterpret_cast<T *>(get_mapped_data()); }
 };
 
-// Internal Image ( the combination of ManagedImage and CombinedImage, used in implementation )
-class InternalImageBase : public ImageBase {
-public:
-	inline explicit InternalImageBase(Parent parent, ResourceState state) : ImageBase(parent, state) {}
-
-	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
-
-	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
-		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
-	};
-	inline VkFormat GetFormat() const {
-		return Visit([](auto *image) -> VkFormat { return image->GetFormat(); });
-	}
-};
-
 class SubImageSize {
 private:
 	VkExtent3D m_extent{};
@@ -337,7 +322,7 @@ public:
 	}
 };
 
-class ManagedImage final : public InternalImageBase,
+class ManagedImage final : public ImageBase,
                            public ImageAttachmentInfo<ManagedImage>,
                            public ManagedResourceInfo<ManagedImage, SubImageSize> {
 private:
@@ -349,7 +334,7 @@ public:
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kManagedImage; }
 
 	inline ManagedImage(Parent parent, VkFormat format, VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_2D)
-	    : InternalImageBase(parent, ResourceState::kManaged) {
+	    : ImageBase(parent, ResourceState::kManaged) {
 		m_format = format;
 		m_view_type = view_type;
 		SetCanvasSize();
@@ -378,7 +363,7 @@ public:
 	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
 };
 
-class CombinedImage final : public InternalImageBase {
+class CombinedImage final : public ImageBase {
 private:
 	VkImageViewType m_view_type;
 	std::vector<OutputImageAlias> m_images;
@@ -412,7 +397,7 @@ public:
 	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
 
 	inline CombinedImage(Parent parent, VkImageViewType view_type, std::vector<OutputImageAlias> &&images)
-	    : InternalImageBase(parent, ResourceState::kCombinedImage) {
+	    : ImageBase(parent, ResourceState::kCombinedImage) {
 		m_view_type = view_type;
 		m_images = std::move(images);
 	}
@@ -516,19 +501,6 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageB
 	assert(false);
 	return visitor(static_cast<const ManagedImage *>(nullptr));
 }
-template <typename Visitor>
-std::invoke_result_t<Visitor, ManagedImage *> InternalImageBase::Visit(Visitor &&visitor) const {
-	switch (GetState()) {
-	case ResourceState::kManaged:
-		return visitor(static_cast<const ManagedImage *>(this));
-	case ResourceState::kCombinedImage:
-		return visitor(static_cast<const CombinedImage *>(this));
-	default:
-		assert(false);
-		return visitor(static_cast<const ManagedImage *>(nullptr));
-	}
-}
-
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> BufferBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
 	case ResourceState::kManaged:

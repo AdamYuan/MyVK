@@ -22,6 +22,7 @@ struct PassInfo {
 	} dependency;
 };
 
+class RGMemoryAllocation;
 struct ResourceInfo {
 	// Dependency
 	struct {
@@ -43,7 +44,7 @@ struct ResourceInfo {
 		struct {
 			SubImageSize size{};
 			uint32_t base_layer{};
-			VkImageViewType vk_view_type{};
+			// VkImageViewType vk_view_type{};
 			VkImageType vk_type{};
 			VkFormat vk_format{};
 			VkImageUsageFlags vk_usages{};
@@ -54,9 +55,13 @@ struct ResourceInfo {
 			VkDeviceSize size{};
 			VkBufferUsageFlags vk_usages{};
 			std::array<myvk::Ptr<myvk::BufferBase>, 2> myvk_buffers{};
+			std::array<void *, 2> mapped_ptrs{};
 		} buffer{};
 		bool double_buffer{};
-		VkMemoryRequirements vk_mem_reqs;
+		VkMemoryRequirements vk_mem_reqs{};
+
+		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
+		std::array<VkDeviceSize, 2> mem_offsets{};
 	} allocation;
 };
 

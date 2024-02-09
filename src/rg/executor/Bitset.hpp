@@ -6,7 +6,9 @@
 #ifndef MYVK_RG_EXE_BITSET_HPP
 #define MYVK_RG_EXE_BITSET_HPP
 
+#include <bit>
 #include <cinttypes>
+#include <ranges>
 
 namespace myvk_rg::executor {
 
@@ -39,6 +41,19 @@ public:
 
 	inline uint64_t *GetData() { return m_bits.data(); }
 	inline const uint64_t *GetData() const { return m_bits.data(); }
+
+	inline auto GetBits() const {
+		return std::views::iota(std::size_t{0}, m_count) | std::views::filter([this](std::size_t x) { return Get(x); });
+	}
+	inline std::size_t GetFirstBit() const {
+		std::size_t base = 0;
+		for (uint64_t b64 : m_bits)
+			if (b64)
+				return base + std::countr_zero(b64);
+			else
+				base += 64;
+		return m_count;
+	}
 };
 
 } // namespace myvk_rg::executor
