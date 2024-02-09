@@ -19,6 +19,7 @@ private:
 	std::map<GlobalKey, const InputBase *> m_inputs;
 	std::map<GlobalKey, const ResourceBase *> m_resources;
 	std::vector<PassInfo> m_pass_infos;
+	std::vector<InputInfo> m_input_infos;
 	std::vector<ResourceInfo> m_resource_infos;
 
 	template <typename Container> void collect_resources(const Container &pool);

@@ -5,12 +5,8 @@ namespace default_executor {
 Dependency Dependency::Create(const Args &args) {
 	Dependency g = {};
 
-	for (const auto &it : args.render_graph.GetResultPoolData()) {
-		it.second.Visit([&](const auto *p_alias) {
-			const PassBase *p_pass = args.collection.FindPass(p_alias->GetSourcePassKey());
-			g.traverse_pass(args, p_pass);
-		});
-	}
+	for (const auto &it : args.render_graph.GetResultPoolData())
+		it.second.Visit([&](const auto *p_alias) { g.traverse_output_alias(args, *p_alias); });
 	g.add_war_edges();
 	g.sort_passes();
 	g.get_pass_relation();
@@ -19,6 +15,14 @@ Dependency Dependency::Create(const Args &args) {
 	g.get_resource_relation();
 
 	return g;
+}
+
+const InputBase *Dependency::traverse_output_alias(const Dependency::Args &args, const OutputAlias auto &output_alias) {
+	const PassBase *p_src_pass = args.collection.FindPass(output_alias.GetSourcePassKey());
+	const InputBase *p_src_input = args.collection.FindInput(output_alias.GetSourceKey());
+	get_dep_info(p_src_input).p_pass = p_src_pass;
+	traverse_pass(args, p_src_pass);
+	return p_src_input;
 }
 
 void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
@@ -32,12 +36,10 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 
 			    p_input->GetInputAlias().Visit(overloaded(
 			        [&](const OutputAlias auto *p_output_alias) {
-				        const PassBase *p_src_pass = args.collection.FindPass(p_output_alias->GetSourcePassKey());
-				        const InputBase *p_src_input = args.collection.FindInput(p_output_alias->GetSourceKey());
-
-				        traverse_pass(args, p_src_pass);
-				        const ResourceBase *p_resource = m_input_2_resource.at(p_src_input);
-				        m_input_2_resource[p_input] = p_resource;
+				        const InputBase *p_src_input = traverse_output_alias(args, *p_output_alias);
+				        const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
+				        const ResourceBase *p_resource = get_dep_info(p_src_input).p_resource;
+				        get_dep_info(p_input).p_resource = p_resource;
 
 				        m_pass_graph.AddEdge(p_src_pass, p_pass,
 				                             PassEdge{p_src_input, p_input, p_resource, PassEdgeType::kLocal});
@@ -45,16 +47,14 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 			        [&](const RawAlias auto *p_raw_alias) {
 				        const ResourceBase *p_resource = args.collection.FindResource(p_raw_alias->GetSourceKey());
 				        m_resource_graph.AddVertex(p_resource);
-				        m_input_2_resource[p_input] = p_resource;
+				        get_dep_info(p_input).p_resource = p_resource;
 
 				        p_resource->Visit(overloaded(
 				            [&](const CombinedImage *p_combined_image) {
 					            for (const OutputImageAlias &src_alias : p_combined_image->GetSubImages()) {
-						            const PassBase *p_src_pass = args.collection.FindPass(src_alias.GetSourcePassKey());
-						            const InputBase *p_src_input = args.collection.FindInput(src_alias.GetSourceKey());
-
-						            traverse_pass(args, p_src_pass);
-						            const ResourceBase *p_sub_image = m_input_2_resource.at(p_src_input);
+						            const InputBase *p_src_input = traverse_output_alias(args, src_alias);
+						            const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
+						            const ResourceBase *p_sub_image = get_dep_info(p_src_input).p_resource;
 
 						            m_pass_graph.AddEdge(
 						                p_src_pass, p_pass,
@@ -67,11 +67,9 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 					                                 PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
 
 					            const auto &src_alias = p_lf_resource->GetPointedAlias();
-					            const PassBase *p_src_pass = args.collection.FindPass(src_alias.GetSourcePassKey());
-					            const InputBase *p_src_input = args.collection.FindInput(src_alias.GetSourceKey());
-
-					            traverse_pass(args, p_src_pass);
-					            const ResourceBase *p_src_resource = m_input_2_resource.at(p_src_input);
+					            const InputBase *p_src_input = traverse_output_alias(args, src_alias);
+					            const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
+					            const ResourceBase *p_src_resource = get_dep_info(p_src_input).p_resource;
 
 					            // Last Frame Edges
 					            m_pass_graph.AddEdge(

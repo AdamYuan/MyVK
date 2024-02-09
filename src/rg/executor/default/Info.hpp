@@ -15,11 +15,34 @@ namespace default_executor {
 using namespace myvk_rg::interface;
 using namespace myvk_rg::executor;
 
-struct PassInfo {
+struct InputInfo {
+	// Dependency
 	struct {
-		std::size_t topo_id{};
 		friend class Dependency;
-	} dependency;
+
+		const PassBase *p_pass{};
+		const ResourceBase *p_resource{};
+	} dependency{};
+};
+
+struct PassInfo {
+	// Dependency
+	struct {
+		friend class Dependency;
+
+	private:
+		std::size_t topo_id{};
+	} dependency{};
+
+	// Schedule
+	struct {
+		friend class Schedule;
+
+	private:
+		std::size_t cluster_id{};
+
+		std::vector<const ImageBase *> attachments;
+	} schedule{};
 };
 
 class RGMemoryAllocation;
@@ -32,7 +55,7 @@ struct ResourceInfo {
 		std::size_t phys_id{};
 		const ResourceBase *p_root_resource{}, *p_lf_resource{};
 		Bitset access_passes;
-	} dependency;
+	} dependency{};
 
 	// Allocation
 	struct {
@@ -62,10 +85,11 @@ struct ResourceInfo {
 
 		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
 		std::array<VkDeviceSize, 2> mem_offsets{};
-	} allocation;
+	} allocation{};
 };
 
 inline PassInfo &GetPassInfo(const PassBase *p_pass) { return *p_pass->__GetPExecutorInfo<PassInfo>(); }
+inline InputInfo &GetInputInfo(const InputBase *p_input) { return *p_input->__GetPExecutorInfo<InputInfo>(); }
 inline ResourceInfo &GetResourceInfo(const ResourceBase *p_resource) {
 	return *p_resource->__GetPExecutorInfo<ResourceInfo>();
 }

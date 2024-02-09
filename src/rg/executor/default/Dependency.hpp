@@ -33,13 +33,13 @@ public:
 private:
 	Graph<const PassBase *, PassEdge> m_pass_graph;
 	Graph<const ResourceBase *, ResourceEdge> m_resource_graph;
-	std::unordered_map<const InputBase *, const ResourceBase *> m_input_2_resource;
 	std::vector<const PassBase *> m_topo_id_passes;
 	std::vector<const ResourceBase *> m_phys_id_resources;
 
 	Relation m_pass_relation, m_resource_relation;
 
 	void traverse_pass(const Args &args, const PassBase *p_pass);
+	const InputBase *traverse_output_alias(const Dependency::Args &args, const OutputAlias auto &output_alias);
 	void add_war_edges(); // Write-After-Read Edges
 	void sort_passes();
 	void tag_resources();
@@ -47,6 +47,7 @@ private:
 	void get_resource_relation();
 
 	static auto &get_dep_info(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency; }
+	static auto &get_dep_info(const InputBase *p_input) { return GetInputInfo(p_input).dependency; }
 	static auto &get_dep_info(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).dependency; }
 
 public:
@@ -62,9 +63,9 @@ public:
 	inline const auto &GetResourceGraph() const { return m_resource_graph; }
 	inline const auto &GetPassGraph() const { return m_pass_graph; }
 
-	// Map Input to Resource
+	// Input
 	inline const ResourceBase *GetInputResource(const InputBase *p_input) const {
-		return m_input_2_resource.at(p_input);
+		return get_dep_info(p_input).p_resource;
 	}
 
 	// Counts

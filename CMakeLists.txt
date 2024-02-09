@@ -52,6 +52,7 @@ add_library(MyVK_RenderGraph STATIC
         src/rg/executor/default/Collection.cpp
         src/rg/executor/default/Dependency.cpp
         src/rg/executor/default/Allocation.cpp
+        src/rg/executor/default/Schedule.cpp
         # src/rg/executor/default/RenderGraphAllocator.cpp
         # src/rg/executor/default/RenderGraphExecutor.cpp
         # src/rg/executor/default/RenderGraphScheduler.cpp

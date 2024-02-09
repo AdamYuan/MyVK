@@ -9,6 +9,8 @@
 #include "Collection.hpp"
 #include "Dependency.hpp"
 
+namespace default_executor {
+
 class Schedule {
 private:
 	struct Args {
@@ -16,6 +18,13 @@ private:
 		const Collection &collection;
 		const Dependency &dependency;
 	};
+
+public:
+	struct PassCluster {
+		std::vector<const PassBase *> subpasses;
+	};
 };
+
+} // namespace default_executor
 
 #endif // MYVK_SCHEDULE_HPP

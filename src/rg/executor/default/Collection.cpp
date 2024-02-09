@@ -17,6 +17,12 @@ void Collection::make_infos() {
 		p_resource->__SetPExecutorInfo(&m_resource_infos.back());
 	}
 
+	m_input_infos.reserve(m_inputs.size());
+	for (const auto &[_, p_input] : m_inputs) {
+		m_input_infos.emplace_back();
+		p_input->__SetPExecutorInfo(&m_input_infos.back());
+	}
+
 	m_pass_infos.reserve(m_passes.size());
 	for (const auto &[_, p_pass] : m_passes) {
 		m_pass_infos.emplace_back();
