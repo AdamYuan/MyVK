@@ -168,9 +168,7 @@ TEST_SUITE("Default Executor") {
 
 	Collection collection;
 	TEST_CASE("Test Collection") {
-		auto res = Collection::Create(*render_graph);
-		CHECK_MESSAGE(res.IsOK(), res.PopError().Format());
-		collection = res.PopValue();
+		collection = Collection::Create(*render_graph);
 		/* printf("PASSES:\n");
 		for (const auto &it : collection.GetPasses())
 		    printf("%s\n", it.first.Format().c_str());
@@ -186,9 +184,7 @@ TEST_SUITE("Default Executor") {
 
 	Dependency dependency;
 	TEST_CASE("Test Dependency") {
-		auto res = Dependency::Create({.render_graph = *render_graph, .collection = collection});
-		CHECK_MESSAGE(res.IsOK(), res.PopError().Format());
-		dependency = res.PopValue();
+		dependency = Dependency::Create({.render_graph = *render_graph, .collection = collection});
 
 		dependency.GetPassGraph().WriteGraphViz(
 		    std::cout,

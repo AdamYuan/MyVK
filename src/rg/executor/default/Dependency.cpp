@@ -2,66 +2,58 @@
 
 namespace default_executor {
 
-CompileResult<Dependency> Dependency::Create(const Args &args) {
+Dependency Dependency::Create(const Args &args) {
 	Dependency g = {};
 
 	for (const auto &it : args.render_graph.GetResultPoolData()) {
-		UNWRAP(it.second.Visit([&](const auto *p_alias) -> CompileResult<void> {
-			const PassBase *p_pass;
-			UNWRAP_ASSIGN(p_pass, args.collection.FindPass(p_alias->GetSourcePassKey()));
-			UNWRAP(g.traverse_pass(args, p_pass));
-			return {};
-		}));
+		it.second.Visit([&](const auto *p_alias) {
+			const PassBase *p_pass = args.collection.FindPass(p_alias->GetSourcePassKey());
+			g.traverse_pass(args, p_pass);
+		});
 	}
-	UNWRAP(g.add_war_edges());
-	UNWRAP(g.sort_passes());
-	UNWRAP(g.get_pass_relation());
+	g.add_war_edges();
+	g.sort_passes();
+	g.get_pass_relation();
 
-	UNWRAP(g.tag_resources());
-	UNWRAP(g.get_resource_relation());
+	g.tag_resources();
+	g.get_resource_relation();
 
 	return g;
 }
 
-CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
+void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 	if (m_pass_graph.HasVertex(p_pass))
-		return {};
+		return;
+
 	const auto pass_visitor = overloaded(
-	    [&](const PassWithInput auto *p_pass) -> CompileResult<void> {
+	    [&](const PassWithInput auto *p_pass) {
 		    for (const auto &it : p_pass->GetInputPoolData()) {
 			    const InputBase *p_input = it.second.template Get<InputBase>();
 
-			    UNWRAP(p_input->GetInputAlias().Visit(overloaded(
-			        [&](const OutputAlias auto *p_output_alias) -> CompileResult<void> {
-				        const PassBase *p_src_pass;
-				        UNWRAP_ASSIGN(p_src_pass, args.collection.FindPass(p_output_alias->GetSourcePassKey()));
-				        const InputBase *p_src_input;
-				        UNWRAP_ASSIGN(p_src_input, args.collection.FindInput(p_output_alias->GetSourceKey()));
+			    p_input->GetInputAlias().Visit(overloaded(
+			        [&](const OutputAlias auto *p_output_alias) {
+				        const PassBase *p_src_pass = args.collection.FindPass(p_output_alias->GetSourcePassKey());
+				        const InputBase *p_src_input = args.collection.FindInput(p_output_alias->GetSourceKey());
 
-				        UNWRAP(traverse_pass(args, p_src_pass));
+				        traverse_pass(args, p_src_pass);
 				        const ResourceBase *p_resource = m_input_2_resource.at(p_src_input);
 				        m_input_2_resource[p_input] = p_resource;
 
 				        m_pass_graph.AddEdge(p_src_pass, p_pass,
 				                             PassEdge{p_src_input, p_input, p_resource, PassEdgeType::kLocal});
-
-				        return {};
 			        },
-			        [&](const RawAlias auto *p_raw_alias) -> CompileResult<void> {
-				        const ResourceBase *p_resource;
-				        UNWRAP_ASSIGN(p_resource, args.collection.FindResource(p_raw_alias->GetSourceKey()));
+			        [&](const RawAlias auto *p_raw_alias) {
+				        const ResourceBase *p_resource = args.collection.FindResource(p_raw_alias->GetSourceKey());
 				        m_resource_graph.AddVertex(p_resource);
 				        m_input_2_resource[p_input] = p_resource;
 
-				        UNWRAP(p_resource->Visit(overloaded(
-				            [&](const CombinedImage *p_combined_image) -> CompileResult<void> {
+				        p_resource->Visit(overloaded(
+				            [&](const CombinedImage *p_combined_image) {
 					            for (const OutputImageAlias &src_alias : p_combined_image->GetSubImages()) {
-						            const PassBase *p_src_pass;
-						            UNWRAP_ASSIGN(p_src_pass, args.collection.FindPass(src_alias.GetSourcePassKey()));
-						            const InputBase *p_src_input;
-						            UNWRAP_ASSIGN(p_src_input, args.collection.FindInput(src_alias.GetSourceKey()));
+						            const PassBase *p_src_pass = args.collection.FindPass(src_alias.GetSourcePassKey());
+						            const InputBase *p_src_input = args.collection.FindInput(src_alias.GetSourceKey());
 
-						            UNWRAP(traverse_pass(args, p_src_pass));
+						            traverse_pass(args, p_src_pass);
 						            const ResourceBase *p_sub_image = m_input_2_resource.at(p_src_input);
 
 						            m_pass_graph.AddEdge(
@@ -69,19 +61,16 @@ CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *
 						                PassEdge{p_src_input, p_input, p_sub_image, PassEdgeType::kLocal});
 						            m_resource_graph.AddEdge(p_resource, p_sub_image, {ResourceEdgeType::kSubResource});
 					            }
-					            return {};
 				            },
-				            [&](const LastFrameResource auto *p_lf_resource) -> CompileResult<void> {
+				            [&](const LastFrameResource auto *p_lf_resource) {
 					            m_pass_graph.AddEdge(nullptr, p_pass,
 					                                 PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
 
 					            const auto &src_alias = p_lf_resource->GetPointedAlias();
-					            const PassBase *p_src_pass;
-					            UNWRAP_ASSIGN(p_src_pass, args.collection.FindPass(src_alias.GetSourcePassKey()));
-					            const InputBase *p_src_input;
-					            UNWRAP_ASSIGN(p_src_input, args.collection.FindInput(src_alias.GetSourceKey()));
+					            const PassBase *p_src_pass = args.collection.FindPass(src_alias.GetSourcePassKey());
+					            const InputBase *p_src_input = args.collection.FindInput(src_alias.GetSourceKey());
 
-					            UNWRAP(traverse_pass(args, p_src_pass));
+					            traverse_pass(args, p_src_pass);
 					            const ResourceBase *p_src_resource = m_input_2_resource.at(p_src_input);
 
 					            // Last Frame Edges
@@ -89,30 +78,24 @@ CompileResult<void> Dependency::traverse_pass(const Args &args, const PassBase *
 					                p_src_pass, p_pass,
 					                PassEdge{p_src_input, p_input, p_src_resource, PassEdgeType::kLastFrame});
 					            m_resource_graph.AddEdge(p_resource, p_src_resource, {ResourceEdgeType::kLastFrame});
-					            return {};
 				            },
-				            [&](auto &&) -> CompileResult<void> {
+				            [&](auto &&) {
 					            m_pass_graph.AddEdge(nullptr, p_pass,
 					                                 PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
-					            return {};
-				            })));
-
-				        return {};
-			        })));
+				            }));
+			        }));
 		    }
-		    return {};
 	    },
-	    [](const auto *) -> CompileResult<void> { return {}; });
+	    [](const auto *) {});
 
-	UNWRAP(p_pass->Visit(pass_visitor));
-	return {};
+	p_pass->Visit(pass_visitor);
 }
 
 struct AccessEdgeInfo {
 	std::vector<std::size_t> reads;
 	std::optional<std::size_t> opt_write;
 };
-CompileResult<void> Dependency::add_war_edges() {
+void Dependency::add_war_edges() {
 	auto view = m_pass_graph.MakeView(kAnyFilter, kPassEdgeFilter<PassEdgeType::kLocal>);
 
 	for (const PassBase *p_pass : view.GetVertices()) {
@@ -125,11 +108,11 @@ CompileResult<void> Dependency::add_war_edges() {
 			else {
 				// Forbid multiple writes
 				if (info.opt_write)
-					return error::MultipleWrite{.alias = e.p_dst_input->GetInputAlias()};
+					Throw(error::MultipleWrite{.alias = e.p_dst_input->GetInputAlias()});
 				// Forbid writes to last frame resource
 				if (e.p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame)
-					return error::WriteToLastFrame{.alias = e.p_dst_input->GetInputAlias(),
-					                               .pass_key = p_pass->GetGlobalKey()};
+					Throw(error::WriteToLastFrame{.alias = e.p_dst_input->GetInputAlias(),
+					                              .pass_key = p_pass->GetGlobalKey()});
 
 				info.opt_write = edge_id;
 			}
@@ -157,10 +140,9 @@ CompileResult<void> Dependency::add_war_edges() {
 			}
 		}
 	}
-	return {};
 }
 
-CompileResult<void> Dependency::sort_passes() {
+void Dependency::sort_passes() {
 	// Exclude nullptr Pass, use Local edges only
 	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; },
 	                                  kPassEdgeFilter<PassEdgeType::kLocal>);
@@ -168,17 +150,15 @@ CompileResult<void> Dependency::sort_passes() {
 	auto kahn_result = view.KahnTopologicalSort();
 
 	if (!kahn_result.is_dag)
-		return error::PassNotDAG{};
+		Throw(error::PassNotDAG{});
 
 	// Assign topo-id to passes
 	m_topo_id_passes = std::move(kahn_result.sorted);
 	for (std::size_t topo_id = 0; const PassBase *p_pass : m_topo_id_passes)
 		get_dep_info(p_pass).topo_id = topo_id++;
-
-	return {};
 }
 
-CompileResult<void> Dependency::tag_resources() {
+void Dependency::tag_resources() {
 	// Validate and Tag Resources
 	for (const ResourceBase *p_resource : m_resource_graph.GetVertices()) {
 		if (p_resource->GetState() == ResourceState::kLastFrame) {
@@ -189,11 +169,11 @@ CompileResult<void> Dependency::tag_resources() {
 
 			// LastFrame Resource should not have parent resource
 			if (!m_resource_graph.GetInEdges(p_resource).empty())
-				return error::ResourceLFParent{.key = p_resource->GetGlobalKey()};
+				Throw(error::ResourceLFParent{.key = p_resource->GetGlobalKey()});
 		} else if (p_resource->GetState() == ResourceState::kExternal) {
 			// External Resource should not have parent resource
 			if (!m_resource_graph.GetInEdges(p_resource).empty())
-				return error::ResourceExtParent{.key = p_resource->GetGlobalKey()};
+				Throw(error::ResourceExtParent{.key = p_resource->GetGlobalKey()});
 		}
 	}
 
@@ -206,33 +186,30 @@ CompileResult<void> Dependency::tag_resources() {
 	});
 
 	if (!find_trees_result.is_forest)
-		return error::ResourceNotTree{};
+		Throw(error::ResourceNotTree{});
 
 	// Assign physical-id to resources
 	for (const ResourceBase *p_resource : m_resource_graph.GetVertices())
-		if (IsResourceRoot(p_resource)) {
+		if (IsRootResource(p_resource)) {
 			std::size_t phys_id = m_phys_id_resources.size();
 			get_dep_info(p_resource).phys_id = phys_id;
 			m_phys_id_resources.push_back(p_resource);
 		}
 	for (const ResourceBase *p_resource : m_resource_graph.GetVertices())
-		if (!IsResourceRoot(p_resource))
-			get_dep_info(p_resource).phys_id = get_dep_info(GetResourceRoot(p_resource)).phys_id;
-
-	return {};
+		if (!IsRootResource(p_resource))
+			get_dep_info(p_resource).phys_id = get_dep_info(GetRootResource(p_resource)).phys_id;
 }
 
-CompileResult<void> Dependency::get_pass_relation() {
+void Dependency::get_pass_relation() {
 	// Exclude nullptr Pass, use Local edges only
 	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; },
 	                                  kPassEdgeFilter<PassEdgeType::kLocal>);
 
 	m_pass_relation =
 	    view.TransitiveClosure(GetPassTopoID, [this](std::size_t topo_id) { return GetTopoIDPass(topo_id); });
-	return {};
 }
 
-CompileResult<void> Dependency::get_resource_relation() {
+void Dependency::get_resource_relation() {
 	{ // Tag access bits of physical resources
 		for (const ResourceBase *p_root : m_phys_id_resources)
 			get_dep_info(p_root).access_passes.Reset(GetSortedPassCount());
@@ -240,7 +217,7 @@ CompileResult<void> Dependency::get_resource_relation() {
 		// Exclude LastFrame edges
 		auto view = m_pass_graph.MakeView(kAnyFilter, kPassEdgeFilter<PassEdgeType::kLocal>);
 		for (auto [_, to, e, _1] : view.GetEdges())
-			get_dep_info(GetResourceRoot(e.p_resource)).access_passes.Add(GetPassTopoID(to));
+			get_dep_info(GetRootResource(e.p_resource)).access_passes.Add(GetPassTopoID(to));
 	}
 
 	// Pass < Resource
@@ -267,8 +244,6 @@ CompileResult<void> Dependency::get_resource_relation() {
 		}
 		++l_phys_id;
 	}
-
-	return {};
 }
 
 } // namespace default_executor

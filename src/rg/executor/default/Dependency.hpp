@@ -39,18 +39,18 @@ private:
 
 	Relation m_pass_relation, m_resource_relation;
 
-	CompileResult<void> traverse_pass(const Args &args, const PassBase *p_pass);
-	CompileResult<void> add_war_edges(); // Write-After-Read Edges
-	CompileResult<void> sort_passes();
-	CompileResult<void> tag_resources();
-	CompileResult<void> get_pass_relation();
-	CompileResult<void> get_resource_relation();
+	void traverse_pass(const Args &args, const PassBase *p_pass);
+	void add_war_edges(); // Write-After-Read Edges
+	void sort_passes();
+	void tag_resources();
+	void get_pass_relation();
+	void get_resource_relation();
 
 	static auto &get_dep_info(const PassBase *p_pass) { return GetPassInfo(p_pass).dependency; }
 	static auto &get_dep_info(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).dependency; }
 
 public:
-	static CompileResult<Dependency> Create(const Args &args);
+	static Dependency Create(const Args &args);
 
 	template <typename TypeEnum, TypeEnum... Types>
 	inline static const auto kEdgeFilter = [](const auto &e) { return ((e.type == Types) || ...); };
@@ -77,18 +77,19 @@ public:
 	const auto &GetTopoIDPasses() const { return m_topo_id_passes; }
 
 	// Physical ID for Resources
-	static std::size_t GetResourcePhysID(const ResourceBase *p_resource) {
-		return GetResourceInfo(p_resource).dependency.phys_id;
-	}
+	static std::size_t GetResourcePhysID(const ResourceBase *p_resource) { return get_dep_info(p_resource).phys_id; }
 	const ResourceBase *GetPhysIDResource(std::size_t phys_id) const { return m_phys_id_resources[phys_id]; }
 	const auto &GetPhysIDResources() const { return m_phys_id_resources; }
 
-	// Resource Root
-	static const ResourceBase *GetResourceRoot(const ResourceBase *p_resource) {
-		return GetResourceInfo(p_resource).dependency.p_root_resource;
+	// Resource Pointers
+	static const ResourceBase *GetRootResource(const ResourceBase *p_resource) {
+		return get_dep_info(p_resource).p_root_resource;
 	}
-	static bool IsResourceRoot(const ResourceBase *p_resource) {
-		return GetResourceInfo(p_resource).dependency.p_root_resource == p_resource;
+	static bool IsRootResource(const ResourceBase *p_resource) {
+		return get_dep_info(p_resource).p_root_resource == p_resource;
+	}
+	static const ResourceBase *GetLFResource(const ResourceBase *p_resource) {
+		return get_dep_info(p_resource).p_lf_resource;
 	}
 
 	// Relations

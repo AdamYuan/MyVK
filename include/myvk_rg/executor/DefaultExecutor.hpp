@@ -3,7 +3,6 @@
 #define MYVK_RG_DEFAULT_EXECUTOR_HPP
 
 #include <myvk/CommandBuffer.hpp>
-#include <myvk_rg/interface/Error.hpp>
 #include <myvk_rg/interface/Executor.hpp>
 
 namespace myvk_rg::executor {
@@ -25,7 +24,7 @@ public:
 	inline ~DefaultExecutor() final = default;
 
 	void OnEvent(const interface::ObjectBase &object, interface::Event event) final;
-	interface::CompileResult<void> CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const;
 };
 
 } // namespace myvk_rg::executor

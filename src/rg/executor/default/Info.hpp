@@ -37,18 +37,18 @@ struct ResourceInfo {
 		friend class Allocation;
 
 	private:
-		SubImageSize size{};
-		uint32_t base_layer{};
-		bool double_buffer{};
-	} image_allocation;
+		struct {
+			SubImageSize size{};
+			uint32_t base_layer{};
+		} image{};
 
-	struct {
-		friend class Allocation;
+		struct {
+			VkDeviceSize size{};
+		} buffer{};
 
-	private:
-		VkDeviceSize size{};
+		bool should_alloc{};
 		bool double_buffer{};
-	} buffer_allocation;
+	} allocation;
 };
 
 inline PassInfo &GetPassInfo(const PassBase *p_pass) { return *p_pass->__GetPExecutorInfo<PassInfo>(); }
