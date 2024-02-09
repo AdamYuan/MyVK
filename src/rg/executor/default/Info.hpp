@@ -7,6 +7,7 @@
 #define MYVK_INFO_HPP
 
 #include "../Bitset.hpp"
+#include <array>
 #include <myvk_rg/interface/RenderGraph.hpp>
 
 namespace default_executor {
@@ -37,17 +38,25 @@ struct ResourceInfo {
 		friend class Allocation;
 
 	private:
+		std::size_t alloc_id{}, view_id{};
+		const ResourceBase *p_alloc_resource{}, *p_view_resource{};
 		struct {
 			SubImageSize size{};
 			uint32_t base_layer{};
+			VkImageViewType vk_view_type{};
+			VkImageType vk_type{};
+			VkFormat vk_format{};
+			VkImageUsageFlags vk_usages{};
+			std::array<myvk::Ptr<myvk::ImageBase>, 2> myvk_images{};
+			std::array<myvk::Ptr<myvk::ImageView>, 2> myvk_image_views{};
 		} image{};
-
 		struct {
 			VkDeviceSize size{};
+			VkBufferUsageFlags vk_usages{};
+			std::array<myvk::Ptr<myvk::BufferBase>, 2> myvk_buffers{};
 		} buffer{};
-
-		bool should_alloc{};
 		bool double_buffer{};
+		VkMemoryRequirements vk_mem_reqs;
 	} allocation;
 };
 

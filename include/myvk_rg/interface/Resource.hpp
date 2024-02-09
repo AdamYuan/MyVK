@@ -500,7 +500,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Resour
 		return visitor(static_cast<const LastFrameBuffer *>(this));
 	}
 	assert(false);
-	return visitor(static_cast<const BufferAliasBase *>(nullptr));
+	return visitor(static_cast<const ManagedImage *>(nullptr));
 }
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageBase::Visit(Visitor &&visitor) const {
 	switch (GetState()) {
@@ -514,7 +514,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageB
 		return visitor(static_cast<const LastFrameImage *>(this));
 	}
 	assert(false);
-	return visitor(static_cast<const ImageAliasBase *>(nullptr));
+	return visitor(static_cast<const ManagedImage *>(nullptr));
 }
 template <typename Visitor>
 std::invoke_result_t<Visitor, ManagedImage *> InternalImageBase::Visit(Visitor &&visitor) const {
@@ -540,7 +540,7 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 	default:
 		assert(false);
 	}
-	return visitor(static_cast<const BufferAliasBase *>(nullptr));
+	return visitor(static_cast<const ManagedBuffer *>(nullptr));
 }
 
 template <typename T>

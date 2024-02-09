@@ -3,27 +3,21 @@
 
 #include <volk.h>
 
-inline static void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
+inline static VkImageType VkImageTypeFromVkImageViewType(VkImageViewType view_type) {
 	// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 	switch (view_type) {
 	case VK_IMAGE_VIEW_TYPE_1D:
 	case VK_IMAGE_VIEW_TYPE_1D_ARRAY:
-		*p_image_type = VK_IMAGE_TYPE_1D;
-		return;
+		return VK_IMAGE_TYPE_1D;
 	case VK_IMAGE_VIEW_TYPE_CUBE:
 	case VK_IMAGE_VIEW_TYPE_CUBE_ARRAY:
-		*p_image_type = VK_IMAGE_TYPE_2D;
-		return;
 	case VK_IMAGE_VIEW_TYPE_2D:
 	case VK_IMAGE_VIEW_TYPE_2D_ARRAY:
-		if (*p_image_type == VK_IMAGE_TYPE_1D)
-			*p_image_type = VK_IMAGE_TYPE_2D;
-		return;
+		return VK_IMAGE_TYPE_2D;
 	case VK_IMAGE_VIEW_TYPE_3D:
-		*p_image_type = VK_IMAGE_TYPE_3D;
-		return;
+		return VK_IMAGE_TYPE_3D;
 	default:
-		return;
+		return VK_IMAGE_TYPE_2D;
 	}
 }
 
