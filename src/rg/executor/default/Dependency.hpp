@@ -64,13 +64,9 @@ public:
 	inline const auto &GetPassGraph() const { return m_pass_graph; }
 
 	// Input
-	inline const ResourceBase *GetInputResource(const InputBase *p_input) const {
-		return get_dep_info(p_input).p_resource;
-	}
-	inline const PassBase *GetInputPass(const InputBase *p_input) const { return get_dep_info(p_input).p_pass; }
-	inline const std::vector<const InputBase *> &GetPassInputs(const PassBase *p_pass) const {
-		return get_dep_info(p_pass).inputs;
-	}
+	static const ResourceBase *GetInputResource(const InputBase *p_input) { return get_dep_info(p_input).p_resource; }
+	static const PassBase *GetInputPass(const InputBase *p_input) { return get_dep_info(p_input).p_pass; }
+	static std::vector<const InputBase *> &GetPassInputs(const PassBase *p_pass) { return get_dep_info(p_pass).inputs; }
 
 	// Counts
 	inline std::size_t GetSortedPassCount() const { return m_topo_id_passes.size(); }

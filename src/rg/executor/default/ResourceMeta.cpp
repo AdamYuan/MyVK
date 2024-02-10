@@ -9,6 +9,8 @@
 namespace default_executor {
 
 ResourceMeta ResourceMeta::Create(const Args &args) {
+	args.collection.ClearInfo(&ResourceInfo::meta);
+
 	ResourceMeta r = {};
 	r.tag_resources(args);
 	r.fetch_alloc_sizes(args);
@@ -23,7 +25,6 @@ void ResourceMeta::tag_resources(const Args &args) {
 		if (p_resource->GetState() == ResourceState::kExternal) {
 			get_meta(p_resource).p_alloc_resource = nullptr;
 			get_meta(p_resource).p_view_resource = nullptr;
-			// get_meta(p_resource).alloc_id = -1;
 			continue;
 		}
 

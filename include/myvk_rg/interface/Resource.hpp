@@ -303,6 +303,14 @@ public:
 	inline uint32_t GetMipLevels() const { return m_mip_levels; }
 	inline uint32_t GetArrayLayers() const { return m_layers; }
 
+	inline VkExtent3D GetBaseMipExtent() const {
+		return VkExtent3D{
+		    .width = std::max(m_extent.width >> m_base_mip_level, 1u),
+		    .height = std::max(m_extent.height >> m_base_mip_level, 1u),
+		    .depth = std::max(m_extent.depth >> m_base_mip_level, 1u),
+		};
+	}
+
 	inline bool Merge(const SubImageSize &r) {
 		if (m_layers == 0)
 			*this = r;

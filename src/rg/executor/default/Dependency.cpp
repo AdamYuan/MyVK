@@ -3,6 +3,8 @@
 namespace default_executor {
 
 Dependency Dependency::Create(const Args &args) {
+	args.collection.ClearInfo(&PassInfo::dependency, &InputInfo::dependency, &ResourceInfo::dependency);
+
 	Dependency g = {};
 
 	for (const auto &it : args.render_graph.GetResultPoolData())

@@ -265,17 +265,35 @@ TEST_SUITE("Default Executor") {
 
 		printf("ALLOC:\n");
 		for (const ResourceBase *p_resource : resource_meta.GetAllocIDResources()) {
-			printf("%s:%zu, ", p_resource->GetGlobalKey().Format().c_str(), ResourceMeta::GetAllocID(p_resource));
+			printf("%s:[alloc_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
+			       ResourceMeta::GetAllocID(p_resource));
 			p_resource->Visit(overloaded(
 			    [](const myvk_rg::interface::ImageBase *p_image) {
 				    const auto &view = ResourceMeta::GetViewInfo(p_image);
-				    printf(" size={%dx%dx%d, mips=%d, layers=%d}", view.size.GetExtent().width,
+				    printf("size={%dx%dx%d, mips=%d, layers=%d}", view.size.GetExtent().width,
 				           view.size.GetExtent().height, view.size.GetExtent().depth, view.size.GetMipLevels(),
 				           view.size.GetArrayLayers());
 			    },
 			    [](const myvk_rg::interface::BufferBase *p_buffer) {
 				    const auto &view = ResourceMeta::GetViewInfo(p_buffer);
-				    printf(" size=%lu", view.size);
+				    printf("size=%lu", view.size);
+			    }));
+			printf("\n");
+		}
+		printf("View:\n");
+		for (const ResourceBase *p_resource : resource_meta.GetViewIDResources()) {
+			printf("%s:[alloc_id=%zu][view_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
+			       ResourceMeta::GetAllocID(p_resource), ResourceMeta::GetViewID(p_resource));
+			p_resource->Visit(overloaded(
+			    [](const myvk_rg::interface::ImageBase *p_image) {
+				    const auto &view = ResourceMeta::GetViewInfo(p_image);
+				    printf("size={%dx%dx%d, mips=%d, layers=%d}, base_layer=%d", view.size.GetExtent().width,
+				           view.size.GetExtent().height, view.size.GetExtent().depth, view.size.GetMipLevels(),
+				           view.size.GetArrayLayers(), view.base_layer);
+			    },
+			    [](const myvk_rg::interface::BufferBase *p_buffer) {
+				    const auto &view = ResourceMeta::GetViewInfo(p_buffer);
+				    printf("size=%lu", view.size);
 			    }));
 			printf("\n");
 		}

@@ -6,8 +6,8 @@
 #ifndef MYVK_SCHEDULE_HPP
 #define MYVK_SCHEDULE_HPP
 
-#include "Collection.hpp"
 #include "Dependency.hpp"
+#include "ResourceMeta.hpp"
 
 namespace default_executor {
 
@@ -32,6 +32,7 @@ private:
 		const RenderGraphBase &render_graph;
 		const Collection &collection;
 		const Dependency &dependency;
+		const ResourceMeta &resource_meta;
 	};
 
 	std::vector<PassGroup> m_pass_groups;
@@ -39,8 +40,9 @@ private:
 
 	static auto &get_sched_info(const PassBase *p_pass) { return GetPassInfo(p_pass).schedule; }
 
-	void fetch_render_areas(const Args &args);
-	void group_passes(const Args &args);
+	static void fetch_render_areas(const Args &args);
+	static Graph<const PassBase *, Dependency::PassEdge> make_extra_graph(const Args &args);
+	std::vector<std::size_t> merge_passes(const Args &args);
 
 public:
 	static Schedule Create(const Args &args);

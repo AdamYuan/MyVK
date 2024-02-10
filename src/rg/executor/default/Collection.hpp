@@ -18,9 +18,9 @@ private:
 	std::map<GlobalKey, const PassBase *> m_passes;
 	std::map<GlobalKey, const InputBase *> m_inputs;
 	std::map<GlobalKey, const ResourceBase *> m_resources;
-	std::vector<PassInfo> m_pass_infos;
-	std::vector<InputInfo> m_input_infos;
-	std::vector<ResourceInfo> m_resource_infos;
+	mutable std::vector<PassInfo> m_pass_infos;
+	mutable std::vector<InputInfo> m_input_infos;
+	mutable std::vector<ResourceInfo> m_resource_infos;
 
 	template <typename Container> void collect_resources(const Container &pool);
 	template <typename Container> void collect_passes(const Container &pool);
@@ -90,6 +90,23 @@ public:
 	            return v;
 	        });
 	} */
+	void ClearInfo() const {}
+	template <typename Info_T, typename Member_T, typename... Args>
+	void ClearInfo(Member_T Info_T::*p_member, Args &&...args) const {
+		if constexpr (std::is_same_v<Info_T, PassInfo>) {
+			for (PassInfo &pass_info : m_pass_infos)
+				pass_info.*p_member = {};
+		} else if constexpr (std::is_same_v<Info_T, ResourceInfo>) {
+			for (ResourceInfo &resource_info : m_resource_infos)
+				resource_info.*p_member = {};
+		} else if constexpr (std::is_same_v<Info_T, InputInfo>) {
+			for (InputInfo &input_info : m_input_infos)
+				input_info.*p_member = {};
+		} else
+			static_assert(false);
+
+		ClearInfo(std::forward<Args>(args)...);
+	}
 };
 
 } // namespace default_executor

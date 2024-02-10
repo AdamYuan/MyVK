@@ -74,6 +74,8 @@ public:
 };
 
 Allocation Allocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args) {
+	args.collection.ClearInfo(&ResourceInfo::allocation);
+
 	Allocation alloc = {};
 	alloc.m_device_ptr = device_ptr;
 
