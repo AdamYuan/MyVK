@@ -25,7 +25,7 @@ private:
 
 	Relation m_resource_alias_relation;
 
-	static auto &get_alloc_info(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).allocation; }
+	static auto &get_vk_alloc(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).allocation; }
 
 	void create_vk_resources(const Args &args);
 	static std::tuple<VkDeviceSize, uint32_t> fetch_memory_requirements(std::ranges::input_range auto &&resources);
@@ -44,7 +44,7 @@ public:
 		return m_resource_alias_relation.Get(alloc_id_l, alloc_id_r);
 	}
 	inline bool IsResourceAliased(const ResourceBase *p_l, const ResourceBase *p_r) const {
-		return IsResourceAliased(ResourceMeta::GetResourceAllocID(p_l), ResourceMeta::GetResourceAllocID(p_r));
+		return IsResourceAliased(ResourceMeta::GetAllocID(p_l), ResourceMeta::GetAllocID(p_r));
 	}
 };
 

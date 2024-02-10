@@ -59,20 +59,31 @@ struct ResourceInfo {
 
 	// Meta
 	struct {
+		friend class ResourceMeta;
+
+	private:
 		std::size_t alloc_id{}, view_id{};
 		const ResourceBase *p_alloc_resource{}, *p_view_resource{};
-		struct {
-			SubImageSize size{};
-			uint32_t base_layer{};
-			VkImageType vk_type{};
-			VkFormat vk_format{};
-			VkImageUsageFlags vk_usages{};
-		} image{};
-		struct {
-			VkDeviceSize size{};
-			VkBufferUsageFlags vk_usages{};
-		} buffer{};
-		bool double_buffer{};
+
+		union {
+			struct {
+				VkImageType vk_type{};
+				VkFormat vk_format{};
+				VkImageUsageFlags vk_usages{};
+			} image_alloc{};
+			struct {
+				VkBufferUsageFlags vk_usages{};
+			} buffer_alloc;
+		};
+		union {
+			struct {
+				SubImageSize size{};
+				uint32_t base_layer{};
+			} image_view{};
+			struct {
+				VkDeviceSize size{};
+			} buffer_view;
+		};
 	} meta{};
 
 	// Allocation
@@ -80,6 +91,7 @@ struct ResourceInfo {
 		friend class Allocation;
 
 	private:
+		bool double_buffer{};
 		struct {
 			std::array<myvk::Ptr<myvk::ImageBase>, 2> myvk_images{};
 			std::array<myvk::Ptr<myvk::ImageView>, 2> myvk_image_views{};

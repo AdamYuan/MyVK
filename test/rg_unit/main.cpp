@@ -142,6 +142,8 @@ public:
 		lf_image->SetPointedAlias(dim_pass->GetImageOutput());
 
 		AddResult({"final"}, dim_pass->GetImageOutput());
+
+		SetCanvasSize({1280, 720});
 	}
 	inline ~MyRenderGraph() final = default;
 
@@ -157,14 +159,18 @@ public:
 
 #include "../../src/rg/executor/default/Collection.hpp"
 #include "../../src/rg/executor/default/Dependency.hpp"
+#include "../../src/rg/executor/default/ResourceMeta.hpp"
 TEST_SUITE("Default Executor") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
 
 	using default_executor::Collection;
 	using default_executor::Dependency;
+	using default_executor::ResourceMeta;
 
 	using myvk_rg::interface::PassBase;
 	using myvk_rg::interface::ResourceBase;
+
+	using myvk_rg::interface::overloaded;
 
 	Collection collection;
 	TEST_CASE("Test Collection") {
@@ -250,5 +256,28 @@ TEST_SUITE("Default Executor") {
 		    for (const auto &in : it.second.output_nodes)
 		        printf("\t\t%s\n", in->p_input->GetInputAlias().GetSourceKey().Format().c_str());
 		} */
+	}
+
+	ResourceMeta resource_meta;
+	TEST_CASE("Test ResourceMeta") {
+		resource_meta =
+		    ResourceMeta::Create({.render_graph = *render_graph, .collection = collection, .dependency = dependency});
+
+		printf("ALLOC:\n");
+		for (const ResourceBase *p_resource : resource_meta.GetAllocIDResources()) {
+			printf("%s:%zu, ", p_resource->GetGlobalKey().Format().c_str(), ResourceMeta::GetAllocID(p_resource));
+			p_resource->Visit(overloaded(
+			    [](const myvk_rg::interface::ImageBase *p_image) {
+				    const auto &view = ResourceMeta::GetViewInfo(p_image);
+				    printf(" size={%dx%dx%d, mips=%d, layers=%d}", view.size.GetExtent().width,
+				           view.size.GetExtent().height, view.size.GetExtent().depth, view.size.GetMipLevels(),
+				           view.size.GetArrayLayers());
+			    },
+			    [](const myvk_rg::interface::BufferBase *p_buffer) {
+				    const auto &view = ResourceMeta::GetViewInfo(p_buffer);
+				    printf(" size=%lu", view.size);
+			    }));
+			printf("\n");
+		}
 	}
 }
