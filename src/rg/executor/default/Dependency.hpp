@@ -67,6 +67,7 @@ public:
 	inline const ResourceBase *GetInputResource(const InputBase *p_input) const {
 		return get_dep_info(p_input).p_resource;
 	}
+	inline const PassBase *GetInputPass(const InputBase *p_input) const { return get_dep_info(p_input).p_pass; }
 
 	// Counts
 	inline std::size_t GetSortedPassCount() const { return m_topo_id_passes.size(); }

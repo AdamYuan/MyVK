@@ -20,7 +20,6 @@ Dependency Dependency::Create(const Args &args) {
 const InputBase *Dependency::traverse_output_alias(const Dependency::Args &args, const OutputAlias auto &output_alias) {
 	const PassBase *p_src_pass = args.collection.FindPass(output_alias.GetSourcePassKey());
 	const InputBase *p_src_input = args.collection.FindInput(output_alias.GetSourceKey());
-	get_dep_info(p_src_input).p_pass = p_src_pass;
 	traverse_pass(args, p_src_pass);
 	return p_src_input;
 }
@@ -33,6 +32,7 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 	    [&](const PassWithInput auto *p_pass) {
 		    for (const auto &it : p_pass->GetInputPoolData()) {
 			    const InputBase *p_input = it.second.template Get<InputBase>();
+			    get_dep_info(p_input).p_pass = p_pass;
 
 			    p_input->GetInputAlias().Visit(overloaded(
 			        [&](const OutputAlias auto *p_output_alias) {
