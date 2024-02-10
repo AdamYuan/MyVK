@@ -28,65 +28,63 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 	if (m_pass_graph.HasVertex(p_pass))
 		return;
 
-	const auto pass_visitor = overloaded(
-	    [&](const PassWithInput auto *p_pass) {
-		    for (const auto &it : p_pass->GetInputPoolData()) {
-			    const InputBase *p_input = it.second.template Get<InputBase>();
-			    get_dep_info(p_input).p_pass = p_pass;
+	const auto pass_visitor = [&](const PassWithInput auto *p_pass) {
+		for (const auto &it : p_pass->GetInputPoolData()) {
+			const InputBase *p_input = it.second.template Get<InputBase>();
+			get_dep_info(p_input).p_pass = p_pass;
+			get_dep_info(p_pass).inputs.push_back(p_input);
 
-			    p_input->GetInputAlias().Visit(overloaded(
-			        [&](const OutputAlias auto *p_output_alias) {
-				        const InputBase *p_src_input = traverse_output_alias(args, *p_output_alias);
-				        const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
-				        const ResourceBase *p_resource = get_dep_info(p_src_input).p_resource;
-				        get_dep_info(p_input).p_resource = p_resource;
+			p_input->GetInputAlias().Visit(overloaded(
+			    [&](const OutputAlias auto *p_output_alias) {
+				    const InputBase *p_src_input = traverse_output_alias(args, *p_output_alias);
+				    const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
+				    const ResourceBase *p_resource = get_dep_info(p_src_input).p_resource;
+				    get_dep_info(p_input).p_resource = p_resource;
 
-				        m_pass_graph.AddEdge(p_src_pass, p_pass,
-				                             PassEdge{p_src_input, p_input, p_resource, PassEdgeType::kLocal});
-			        },
-			        [&](const RawAlias auto *p_raw_alias) {
-				        const ResourceBase *p_resource = args.collection.FindResource(p_raw_alias->GetSourceKey());
-				        m_resource_graph.AddVertex(p_resource);
-				        get_dep_info(p_input).p_resource = p_resource;
+				    m_pass_graph.AddEdge(p_src_pass, p_pass,
+				                         PassEdge{p_src_input, p_input, p_resource, PassEdgeType::kLocal});
+			    },
+			    [&](const RawAlias auto *p_raw_alias) {
+				    const ResourceBase *p_resource = args.collection.FindResource(p_raw_alias->GetSourceKey());
+				    m_resource_graph.AddVertex(p_resource);
+				    get_dep_info(p_input).p_resource = p_resource;
 
-				        p_resource->Visit(overloaded(
-				            [&](const CombinedImage *p_combined_image) {
-					            for (const OutputImageAlias &src_alias : p_combined_image->GetSubImages()) {
-						            const InputBase *p_src_input = traverse_output_alias(args, src_alias);
-						            const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
-						            const ResourceBase *p_sub_image = get_dep_info(p_src_input).p_resource;
+				    p_resource->Visit(overloaded(
+				        [&](const CombinedImage *p_combined_image) {
+					        for (const OutputImageAlias &src_alias : p_combined_image->GetSubImages()) {
+						        const InputBase *p_src_input = traverse_output_alias(args, src_alias);
+						        const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
+						        const ResourceBase *p_sub_image = get_dep_info(p_src_input).p_resource;
 
-						            m_pass_graph.AddEdge(
-						                p_src_pass, p_pass,
-						                PassEdge{p_src_input, p_input, p_sub_image, PassEdgeType::kLocal});
-						            m_resource_graph.AddEdge(p_resource, p_sub_image, {ResourceEdgeType::kSubResource});
-					            }
-				            },
-				            [&](const LastFrameResource auto *p_lf_resource) {
-					            m_pass_graph.AddEdge(nullptr, p_pass,
-					                                 PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
+						        m_pass_graph.AddEdge(p_src_pass, p_pass,
+						                             PassEdge{p_src_input, p_input, p_sub_image, PassEdgeType::kLocal});
+						        m_resource_graph.AddEdge(p_resource, p_sub_image, {ResourceEdgeType::kSubResource});
+					        }
+				        },
+				        [&](const LastFrameResource auto *p_lf_resource) {
+					        m_pass_graph.AddEdge(nullptr, p_pass,
+					                             PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
 
-					            const auto &src_alias = p_lf_resource->GetPointedAlias();
-					            const InputBase *p_src_input = traverse_output_alias(args, src_alias);
-					            const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
-					            const ResourceBase *p_src_resource = get_dep_info(p_src_input).p_resource;
+					        const auto &src_alias = p_lf_resource->GetPointedAlias();
+					        const InputBase *p_src_input = traverse_output_alias(args, src_alias);
+					        const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
+					        const ResourceBase *p_src_resource = get_dep_info(p_src_input).p_resource;
 
-					            // Last Frame Edges
-					            m_pass_graph.AddEdge(
-					                p_src_pass, p_pass,
-					                PassEdge{p_src_input, p_input, p_src_resource, PassEdgeType::kLastFrame});
-					            m_resource_graph.AddEdge(p_resource, p_src_resource, {ResourceEdgeType::kLastFrame});
-				            },
-				            [&](auto &&) {
-					            m_pass_graph.AddEdge(nullptr, p_pass,
-					                                 PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
-				            }));
-			        }));
-		    }
-	    },
-	    [](const auto *) {});
+					        // Last Frame Edges
+					        m_pass_graph.AddEdge(
+					            p_src_pass, p_pass,
+					            PassEdge{p_src_input, p_input, p_src_resource, PassEdgeType::kLastFrame});
+					        m_resource_graph.AddEdge(p_resource, p_src_resource, {ResourceEdgeType::kLastFrame});
+				        },
+				        [&](auto &&) {
+					        m_pass_graph.AddEdge(nullptr, p_pass,
+					                             PassEdge{nullptr, p_input, p_resource, PassEdgeType::kLocal});
+				        }));
+			    }));
+		}
+	};
 
-	p_pass->Visit(pass_visitor);
+	p_pass->Visit(overloaded(pass_visitor, [](auto &&) {}));
 }
 
 struct AccessEdgeInfo {

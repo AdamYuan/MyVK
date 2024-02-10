@@ -32,6 +32,7 @@ struct PassInfo {
 
 	private:
 		std::size_t topo_id{};
+		std::vector<const InputBase *> inputs;
 	} dependency{};
 
 	// Schedule
@@ -39,9 +40,8 @@ struct PassInfo {
 		friend class Schedule;
 
 	private:
-		std::size_t cluster_id{};
-
-		std::vector<const ImageBase *> attachments;
+		RenderPassArea render_area;
+		std::size_t group_id{}, subpass_id{};
 	} schedule{};
 };
 
