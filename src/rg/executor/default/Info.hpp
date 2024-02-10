@@ -57,32 +57,38 @@ struct ResourceInfo {
 		Bitset access_passes;
 	} dependency{};
 
-	// Allocation
+	// Meta
 	struct {
-		friend class Allocation;
-
-	private:
 		std::size_t alloc_id{}, view_id{};
 		const ResourceBase *p_alloc_resource{}, *p_view_resource{};
 		struct {
 			SubImageSize size{};
 			uint32_t base_layer{};
-			// VkImageViewType vk_view_type{};
 			VkImageType vk_type{};
 			VkFormat vk_format{};
 			VkImageUsageFlags vk_usages{};
-			std::array<myvk::Ptr<myvk::ImageBase>, 2> myvk_images{};
-			std::array<myvk::Ptr<myvk::ImageView>, 2> myvk_image_views{};
 		} image{};
 		struct {
 			VkDeviceSize size{};
 			VkBufferUsageFlags vk_usages{};
+		} buffer{};
+		bool double_buffer{};
+	} meta{};
+
+	// Allocation
+	struct {
+		friend class Allocation;
+
+	private:
+		struct {
+			std::array<myvk::Ptr<myvk::ImageBase>, 2> myvk_images{};
+			std::array<myvk::Ptr<myvk::ImageView>, 2> myvk_image_views{};
+		} image{};
+		struct {
 			std::array<myvk::Ptr<myvk::BufferBase>, 2> myvk_buffers{};
 			std::array<void *, 2> mapped_ptrs{};
 		} buffer{};
-		bool double_buffer{};
 		VkMemoryRequirements vk_mem_reqs{};
-
 		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
 		std::array<VkDeviceSize, 2> mem_offsets{};
 	} allocation{};
