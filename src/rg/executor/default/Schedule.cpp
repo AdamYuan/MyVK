@@ -12,8 +12,8 @@ Schedule Schedule::Create(const Args &args) {
 	args.collection.ClearInfo(&PassInfo::schedule);
 
 	Schedule s = {};
-	s.fetch_render_areas(args);
-	s.merge_passes(args);
+	fetch_render_areas(args);
+	s.group_passes(args, merge_passes(args, make_image_read_graph(args)));
 	return s;
 }
 
@@ -51,7 +51,7 @@ void Schedule::fetch_render_areas(const Args &args) {
 		p_pass->Visit(overloaded(graphics_pass_visitor, [](auto &&) {}));
 }
 
-Graph<const PassBase *, Dependency::PassEdge> Schedule::make_extra_graph(const Schedule::Args &args) {
+Graph<const PassBase *, Dependency::PassEdge> Schedule::make_image_read_graph(const Schedule::Args &args) {
 	// Add extra image read edges, since multiple reads to the same image can break merging if, for example the first
 	// (topo_id) reads as Input attachment and the second reads as Sampler
 	Graph<const PassBase *, Dependency::PassEdge> extra_graph;
@@ -63,6 +63,8 @@ Graph<const PassBase *, Dependency::PassEdge> Schedule::make_extra_graph(const S
 	});
 
 	for (const PassBase *p_pass : view.GetVertices()) {
+		extra_graph.AddVertex(p_pass);
+
 		std::vector<std::size_t> out_edge_ids;
 		for (auto [_, _1, edge_id] : view.GetOutEdges(p_pass))
 			out_edge_ids.push_back(edge_id);
@@ -98,7 +100,8 @@ Graph<const PassBase *, Dependency::PassEdge> Schedule::make_extra_graph(const S
 	return extra_graph;
 }
 
-std::vector<std::size_t> Schedule::merge_passes(const Args &args) {
+std::vector<std::size_t>
+Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependency::PassEdge> &image_read_pass_graph) {
 	// Compute Merge Size
 
 	// Calculate merge_size, Complexity: O(N + M)
@@ -123,14 +126,67 @@ std::vector<std::size_t> Schedule::merge_passes(const Args &args) {
 			merge_sizes[i] = 0;
 	}
 
+	// Exclude nullptr Pass
+	const auto node_filter = [](const PassBase *p_pass) -> bool { return p_pass; };
+	auto view = args.dependency.GetPassGraph().MakeView(node_filter,
+	                                                    Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kLocal>);
+	auto image_read_view = image_read_pass_graph.MakeView(node_filter, Dependency::kAnyFilter);
+
 	for (std::size_t i = 0; i < args.dependency.GetSortedPassCount(); ++i) {
 		if (i == 0)
 			continue;
 
 		const PassBase *p_pass = args.dependency.GetTopoIDPass(i);
+		std::size_t &size = merge_sizes[i];
+
+		for (auto [from, e, _] : view.GetInEdges(p_pass)) {
+			std::size_t from_topo_id = Dependency::GetPassTopoID(from);
+			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()))
+				size = std::min(size, i - from_topo_id + merge_sizes[from_topo_id]);
+			else
+				size = std::min(size, i - from_topo_id);
+		}
+		for (auto [from, e, _] : image_read_view.GetInEdges(p_pass)) {
+			std::size_t from_topo_id = Dependency::GetPassTopoID(from);
+			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()) ||
+			    e.opt_p_src_input->GetUsage() == e.p_dst_input->GetUsage())
+				// Read operations with same Usage can also merge into the same RenderPass
+				size = std::min(size, i - from_topo_id + merge_sizes[from_topo_id]);
+			else
+				size = std::min(size, i - from_topo_id);
+		}
+	}
+
+	// Regularize Merge Sizes
+	for (std::size_t i = 0, prev_size = 0; i < args.dependency.GetSortedPassCount(); ++i) {
+		const PassBase *p_pass = args.dependency.GetTopoIDPass(i);
+		auto &size = merge_sizes[i];
+		if (size > prev_size)
+			size = prev_size + 1;
+		else
+			size = p_pass->GetType() == PassType::kGraphics ? 1 : 0;
+
+		prev_size = size;
 	}
 
 	return merge_sizes;
+}
+
+void Schedule::group_passes(const Args &args, const std::vector<std::size_t> &merge_sizes) {
+	for (std::size_t topo_id = 0; const PassBase *p_pass : args.dependency.GetTopoIDPasses()) {
+		std::size_t merge_size = merge_sizes[topo_id];
+		if (merge_size <= 1) {
+			get_sched_info(p_pass).group_id = m_pass_groups.size();
+			get_sched_info(p_pass).subpass_id = 0;
+			m_pass_groups.emplace_back();
+		} else {
+			get_sched_info(p_pass).group_id = m_pass_groups.size() - 1;
+			get_sched_info(p_pass).subpass_id = merge_size - 1;
+		}
+		m_pass_groups.back().subpasses.push_back(p_pass);
+
+		++topo_id;
+	}
 }
 
 } // namespace default_executor

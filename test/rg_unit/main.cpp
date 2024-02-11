@@ -160,12 +160,14 @@ public:
 #include "../../src/rg/executor/default/Collection.hpp"
 #include "../../src/rg/executor/default/Dependency.hpp"
 #include "../../src/rg/executor/default/ResourceMeta.hpp"
+#include "../../src/rg/executor/default/Schedule.hpp"
 TEST_SUITE("Default Executor") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
 
 	using default_executor::Collection;
 	using default_executor::Dependency;
 	using default_executor::ResourceMeta;
+	using default_executor::Schedule;
 
 	using myvk_rg::interface::PassBase;
 	using myvk_rg::interface::ResourceBase;
@@ -295,6 +297,22 @@ TEST_SUITE("Default Executor") {
 				    const auto &view = ResourceMeta::GetViewInfo(p_buffer);
 				    printf("size=%lu", view.size);
 			    }));
+			printf("\n");
+		}
+	}
+
+	Schedule schedule;
+	TEST_CASE("Test Schedule") {
+		schedule = Schedule::Create({.render_graph = *render_graph,
+		                             .collection = collection,
+		                             .dependency = dependency,
+		                             .resource_meta = resource_meta});
+
+		for (const auto &pass_group : schedule.GetPassGroups()) {
+			printf("Pass Group #%zu: ", Schedule::GetGroupID(pass_group.subpasses[0]));
+			for (const PassBase *p_subpass : pass_group.subpasses) {
+				printf("%s:%zu, ", p_subpass->GetGlobalKey().Format().c_str(), Schedule::GetSubpassID(p_subpass));
+			}
 			printf("\n");
 		}
 	}
