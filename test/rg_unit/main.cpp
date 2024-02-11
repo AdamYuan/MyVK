@@ -203,8 +203,7 @@ TEST_SUITE("Default Executor") {
 		    },
 		    [](const Dependency::PassEdge &e) {
 			    return e.p_resource->GetGlobalKey().Format() + ";" +
-			           std::to_string(Dependency::GetResourcePhysID(e.p_resource)) +
-			           (e.type == Dependency::PassEdgeType::kLocal ? "" : "(LF)");
+			           std::to_string(Dependency::GetResourcePhysID(e.p_resource));
 		    });
 
 		dependency.GetResourceGraph().WriteGraphViz(
@@ -214,24 +213,9 @@ TEST_SUITE("Default Executor") {
 			           std::to_string(Dependency::GetResourcePhysID(p_resource));
 		    },
 		    [](const Dependency::ResourceEdge &e) {
-			    return e.type == Dependency::ResourceEdgeType::kSubResource ? "SUB" : "LF";
+			    return e == Dependency::ResourceEdge::kSubResource ? "SUB" : "LF";
 		    });
 
-		{
-			auto view = dependency.GetPassGraph().MakeView(
-			    Dependency::kAnyFilter, Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kLocal>);
-			auto kahn_result = view.KahnTopologicalSort();
-			CHECK(kahn_result.is_dag);
-			CHECK_EQ(kahn_result.sorted[0], nullptr);
-			for (const auto p_pass : kahn_result.sorted) {
-				std::cout << (p_pass ? p_pass->GetGlobalKey().Format() : "start") << std::endl;
-			}
-		}
-		{
-			auto view = dependency.GetPassGraph().MakeView(Dependency::kAnyFilter, Dependency::kAnyFilter);
-			auto kahn_result = view.KahnTopologicalSort();
-			CHECK(!kahn_result.is_dag);
-		}
 		{
 			printf("Pass Less:\n");
 			for (std::size_t i = 0; i < dependency.GetSortedPassCount(); ++i) {

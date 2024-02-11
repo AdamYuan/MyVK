@@ -59,7 +59,7 @@ Graph<const PassBase *, Dependency::PassEdge> Schedule::make_image_read_graph(co
 	const auto &pass_graph = args.dependency.GetPassGraph();
 	// Only process Local & Image access Edges
 	auto view = pass_graph.MakeView(Dependency::kAnyFilter, [](const Dependency::PassEdge &e) -> bool {
-		return e.type == Dependency::PassEdgeType::kLocal && e.p_resource->GetType() == ResourceType::kImage;
+		return e.p_resource->GetType() == ResourceType::kImage;
 	});
 
 	for (const PassBase *p_pass : view.GetVertices()) {
@@ -89,11 +89,9 @@ Graph<const PassBase *, Dependency::PassEdge> Schedule::make_image_read_graph(co
 				it->second = edge_id;
 
 				const auto &prev_e = pass_graph.GetEdge(prev_edge_id);
-				extra_graph.AddEdge(pass_graph.GetToVertex(prev_edge_id), pass_graph.GetToVertex(edge_id),
-				                    {.opt_p_src_input = prev_e.p_dst_input,
-				                     .p_dst_input = e.p_dst_input,
-				                     .p_resource = p_resource,
-				                     .type = Dependency::PassEdgeType::kLocal});
+				extra_graph.AddEdge(
+				    pass_graph.GetToVertex(prev_edge_id), pass_graph.GetToVertex(edge_id),
+				    {.opt_p_src_input = prev_e.p_dst_input, .p_dst_input = e.p_dst_input, .p_resource = p_resource});
 			}
 		}
 	}
@@ -128,8 +126,7 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 
 	// Exclude nullptr Pass
 	const auto node_filter = [](const PassBase *p_pass) -> bool { return p_pass; };
-	auto view = args.dependency.GetPassGraph().MakeView(node_filter,
-	                                                    Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kLocal>);
+	auto view = args.dependency.GetPassGraph().MakeView(node_filter, Dependency::kAnyFilter);
 	auto image_read_view = image_read_pass_graph.MakeView(node_filter, Dependency::kAnyFilter);
 
 	for (std::size_t i = 0; i < args.dependency.GetSortedPassCount(); ++i) {

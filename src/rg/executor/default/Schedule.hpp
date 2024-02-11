@@ -13,17 +13,19 @@ namespace default_executor {
 
 class Schedule {
 public:
-	struct PassDependency {
+	enum class BarrierType { kLocal, kValid, kLFValid, kExternal };
+	struct PassBarrier {
 		const ResourceBase *p_resource;
 		std::vector<const InputBase *> src_s, dst_s;
+		BarrierType type;
 	};
-	struct SubpassDependency {
+	struct SubpassBarrier {
 		const ImageBase *p_attachment;
 		const InputBase *p_src, *p_dst;
 	};
 	struct PassGroup {
 		std::vector<const PassBase *> subpasses;
-		std::vector<SubpassDependency> subpass_deps;
+		std::vector<SubpassBarrier> subpass_deps;
 		inline bool IsRenderPass() const { return subpasses[0]->GetType() == PassType::kGraphics; }
 	};
 
@@ -36,7 +38,7 @@ private:
 	};
 
 	std::vector<PassGroup> m_pass_groups;
-	std::vector<PassDependency> m_pass_dependencies;
+	std::vector<PassBarrier> m_pass_barriers;
 
 	static auto &get_sched_info(const PassBase *p_pass) { return GetPassInfo(p_pass).schedule; }
 

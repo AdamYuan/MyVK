@@ -19,16 +19,11 @@ public:
 		const Collection &collection;
 	};
 
-	enum class PassEdgeType { kLocal, kLastFrame };
 	struct PassEdge {
 		const InputBase *opt_p_src_input, *p_dst_input;
 		const ResourceBase *p_resource;
-		PassEdgeType type;
 	};
-	enum class ResourceEdgeType { kSubResource, kLastFrame };
-	struct ResourceEdge {
-		ResourceEdgeType type;
-	};
+	enum class ResourceEdge { kSubResource, kLastFrame };
 
 private:
 	Graph<const PassBase *, PassEdge> m_pass_graph;
@@ -53,11 +48,8 @@ private:
 public:
 	static Dependency Create(const Args &args);
 
-	template <typename TypeEnum, TypeEnum... Types>
-	inline static const auto kEdgeFilter = [](const auto &e) { return ((e.type == Types) || ...); };
-	template <PassEdgeType... Types> inline static const auto kPassEdgeFilter = kEdgeFilter<PassEdgeType, Types...>;
-	template <ResourceEdgeType... Types>
-	inline static const auto kResourceEdgeFilter = kEdgeFilter<ResourceEdgeType, Types...>;
+	template <ResourceEdge... Types>
+	inline static const auto kResourceEdgeFilter = [](const auto &e) { return ((e == Types) || ...); };
 	inline static const auto kAnyFilter = [](auto &&) { return true; };
 
 	inline const auto &GetResourceGraph() const { return m_resource_graph; }
