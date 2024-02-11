@@ -6,7 +6,7 @@
 #ifndef MYVK_RG_EXE_DEF_ALLOCATOR_HPP
 #define MYVK_RG_EXE_DEF_ALLOCATOR_HPP
 
-#include "ResourceMeta.hpp"
+#include "Metadata.hpp"
 
 #include <myvk/Device.hpp>
 
@@ -18,7 +18,7 @@ private:
 		const RenderGraphBase &render_graph;
 		const Collection &collection;
 		const Dependency &dependency;
-		const ResourceMeta &resource_meta;
+		const Metadata &resource_meta;
 	};
 
 	myvk::Ptr<myvk::Device> m_device_ptr;
@@ -44,7 +44,7 @@ public:
 		return m_resource_alias_relation.Get(alloc_id_l, alloc_id_r);
 	}
 	inline bool IsResourceAliased(const ResourceBase *p_l, const ResourceBase *p_r) const {
-		return IsResourceAliased(ResourceMeta::GetAllocID(p_l), ResourceMeta::GetAllocID(p_r));
+		return IsResourceAliased(Metadata::GetResourceAllocID(p_l), Metadata::GetResourceAllocID(p_r));
 	}
 };
 

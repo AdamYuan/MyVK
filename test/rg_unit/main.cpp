@@ -159,14 +159,14 @@ public:
 
 #include "../../src/rg/executor/default/Collection.hpp"
 #include "../../src/rg/executor/default/Dependency.hpp"
-#include "../../src/rg/executor/default/ResourceMeta.hpp"
+#include "../../src/rg/executor/default/Metadata.hpp"
 #include "../../src/rg/executor/default/Schedule.hpp"
 TEST_SUITE("Default Executor") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph>();
 
 	using default_executor::Collection;
 	using default_executor::Dependency;
-	using default_executor::ResourceMeta;
+	using default_executor::Metadata;
 	using default_executor::Schedule;
 
 	using myvk_rg::interface::PassBase;
@@ -244,24 +244,24 @@ TEST_SUITE("Default Executor") {
 		} */
 	}
 
-	ResourceMeta resource_meta;
+	Metadata resource_meta;
 	TEST_CASE("Test ResourceMeta") {
 		resource_meta =
-		    ResourceMeta::Create({.render_graph = *render_graph, .collection = collection, .dependency = dependency});
+		    Metadata::Create({.render_graph = *render_graph, .collection = collection, .dependency = dependency});
 
 		printf("ALLOC:\n");
 		for (const ResourceBase *p_resource : resource_meta.GetAllocIDResources()) {
 			printf("%s:[alloc_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
-			       ResourceMeta::GetAllocID(p_resource));
+			       Metadata::GetResourceAllocID(p_resource));
 			p_resource->Visit(overloaded(
 			    [](const myvk_rg::interface::ImageBase *p_image) {
-				    const auto &view = ResourceMeta::GetViewInfo(p_image);
+				    const auto &view = Metadata::GetViewInfo(p_image);
 				    printf("size={%dx%dx%d, mips=%d, layers=%d}", view.size.GetExtent().width,
 				           view.size.GetExtent().height, view.size.GetExtent().depth, view.size.GetMipLevels(),
 				           view.size.GetArrayLayers());
 			    },
 			    [](const myvk_rg::interface::BufferBase *p_buffer) {
-				    const auto &view = ResourceMeta::GetViewInfo(p_buffer);
+				    const auto &view = Metadata::GetViewInfo(p_buffer);
 				    printf("size=%lu", view.size);
 			    }));
 			printf("\n");
@@ -269,16 +269,16 @@ TEST_SUITE("Default Executor") {
 		printf("View:\n");
 		for (const ResourceBase *p_resource : resource_meta.GetViewIDResources()) {
 			printf("%s:[alloc_id=%zu][view_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
-			       ResourceMeta::GetAllocID(p_resource), ResourceMeta::GetViewID(p_resource));
+			       Metadata::GetResourceAllocID(p_resource), Metadata::GetResourceViewID(p_resource));
 			p_resource->Visit(overloaded(
 			    [](const myvk_rg::interface::ImageBase *p_image) {
-				    const auto &view = ResourceMeta::GetViewInfo(p_image);
+				    const auto &view = Metadata::GetViewInfo(p_image);
 				    printf("size={%dx%dx%d, mips=%d, layers=%d}, base_layer=%d", view.size.GetExtent().width,
 				           view.size.GetExtent().height, view.size.GetExtent().depth, view.size.GetMipLevels(),
 				           view.size.GetArrayLayers(), view.base_layer);
 			    },
 			    [](const myvk_rg::interface::BufferBase *p_buffer) {
-				    const auto &view = ResourceMeta::GetViewInfo(p_buffer);
+				    const auto &view = Metadata::GetViewInfo(p_buffer);
 				    printf("size=%lu", view.size);
 			    }));
 			printf("\n");

@@ -35,12 +35,19 @@ struct PassInfo {
 		std::vector<const InputBase *> inputs;
 	} dependency{};
 
+	// Metadata
+	struct {
+		friend class Metadata;
+
+	private:
+		RenderPassArea render_area;
+	} metadata{};
+
 	// Schedule
 	struct {
 		friend class Schedule;
 
 	private:
-		RenderPassArea render_area;
 		std::size_t group_id{}, subpass_id{};
 	} schedule{};
 };
@@ -57,9 +64,9 @@ struct ResourceInfo {
 		Bitset access_passes;
 	} dependency{};
 
-	// Meta
+	// Metadata
 	struct {
-		friend class ResourceMeta;
+		friend class Metadata;
 
 	private:
 		std::size_t alloc_id{}, view_id{};
@@ -84,7 +91,7 @@ struct ResourceInfo {
 				VkDeviceSize size{};
 			} buffer_view;
 		};
-	} meta{};
+	} metadata{};
 
 	// Allocation
 	struct {

@@ -5,6 +5,7 @@
 #include "Schedule.hpp"
 
 #include <algorithm>
+#include <cassert>
 
 namespace default_executor {
 
@@ -12,43 +13,9 @@ Schedule Schedule::Create(const Args &args) {
 	args.collection.ClearInfo(&PassInfo::schedule);
 
 	Schedule s = {};
-	fetch_render_areas(args);
-	s.group_passes(args, merge_passes(args, make_image_read_graph(args)));
+	s.make_pass_groups(args, merge_passes(args, make_image_read_graph(args)));
+	s.make_barriers(args);
 	return s;
-}
-
-void Schedule::fetch_render_areas(const Args &args) {
-	auto graphics_pass_visitor = [&](const GraphicsPassBase *p_graphics_pass) {
-		const auto &opt_area = p_graphics_pass->GetOptRenderArea();
-		if (opt_area) {
-			get_sched_info(p_graphics_pass).render_area =
-			    std::visit(overloaded(
-			                   [&](const std::invocable<VkExtent2D> auto &area_func) {
-				                   return area_func(args.render_graph.GetCanvasSize());
-			                   },
-			                   [](const RenderPassArea &area) { return area; }),
-			               *opt_area);
-		} else {
-			// Loop through Pass Inputs and find the largest attachment
-			RenderPassArea area = {};
-			for (const InputBase *p_input : Dependency::GetPassInputs(p_graphics_pass)) {
-				if (!UsageIsAttachment(p_input->GetUsage()))
-					continue;
-				Dependency::GetInputResource(p_input)->Visit(overloaded(
-				    [&](const ImageBase *p_image) {
-					    const auto &size = ResourceMeta::GetViewInfo(p_image).size;
-					    area.layers = std::max(area.layers, size.GetArrayLayers());
-					    auto [width, height, _] = size.GetBaseMipExtent();
-					    area.extent.width = std::max(area.extent.width, width);
-					    area.extent.height = std::max(area.extent.height, height);
-				    },
-				    [](auto &&) {}));
-			}
-			get_sched_info(p_graphics_pass).render_area = area;
-		}
-	};
-	for (const PassBase *p_pass : args.dependency.GetTopoIDPasses())
-		p_pass->Visit(overloaded(graphics_pass_visitor, [](auto &&) {}));
 }
 
 Graph<const PassBase *, Dependency::PassEdge> Schedule::make_image_read_graph(const Schedule::Args &args) {
@@ -117,7 +84,8 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 		if (p_pass->GetType() == PassType::kGraphics) {
 			// Both are RenderPass and have equal RenderArea
 			const PassBase *p_prev_pass = args.dependency.GetTopoIDPass(i - 1);
-			merge_sizes[i] = get_sched_info(p_pass).render_area == get_sched_info(p_prev_pass).render_area
+			merge_sizes[i] = p_prev_pass->GetType() == PassType::kGraphics &&
+			                         Metadata::GetPassRenderArea(p_pass) == Metadata::GetPassRenderArea(p_prev_pass)
 			                     ? merge_sizes[i - 1] + 1
 			                     : 1;
 		} else
@@ -145,9 +113,8 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 		}
 		for (auto [from, e, _] : image_read_view.GetInEdges(p_pass)) {
 			std::size_t from_topo_id = Dependency::GetPassTopoID(from);
-			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()) ||
-			    e.opt_p_src_input->GetUsage() == e.p_dst_input->GetUsage())
-				// Read operations with same Usage can also merge into the same RenderPass
+			if (e.opt_p_src_input->GetUsage() == e.p_dst_input->GetUsage())
+				// Image Reads with same Usage can merge into the same RenderPass
 				size = std::min(size, i - from_topo_id + merge_sizes[from_topo_id]);
 			else
 				size = std::min(size, i - from_topo_id);
@@ -169,7 +136,7 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 	return merge_sizes;
 }
 
-void Schedule::group_passes(const Args &args, const std::vector<std::size_t> &merge_sizes) {
+void Schedule::make_pass_groups(const Args &args, const std::vector<std::size_t> &merge_sizes) {
 	for (std::size_t topo_id = 0; const PassBase *p_pass : args.dependency.GetTopoIDPasses()) {
 		std::size_t merge_size = merge_sizes[topo_id];
 		if (merge_size <= 1) {
@@ -183,6 +150,70 @@ void Schedule::group_passes(const Args &args, const std::vector<std::size_t> &me
 		m_pass_groups.back().subpasses.push_back(p_pass);
 
 		++topo_id;
+	}
+}
+
+Schedule::BarrierType Schedule::get_valid_barrier_type(const ResourceBase *p_valid_resource) {
+	switch (p_valid_resource->GetState()) {
+	case ResourceState::kExternal:
+		return BarrierType::kExtValid;
+	case ResourceState::kLastFrame:
+		return BarrierType::kLFValid;
+	default:
+		return BarrierType::kValid;
+	}
+}
+
+void Schedule::make_barriers(const Schedule::Args &args) {
+	std::unordered_map<const InputBase *, std::vector<std::size_t>> local_read_edges;
+	std::unordered_map<const ResourceBase *, std::vector<std::size_t>> valid_read_edges;
+
+	for (auto [from, to, e, edge_id] : args.dependency.GetPassGraph().GetEdges()) {
+		if (from == nullptr) {
+			auto [_, p_dst_input, p_resource] = e;
+			// Not Local Dependency, should be Valid / LFValid / ExtValid
+			bool dst_write = !UsageIsReadOnly(p_dst_input->GetUsage());
+			if (dst_write) {
+				// Write Validation, push directly
+				m_pass_barriers.push_back({
+				    .p_resource = p_resource,
+				    .src_s = {},
+				    .dst_s = {p_dst_input},
+				    .type = get_valid_barrier_type(p_resource),
+				});
+			} else {
+				// Read Validation, push to Valid Read Edges
+				valid_read_edges[p_resource].push_back(edge_id);
+			}
+		} else {
+			auto [p_src_input, p_dst_input, p_resource] = e;
+
+			if (GetGroupID(from) == GetGroupID(to)) {
+				m_pass_groups[GetGroupID(from)].subpass_deps.push_back(SubpassBarrier{
+				    .p_attachment = static_cast<const ImageBase *>(p_resource),
+				    .p_src = p_src_input,
+				    .p_dst = p_dst_input,
+				});
+				assert(p_resource->GetType() == ResourceType::kImage && UsageIsAttachment(e.p_dst_input->GetUsage()));
+			} else {
+				bool src_write = !UsageIsReadOnly(p_src_input->GetUsage()),
+				     dst_write = !UsageIsReadOnly(p_dst_input->GetUsage());
+				assert(src_write || dst_write); // Should have a write access
+
+				if (src_write && dst_write) {
+					// Both are write access, push directly
+					m_pass_barriers.push_back({
+					    .p_resource = e.p_resource,
+					    .src_s = {p_src_input},
+					    .dst_s = {p_dst_input},
+					    .type = BarrierType::kLocal,
+					});
+				} else if (src_write) {
+					// Read after Write, push to RAW edges
+					local_read_edges[p_src_input].push_back(edge_id);
+				}
+			}
+		}
 	}
 }
 

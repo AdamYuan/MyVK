@@ -10,7 +10,7 @@
 
 namespace default_executor {
 
-using Meta = ResourceMeta;
+using Meta = Metadata;
 
 class RGImage final : public myvk::ImageBase {
 private:
@@ -292,7 +292,7 @@ void Allocation::alloc_optimal(const Args &args, std::ranges::input_range auto &
 			// Check Overlapping
 			if (alloc_l.mem_offsets[0] + alloc_l.vk_mem_reqs.size > alloc_r.mem_offsets[0] &&
 			    alloc_r.mem_offsets[0] + alloc_r.vk_mem_reqs.size > alloc_l.mem_offsets[0])
-				m_resource_alias_relation.Add(Meta::GetAllocID(p_l), Meta::GetAllocID(p_r));
+				m_resource_alias_relation.Add(Meta::GetResourceAllocID(p_l), Meta::GetResourceAllocID(p_r));
 		}
 	}
 
@@ -310,7 +310,7 @@ void Allocation::alloc_optimal(const Args &args, std::ranges::input_range auto &
 }
 
 void Allocation::create_vk_allocations(const Args &args) {
-	m_resource_alias_relation.Reset(args.resource_meta.GetAllocCount(), args.resource_meta.GetAllocCount());
+	m_resource_alias_relation.Reset(args.resource_meta.GetResourceAllocCount(), args.resource_meta.GetResourceAllocCount());
 
 	std::vector<const ResourceBase *> local_resources, lf_resources, random_mapped_resources,
 	    seq_write_mapped_resources;

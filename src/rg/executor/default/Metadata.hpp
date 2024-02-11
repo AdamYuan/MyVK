@@ -10,7 +10,7 @@
 
 namespace default_executor {
 
-class ResourceMeta {
+class Metadata {
 private:
 	struct Args {
 		const RenderGraphBase &render_graph;
@@ -22,21 +22,23 @@ private:
 
 	void tag_resources(const Args &args);
 	void fetch_alloc_sizes(const Args &p_view_image);
-	void fetch_alloc_usages(const Args &args);
-	void propagate_meta(const Args &args);
+	static void fetch_alloc_usages(const Args &args);
+	static void propagate_resource_meta(const Args &args);
+	static void fetch_render_areas(const Args &args);
 
-	static auto &get_meta(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).meta; }
+	static auto &get_meta(const PassBase *p_pass) { return GetPassInfo(p_pass).metadata; }
+	static auto &get_meta(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).metadata; }
 	static auto &get_alloc(const ImageBase *p_image) { return get_meta(p_image).image_alloc; }
 	static auto &get_alloc(const BufferBase *p_buffer) { return get_meta(p_buffer).buffer_alloc; }
 	static auto &get_view(const ImageBase *p_image) { return get_meta(p_image).image_view; }
 	static auto &get_view(const BufferBase *p_buffer) { return get_meta(p_buffer).buffer_view; }
 
 public:
-	static ResourceMeta Create(const Args &args);
+	static Metadata Create(const Args &args);
 
 	// Alloc ID (Internal & Local & Physical Resources)
-	static std::size_t GetAllocID(const ResourceBase *p_resource) { return get_meta(p_resource).alloc_id; }
-	inline std::size_t GetAllocCount() const { return m_alloc_id_resources.size(); }
+	static std::size_t GetResourceAllocID(const ResourceBase *p_resource) { return get_meta(p_resource).alloc_id; }
+	inline std::size_t GetResourceAllocCount() const { return m_alloc_id_resources.size(); }
 	inline const ResourceBase *GetAllocIDResource(std::size_t alloc_id) const { return m_alloc_id_resources[alloc_id]; }
 	inline const auto &GetAllocIDResources() const { return m_alloc_id_resources; }
 	static const ResourceBase *GetAllocResource(const ResourceBase *p_resource) {
@@ -55,8 +57,8 @@ public:
 	static const auto &GetAllocInfo(const BufferBase *p_buffer) { return get_alloc(p_buffer); }
 
 	// View ID (Internal & Local Resources)
-	static std::size_t GetViewID(const ResourceBase *p_resource) { return get_meta(p_resource).view_id; }
-	inline std::size_t GetViewCount() const { return m_view_id_resources.size(); }
+	static std::size_t GetResourceViewID(const ResourceBase *p_resource) { return get_meta(p_resource).view_id; }
+	inline std::size_t GetResourceViewCount() const { return m_view_id_resources.size(); }
 	inline const ResourceBase *GetViewIDResource(std::size_t view_id) const { return m_view_id_resources[view_id]; }
 	inline const auto &GetViewIDResources() const { return m_view_id_resources; }
 	static const ResourceBase *GetViewResource(const ResourceBase *p_resource) {
@@ -74,6 +76,9 @@ public:
 
 	static const auto &GetViewInfo(const ImageBase *p_image) { return get_view(p_image); }
 	static const auto &GetViewInfo(const BufferBase *p_buffer) { return get_view(p_buffer); }
+
+	// Pass RenderArea
+	static RenderPassArea GetPassRenderArea(const PassBase *p_pass) { return get_meta(p_pass).render_area; }
 };
 
 } // namespace default_executor

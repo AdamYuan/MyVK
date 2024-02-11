@@ -2,24 +2,25 @@
 // Created by adamyuan on 2/10/24.
 //
 
-#include "ResourceMeta.hpp"
+#include "Metadata.hpp"
 
 #include "../VkHelper.hpp"
 
 namespace default_executor {
 
-ResourceMeta ResourceMeta::Create(const Args &args) {
-	args.collection.ClearInfo(&ResourceInfo::meta);
+Metadata Metadata::Create(const Args &args) {
+	args.collection.ClearInfo(&ResourceInfo::metadata, &PassInfo::metadata);
 
-	ResourceMeta r = {};
+	Metadata r = {};
 	r.tag_resources(args);
 	r.fetch_alloc_sizes(args);
-	r.fetch_alloc_usages(args);
-	r.propagate_meta(args);
+	fetch_alloc_usages(args);
+	propagate_resource_meta(args);
+	fetch_render_areas(args);
 	return r;
 }
 
-void ResourceMeta::tag_resources(const Args &args) {
+void Metadata::tag_resources(const Args &args) {
 	for (const ResourceBase *p_resource : args.dependency.GetResourceGraph().GetVertices()) {
 		// Skip External Resources
 		if (p_resource->GetState() == ResourceState::kExternal) {
@@ -48,7 +49,7 @@ void ResourceMeta::tag_resources(const Args &args) {
 	}
 }
 
-void ResourceMeta::propagate_meta(const Args &args) {
+void Metadata::propagate_resource_meta(const Args &args) {
 	for (const ResourceBase *p_resource : args.dependency.GetResourceGraph().GetVertices()) {
 		if (!IsAllocResource(p_resource) && GetAllocResource(p_resource)) {
 			get_meta(p_resource).alloc_id = get_meta(GetAllocResource(p_resource)).alloc_id;
@@ -63,7 +64,7 @@ void ResourceMeta::propagate_meta(const Args &args) {
 	}
 }
 
-void ResourceMeta::fetch_alloc_sizes(const Args &args) {
+void Metadata::fetch_alloc_sizes(const Args &args) {
 	const auto get_size = [&](const auto &size_variant) {
 		const auto get_size_visitor = overloaded(
 		    [&](const std::invocable<VkExtent2D> auto &size_func) {
@@ -148,7 +149,7 @@ void ResourceMeta::fetch_alloc_sizes(const Args &args) {
 		                             [](auto &&) {}));
 }
 
-void ResourceMeta::fetch_alloc_usages(const Args &args) {
+void Metadata::fetch_alloc_usages(const Args &args) {
 	for (auto [_, p_pass, e, _1] : args.dependency.GetPassGraph().GetEdges()) {
 		e.p_resource->Visit([&](const auto *p_resource) {
 			get_alloc(GetAllocResource(p_resource)).vk_usages |= UsageGetCreationUsages(e.p_dst_input->GetUsage());
@@ -165,6 +166,40 @@ void ResourceMeta::fetch_alloc_usages(const Args &args) {
 		    },
 		    [](auto &&) {}));
 	}
+}
+
+void Metadata::fetch_render_areas(const Metadata::Args &args) {
+	auto graphics_pass_visitor = [&](const GraphicsPassBase *p_graphics_pass) {
+		const auto &opt_area = p_graphics_pass->GetOptRenderArea();
+		if (opt_area) {
+			get_meta(p_graphics_pass).render_area =
+			    std::visit(overloaded(
+			                   [&](const std::invocable<VkExtent2D> auto &area_func) {
+				                   return area_func(args.render_graph.GetCanvasSize());
+			                   },
+			                   [](const RenderPassArea &area) { return area; }),
+			               *opt_area);
+		} else {
+			// Loop through Pass Inputs and find the largest attachment
+			RenderPassArea area = {};
+			for (const InputBase *p_input : Dependency::GetPassInputs(p_graphics_pass)) {
+				if (!UsageIsAttachment(p_input->GetUsage()))
+					continue;
+				Dependency::GetInputResource(p_input)->Visit(overloaded(
+				    [&](const ImageBase *p_image) {
+					    const auto &size = Metadata::GetViewInfo(p_image).size;
+					    area.layers = std::max(area.layers, size.GetArrayLayers());
+					    auto [width, height, _] = size.GetBaseMipExtent();
+					    area.extent.width = std::max(area.extent.width, width);
+					    area.extent.height = std::max(area.extent.height, height);
+				    },
+				    [](auto &&) {}));
+			}
+			get_meta(p_graphics_pass).render_area = area;
+		}
+	};
+	for (const PassBase *p_pass : args.dependency.GetTopoIDPasses())
+		p_pass->Visit(overloaded(graphics_pass_visitor, [](auto &&) {}));
 }
 
 } // namespace default_executor
