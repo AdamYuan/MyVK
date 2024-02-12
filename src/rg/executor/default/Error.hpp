@@ -47,20 +47,24 @@ struct AliasNoMatch {
 };
 struct WriteToLastFrame {
 	AliasBase alias;
-	inline std::string Format() const {
-		return "Write to last frame source " + alias.GetSourceKey().Format();
-	}
+	inline std::string Format() const { return "Write to last frame source " + alias.GetSourceKey().Format(); }
 };
 struct MultipleWrite {
 	AliasBase alias;
 	inline std::string Format() const {
-		return "Alias souce " + alias.GetSourceKey().Format() + " is written multiple times";
+		return "Alias source " + alias.GetSourceKey().Format() + " is written multiple times";
+	}
+};
+struct ResourceMultiForm {
+	AliasBase alias;
+	inline std::string Format() const {
+		return "Alias source " + alias.GetSourceKey().Format() + " is further used in multiple form";
 	}
 };
 struct ResourceMultiInput {
 	AliasBase alias;
 	inline std::string Format() const {
-		return "Alias souce " + alias.GetSourceKey().Format() + " is input multiple times in the same pass";
+		return "Alias source " + alias.GetSourceKey().Format() + " is input multiple times in the same pass";
 	}
 };
 struct PassNotDAG {

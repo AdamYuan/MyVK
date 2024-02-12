@@ -27,6 +27,7 @@ private:
 
 	static auto &get_vk_alloc(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).vk_allocation; }
 
+	void init_alias_relation(const Args &args);
 	void create_vk_resources(const Args &args);
 	static std::tuple<VkDeviceSize, uint32_t> fetch_memory_requirements(std::ranges::input_range auto &&resources);
 	void alloc_naive(std::ranges::input_range auto &&resources, const VmaAllocationCreateInfo &create_info);
@@ -40,11 +41,8 @@ public:
 	static VkAllocation Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
 
 	// Resource Alias Relationship
-	inline bool IsResourceAliased(std::size_t alloc_id_l, std::size_t alloc_id_r) const {
-		return m_resource_alias_relation.Get(alloc_id_l, alloc_id_r);
-	}
 	inline bool IsResourceAliased(const ResourceBase *p_l, const ResourceBase *p_r) const {
-		return IsResourceAliased(Metadata::GetResourceAllocID(p_l), Metadata::GetResourceAllocID(p_r));
+		return m_resource_alias_relation.Get(Dependency::GetResourcePhysID(p_l), Dependency::GetResourcePhysID(p_r));
 	}
 };
 

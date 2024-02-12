@@ -85,7 +85,9 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 
 struct AccessEdgeInfo {
 	std::vector<std::size_t> reads;
+	const ResourceBase *p_read_dst_resource = nullptr;
 	std::optional<std::size_t> opt_write;
+	const ResourceBase *p_write_dst_resource = nullptr;
 };
 void Dependency::add_war_edges() {
 	for (const PassBase *p_pass : m_pass_graph.GetVertices()) {
@@ -93,9 +95,15 @@ void Dependency::add_war_edges() {
 
 		for (auto [_, e, edge_id] : m_pass_graph.GetOutEdges(p_pass)) {
 			auto &info = access_edges[e.p_resource];
-			if (UsageIsReadOnly(e.p_dst_input->GetUsage()))
+			if (UsageIsReadOnly(e.p_dst_input->GetUsage())) {
+				// GetInputResource(e.p_dst_input) can be different from e.p_resource (if used as CombinedImage)
+				// All read access should have the same dst resource
+				if (info.p_read_dst_resource && info.p_read_dst_resource != GetInputResource(e.p_dst_input))
+					Throw(error::ResourceMultiForm{.alias = e.p_dst_input->GetInputAlias()});
+
 				info.reads.push_back(edge_id);
-			else {
+				info.p_read_dst_resource = GetInputResource(e.p_dst_input);
+			} else {
 				// Forbid multiple writes
 				if (info.opt_write)
 					Throw(error::MultipleWrite{.alias = e.p_dst_input->GetInputAlias()});
@@ -104,6 +112,7 @@ void Dependency::add_war_edges() {
 					Throw(error::WriteToLastFrame{.alias = e.p_dst_input->GetInputAlias()});
 
 				info.opt_write = edge_id;
+				info.p_write_dst_resource = GetInputResource(e.p_dst_input);
 			}
 		}
 
@@ -113,15 +122,28 @@ void Dependency::add_war_edges() {
 				continue;
 
 			std::size_t write_id = *info.opt_write;
+			const InputBase *p_write_dst = m_pass_graph.GetEdge(write_id).p_dst_input;
+
+			// If read_dst_resource != write_dst_resource, then write_dst_resource must be a combined image includes
+			// p_resource and read_dst_resource must be p_resource
+			if (info.p_read_dst_resource != info.p_write_dst_resource) {
+				bool well_formed =
+				    info.p_read_dst_resource == p_resource &&
+				    info.p_write_dst_resource->GetState() == myvk_rg::interface::ResourceState::kCombinedImage;
+
+				if (!well_formed)
+					Throw(error::ResourceMultiForm{.alias = p_write_dst->GetInputAlias()});
+			}
 
 			// Add edges from read to write
-			for (std::size_t read_id : info.reads)
+			for (std::size_t read_id : info.reads) {
 				m_pass_graph.AddEdge(m_pass_graph.GetToVertex(read_id), m_pass_graph.GetToVertex(write_id),
 				                     PassEdge{
 				                         .opt_p_src_input = m_pass_graph.GetEdge(read_id).p_dst_input,
-				                         .p_dst_input = m_pass_graph.GetEdge(write_id).p_dst_input,
+				                         .p_dst_input = p_write_dst,
 				                         .p_resource = p_resource,
 				                     });
+			}
 
 			// Add to Indirect WAW Graph
 			m_pass_indirect_waw_graph.AddEdge(m_pass_graph.GetFromVertex(write_id), m_pass_graph.GetToVertex(write_id),

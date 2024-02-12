@@ -79,12 +79,17 @@ VkAllocation VkAllocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, con
 	VkAllocation alloc = {};
 	alloc.m_device_ptr = device_ptr;
 
+	alloc.init_alias_relation(args);
 	alloc.create_vk_resources(args);
 	alloc.create_vk_allocations(args);
 	alloc.bind_vk_resources(args);
 	alloc.create_vk_image_views(args);
 
 	return alloc;
+}
+
+void VkAllocation::init_alias_relation(const Args &args) {
+	m_resource_alias_relation.Reset(args.dependency.GetPhysResourceCount(), args.dependency.GetPhysResourceCount());
 }
 
 void VkAllocation::create_vk_resources(const Args &args) {
@@ -161,8 +166,18 @@ void VkAllocation::create_vk_resources(const Args &args) {
 	const auto check_double_buffer = [&](const ResourceBase *p_resource) {
 		// Double Buffer if LastFrame Resource >= Resource
 		const ResourceBase *p_lf_resource = Dependency::GetLFResource(p_resource);
-		get_vk_alloc(p_resource).double_buffer =
-		    p_lf_resource && !args.dependency.IsResourceLess(p_lf_resource, p_resource);
+		if (p_lf_resource == nullptr)
+			return;
+
+		bool double_buffer = !args.dependency.IsResourceLess(p_lf_resource, p_resource);
+		get_vk_alloc(p_resource).double_buffer = double_buffer;
+		// If resource have LF reference and is not double_buffered, then aliasing appears
+		if (!double_buffer) {
+			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_resource),
+			                              Dependency::GetResourcePhysID(p_lf_resource));
+			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_lf_resource),
+			                              Dependency::GetResourcePhysID(p_resource));
+		}
 	};
 
 	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources()) {
@@ -226,7 +241,7 @@ struct MemEvent {
 } // namespace alloc_optimal
 
 void VkAllocation::alloc_optimal(const Args &args, std::ranges::input_range auto &&resources,
-                               const VmaAllocationCreateInfo &create_info) {
+                                 const VmaAllocationCreateInfo &create_info) {
 	auto [alignment, memory_type_bits] = fetch_memory_requirements(resources);
 
 	std::ranges::sort(resources, [](const ResourceBase *p_l, const ResourceBase *p_r) -> bool {
@@ -292,7 +307,7 @@ void VkAllocation::alloc_optimal(const Args &args, std::ranges::input_range auto
 			// Check Overlapping
 			if (alloc_l.mem_offsets[0] + alloc_l.vk_mem_reqs.size > alloc_r.mem_offsets[0] &&
 			    alloc_r.mem_offsets[0] + alloc_r.vk_mem_reqs.size > alloc_l.mem_offsets[0])
-				m_resource_alias_relation.Add(Meta::GetResourceAllocID(p_l), Meta::GetResourceAllocID(p_r));
+				m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_l), Dependency::GetResourcePhysID(p_r));
 		}
 	}
 
@@ -310,8 +325,6 @@ void VkAllocation::alloc_optimal(const Args &args, std::ranges::input_range auto
 }
 
 void VkAllocation::create_vk_allocations(const Args &args) {
-	m_resource_alias_relation.Reset(args.metadata.GetResourceAllocCount(), args.metadata.GetResourceAllocCount());
-
 	std::vector<const ResourceBase *> local_resources, lf_resources, random_mapped_resources,
 	    seq_write_mapped_resources;
 
