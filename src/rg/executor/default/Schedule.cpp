@@ -15,7 +15,7 @@ Schedule Schedule::Create(const Args &args) {
 	Schedule s = {};
 	s.make_pass_groups(args, merge_passes(args, make_image_read_graph(args)));
 	s.make_barriers(args);
-	s.make_ext_output_barriers(args);
+	s.make_output_barriers(args);
 	propagate_resource_info(args);
 	return s;
 }
@@ -164,9 +164,11 @@ void Schedule::make_pass_groups(const Args &args, const std::vector<std::size_t>
 Schedule::BarrierType Schedule::get_valid_barrier_type(const ResourceBase *p_valid_resource) {
 	switch (p_valid_resource->GetState()) {
 	case ResourceState::kExternal:
-		return BarrierType::kExtValid;
+		return BarrierType::kExtValidate;
+	case ResourceState::kLastFrame:
+		return BarrierType::kLFValidate;
 	default:
-		return BarrierType::kValid;
+		return BarrierType::kValidate;
 	}
 }
 
@@ -327,16 +329,23 @@ void Schedule::propagate_resource_info(const Schedule::Args &args) {
 			get_sched_info(p_resource) = get_sched_info(Dependency::GetRootResource(p_resource));
 }
 
-void Schedule::make_ext_output_barriers(const Schedule::Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetPhysIDResources())
-		if (p_resource->GetState() == ResourceState::kExternal) {
+void Schedule::make_output_barriers(const Args &args) {
+	for (const ResourceBase *p_resource : args.dependency.GetPhysIDResources()) {
+		if (p_resource->GetState() == ResourceState::kExternal)
 			m_pass_barriers.push_back({
 			    .p_resource = p_resource,
 			    .src_s = get_sched_info(p_resource).last_accesses,
 			    .dst_s = {},
 			    .type = BarrierType::kExtOutput,
 			});
-		}
+		else if (p_resource->GetState() == ResourceState::kLastFrame)
+			m_pass_barriers.push_back({
+			    .p_resource = Dependency::GetLFResource(p_resource), // Barrier on LFResource in current frame
+			    .src_s = get_sched_info(p_resource).last_accesses,
+			    .dst_s = {},
+			    .type = BarrierType::kLFOutput,
+			});
+	}
 }
 
 } // namespace default_executor
