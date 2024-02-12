@@ -52,12 +52,13 @@ private:
 	                                auto &&func);
 	void push_read_barrier(const ResourceBase *p_resource, const InputBase *p_write, const InputBase *p_next_write,
 	                       Schedule::BarrierType raw_barrier_type, std::span<const InputBase *const> src_s,
-	                        std::span<const InputBase *const> dst_s);
+	                       std::span<const InputBase *const> dst_s);
 	void make_barriers(const Args &args);
 
 public:
 	static Schedule Create(const Args &args);
 	inline const auto &GetPassGroups() const { return m_pass_groups; }
+	inline const auto &GetPassBarriers() const { return m_pass_barriers; }
 	static std::size_t GetGroupID(const PassBase *p_pass) { return get_sched_info(p_pass).group_id; }
 	static std::size_t GetSubpassID(const PassBase *p_pass) { return get_sched_info(p_pass).subpass_id; }
 };

@@ -231,7 +231,7 @@ void Schedule::push_read_barrier(const ResourceBase *p_resource, const InputBase
 namespace make_barriers {
 struct ReadInfo {
 	std::vector<const InputBase *> reads;
-	const InputBase *p_next_write;
+	const InputBase *p_next_write{};
 };
 } // namespace make_barriers
 void Schedule::make_barriers(const Schedule::Args &args) {
@@ -240,8 +240,13 @@ void Schedule::make_barriers(const Schedule::Args &args) {
 	std::unordered_map<const InputBase *, ReadInfo> local_reads;
 	std::unordered_map<const ResourceBase *, ReadInfo> valid_reads;
 
+	// Fetch p_next_write from Indirect WAW Graph, set to local_reads and valid_reads
+	for (auto [from, to, e, _] : args.dependency.GetPassIndirectWAWGraph().GetEdges()) {
+		ReadInfo &info = from == nullptr ? valid_reads[e.p_resource] : local_reads[e.opt_p_src_input];
+		info.p_next_write = e.p_dst_input;
+	}
 	// Write-After-Write or Write validation Barriers are directly added, WAR and RAW Barriers are remained to be
-	// processed (push to local_reads and valid_reads firstly)
+	// processed (push to local_reads and valid_reads)
 	for (auto [from, to, e, _] : args.dependency.GetPassGraph().GetEdges()) {
 		if (from == nullptr) {
 			// Validation
@@ -293,16 +298,11 @@ void Schedule::make_barriers(const Schedule::Args &args) {
 		}
 	}
 
-	// Fetch p_next_write from Indirect WAW Graph
-	for (auto [from, to, e, _] : args.dependency.GetPassIndirectWAWGraph().GetEdges()) {
-		ReadInfo &info = from == nullptr ? valid_reads[e.p_resource] : local_reads[e.opt_p_src_input];
-		info.p_next_write = e.p_dst_input;
-	}
-
 	for (auto &[p_input, read_info] : local_reads) {
 		const ResourceBase *p_resource = Dependency::GetInputResource(p_input);
 		const InputBase *p_next_write = read_info.p_next_write;
 
+		assert(!read_info.reads.empty());
 		for_each_read_group(p_resource, std::move(read_info.reads), [&](auto src_s, auto dst_s) {
 			push_read_barrier(p_resource, p_input, p_next_write, BarrierType::kLocal, src_s, dst_s);
 		});
@@ -310,6 +310,8 @@ void Schedule::make_barriers(const Schedule::Args &args) {
 	for (auto &[p_resource, read_info] : valid_reads) {
 		const InputBase *p_next_write = read_info.p_next_write;
 		BarrierType barrier_type = get_valid_barrier_type(p_resource);
+
+		assert(!read_info.reads.empty());
 		for_each_read_group(p_resource, std::move(read_info.reads), [&](auto src_s, auto dst_s) {
 			push_read_barrier(p_resource, nullptr, p_next_write, barrier_type, src_s, dst_s);
 		});

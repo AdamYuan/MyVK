@@ -29,6 +29,7 @@ const InputBase *Dependency::traverse_output_alias(const Dependency::Args &args,
 void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 	if (m_pass_graph.HasVertex(p_pass))
 		return;
+	m_pass_graph.AddVertex(p_pass);
 
 	const auto pass_visitor = [&](const PassWithInput auto *p_pass) {
 		for (const auto &it : p_pass->GetInputPoolData()) {

@@ -1,6 +1,8 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
+#include "magic_enum.hpp"
+
 #include <myvk_rg/executor/DefaultExecutor.hpp>
 #include <myvk_rg/interface/Input.hpp>
 #include <myvk_rg/interface/Key.hpp>
@@ -163,12 +165,97 @@ public:
 	}
 };
 
+class InputAttPass final : public myvk_rg::GraphicsPassBase {
+public:
+	inline InputAttPass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
+	    : myvk_rg::GraphicsPassBase(parent) {
+		AddInputAttachmentInput<0, 0>({"in"}, image);
+		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image->AsInput());
+	}
+	inline ~InputAttPass() final = default;
+	inline void CreatePipeline() final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
+};
+
+class SamplerPass final : public myvk_rg::GraphicsPassBase {
+public:
+	inline SamplerPass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
+	    : myvk_rg::GraphicsPassBase(parent) {
+		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"in"}, image,
+		                                                                                              nullptr);
+		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
+		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image->AsInput());
+	}
+	inline ~SamplerPass() final = default;
+	inline void CreatePipeline() final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
+};
+
+class ImageRPass final : public myvk_rg::ComputePassBase {
+public:
+	inline ImageRPass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
+	    : myvk_rg::ComputePassBase(parent) {
+		AddDescriptorInput<0, myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({"in"}, image);
+		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
+		AddDescriptorInput<1, myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
+		    {"out"}, out_image->AsInput());
+	}
+	inline ~ImageRPass() final = default;
+	inline void CreatePipeline() final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
+};
+
+class ImageWPass final : public myvk_rg::ComputePassBase {
+public:
+	inline ImageWPass(myvk_rg::Parent parent, const myvk_rg::Image &image) : myvk_rg::ComputePassBase(parent) {
+		AddDescriptorInput<0, myvk_rg::Usage::kStorageImageRW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({"out"}, image);
+	}
+	inline ~ImageWPass() final = default;
+	inline void CreatePipeline() final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
+};
+
+class MyRenderGraph2 final : public myvk_rg::RenderGraphBase<> {
+public:
+	inline MyRenderGraph2() {
+		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
+
+		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
+		auto src_pass = CreatePass<InputAttPass>({"src"}, lf_image->AsInput(), format);
+
+		auto read1_pass = CreatePass<InputAttPass>({"read", 1}, src_pass->GetImageOutput(), format);
+		auto read2_pass = CreatePass<InputAttPass>({"read", 2}, src_pass->GetImageOutput(), format);
+		auto read3_pass = CreatePass<ImageRPass>({"read", 3}, src_pass->GetImageOutput(), format);
+		auto read4_pass = CreatePass<SamplerPass>({"read", 4}, src_pass->GetImageOutput(), format);
+		auto read5_pass = CreatePass<SamplerPass>({"read", 5}, src_pass->GetImageOutput(), format);
+
+		auto combined_image = CreateResource<myvk_rg::CombinedImage>(
+		    {"combined"}, VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+		    std::vector{src_pass->GetImageOutput(), read1_pass->GetImageOutput(), read2_pass->GetImageOutput(),
+		                read3_pass->GetImageOutput(), read4_pass->GetImageOutput(), read5_pass->GetImageOutput()});
+
+		auto write_pass = CreatePass<ImageWPass>({"write"}, combined_image->AsInput());
+
+		lf_image->SetPointedAlias(write_pass->GetImageOutput());
+
+		AddResult({"final"}, write_pass->GetImageOutput());
+
+		SetCanvasSize({1280, 720});
+	}
+	inline ~MyRenderGraph2() final = default;
+};
+
 #include "../../src/rg/executor/default/Collection.hpp"
 #include "../../src/rg/executor/default/Dependency.hpp"
 #include "../../src/rg/executor/default/Metadata.hpp"
 #include "../../src/rg/executor/default/Schedule.hpp"
 TEST_SUITE("Default Executor") {
-	auto render_graph = myvk::MakePtr<MyRenderGraph>();
+	auto render_graph = myvk::MakePtr<MyRenderGraph2>();
 
 	using default_executor::Collection;
 	using default_executor::Dependency;
@@ -300,12 +387,28 @@ TEST_SUITE("Default Executor") {
 		    .metadata = metadata,
 		});
 
+		printf("Pass Groups:\n");
 		for (const auto &pass_group : schedule.GetPassGroups()) {
 			printf("Pass Group #%zu: ", Schedule::GetGroupID(pass_group.subpasses[0]));
 			for (const PassBase *p_subpass : pass_group.subpasses) {
 				printf("%s:%zu, ", p_subpass->GetGlobalKey().Format().c_str(), Schedule::GetSubpassID(p_subpass));
 			}
 			printf("\n");
+		}
+
+		printf("Barriers:\n");
+		for (const auto &pass_barrier : schedule.GetPassBarriers()) {
+			printf("resource = %s\nfrom=", pass_barrier.p_resource->GetGlobalKey().Format().c_str());
+			for (const auto &p_src : pass_barrier.src_s) {
+				printf("%s:0x%x; ", p_src->GetInputAlias().GetSourceKey().Format().c_str(),
+				       static_cast<int>(p_src->GetUsage()));
+			}
+			printf("\nto=");
+			for (const auto &p_dst : pass_barrier.dst_s) {
+				printf("%s:0x%x; ", p_dst->GetInputAlias().GetSourceKey().Format().c_str(),
+				       static_cast<int>(p_dst->GetUsage()));
+			}
+			printf("\ntype=%d\n\n", static_cast<int>(pass_barrier.type));
 		}
 	}
 }
