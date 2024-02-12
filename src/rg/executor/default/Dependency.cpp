@@ -124,7 +124,7 @@ void Dependency::add_war_edges() {
 			std::size_t write_id = *info.opt_write;
 			const InputBase *p_write_dst = m_pass_graph.GetEdge(write_id).p_dst_input;
 
-			// If read_dst_resource != write_dst_resource, then write_dst_resource must be a combined image includes
+			// If read_dst_resource != write_dst_resource, then write_dst_resource must be a combined image including
 			// p_resource and read_dst_resource must be p_resource
 			if (info.p_read_dst_resource != info.p_write_dst_resource) {
 				bool well_formed =

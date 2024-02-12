@@ -80,6 +80,7 @@ VkAllocation VkAllocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, con
 	alloc.m_device_ptr = device_ptr;
 
 	alloc.init_alias_relation(args);
+	alloc.check_double_buffer(args);
 	alloc.create_vk_resources(args);
 	alloc.create_vk_allocations(args);
 	alloc.bind_vk_resources(args);
@@ -90,6 +91,28 @@ VkAllocation VkAllocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, con
 
 void VkAllocation::init_alias_relation(const Args &args) {
 	m_resource_alias_relation.Reset(args.dependency.GetPhysResourceCount(), args.dependency.GetPhysResourceCount());
+}
+
+void VkAllocation::check_double_buffer(const VkAllocation::Args &args) {
+	const auto check_double_buffer = [&](const ResourceBase *p_resource) {
+		// Double Buffer if LastFrame Resource >= Resource
+		const ResourceBase *p_lf_resource = Dependency::GetLFResource(p_resource);
+		if (p_lf_resource == nullptr)
+			return;
+
+		bool double_buffer = !args.dependency.IsResourceLess(p_lf_resource, p_resource);
+		get_vk_alloc(p_resource).double_buffer = double_buffer;
+		// If resource have LF reference and is not double_buffered, then aliasing appears
+		if (!double_buffer) {
+			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_resource),
+			                              Dependency::GetResourcePhysID(p_lf_resource));
+			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_lf_resource),
+			                              Dependency::GetResourcePhysID(p_resource));
+		}
+	};
+
+	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources())
+		check_double_buffer(p_resource);
 }
 
 void VkAllocation::create_vk_resources(const Args &args) {
@@ -163,27 +186,8 @@ void VkAllocation::create_vk_resources(const Args &args) {
 		                                                         : vk_alloc.buffer.myvk_buffers[0];
 	};
 
-	const auto check_double_buffer = [&](const ResourceBase *p_resource) {
-		// Double Buffer if LastFrame Resource >= Resource
-		const ResourceBase *p_lf_resource = Dependency::GetLFResource(p_resource);
-		if (p_lf_resource == nullptr)
-			return;
-
-		bool double_buffer = !args.dependency.IsResourceLess(p_lf_resource, p_resource);
-		get_vk_alloc(p_resource).double_buffer = double_buffer;
-		// If resource have LF reference and is not double_buffered, then aliasing appears
-		if (!double_buffer) {
-			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_resource),
-			                              Dependency::GetResourcePhysID(p_lf_resource));
-			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_lf_resource),
-			                              Dependency::GetResourcePhysID(p_resource));
-		}
-	};
-
-	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources()) {
-		check_double_buffer(p_resource);
+	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources())
 		p_resource->Visit(overloaded(create_image, create_buffer));
-	}
 }
 
 inline static constexpr VkDeviceSize DivCeil(VkDeviceSize l, VkDeviceSize r) { return (l / r) + (l % r ? 1 : 0); }

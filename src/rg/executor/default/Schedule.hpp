@@ -13,7 +13,7 @@ namespace default_executor {
 
 class Schedule {
 public:
-	enum class BarrierType { kLocal, kValid, kLFValid, kExtValid, kExtOut };
+	enum class BarrierType { kLocal, kValid, kExtValid, kExtOutput };
 	struct PassBarrier {
 		const ResourceBase *p_resource;
 		std::vector<const InputBase *> src_s, dst_s;
@@ -56,6 +56,7 @@ private:
 	void push_write_barrier(const Args &args, const ResourceBase *p_resource, const InputBase *p_write,
 	                        const InputBase *p_next_write);
 	void make_barriers(const Args &args);
+	void make_ext_output_barriers(const Args &args);
 
 	void update_resource_info(const Args &args, const ResourceBase *p_resource,
 	                          std::span<const InputBase *const> accesses);

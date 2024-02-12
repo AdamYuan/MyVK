@@ -28,6 +28,7 @@ private:
 	static auto &get_vk_alloc(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).vk_allocation; }
 
 	void init_alias_relation(const Args &args);
+	void check_double_buffer(const Args &args);
 	void create_vk_resources(const Args &args);
 	static std::tuple<VkDeviceSize, uint32_t> fetch_memory_requirements(std::ranges::input_range auto &&resources);
 	void alloc_naive(std::ranges::input_range auto &&resources, const VmaAllocationCreateInfo &create_info);
