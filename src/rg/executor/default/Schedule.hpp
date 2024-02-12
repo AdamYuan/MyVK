@@ -34,7 +34,7 @@ private:
 		const RenderGraphBase &render_graph;
 		const Collection &collection;
 		const Dependency &dependency;
-		const Metadata &resource_meta;
+		const Metadata &metadata;
 	};
 
 	std::vector<PassGroup> m_pass_groups;
@@ -48,6 +48,11 @@ private:
 	static std::vector<std::size_t>
 	merge_passes(const Args &args, const Graph<const PassBase *, Dependency::PassEdge> &image_read_pass_graph);
 	void make_pass_groups(const Args &args, const std::vector<std::size_t> &merge_sizes);
+	static void for_each_read_group(const ResourceBase *p_resource, std::vector<const InputBase *> &&reads,
+	                                auto &&func);
+	void push_read_barrier(const ResourceBase *p_resource, const InputBase *p_write, const InputBase *p_next_write,
+	                       Schedule::BarrierType raw_barrier_type, std::span<const InputBase *const> src_s,
+	                        std::span<const InputBase *const> dst_s);
 	void make_barriers(const Args &args);
 
 public:

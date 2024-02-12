@@ -139,9 +139,15 @@ public:
 
 		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass3->GetImageOutput(), format);
 
-		lf_image->SetPointedAlias(dim_pass->GetImageOutput());
+		auto combined_image2 = CreateResource<myvk_rg::CombinedImage>(
+		    {"combined2"}, VK_IMAGE_VIEW_TYPE_2D_ARRAY,
+		    std::vector{dim_pass->GetImageOutput(), blur_pass3->GetImageOutput()});
 
-		AddResult({"final"}, dim_pass->GetImageOutput());
+		auto dim_pass2 = CreatePass<DimPass>({"dim_pass2"}, combined_image2->AsInput(), format);
+
+		lf_image->SetPointedAlias(dim_pass2->GetImageOutput());
+
+		AddResult({"final"}, dim_pass2->GetImageOutput());
 
 		SetCanvasSize({1280, 720});
 	}
@@ -202,7 +208,7 @@ TEST_SUITE("Default Executor") {
 			               : "start";
 		    },
 		    [](const Dependency::PassEdge &e) {
-			    return e.p_resource->GetGlobalKey().Format() + ";" +
+			    return e.p_dst_input->GetGlobalKey().Format() + ";" +
 			           std::to_string(Dependency::GetResourcePhysID(e.p_resource));
 		    });
 
@@ -244,13 +250,13 @@ TEST_SUITE("Default Executor") {
 		} */
 	}
 
-	Metadata resource_meta;
-	TEST_CASE("Test ResourceMeta") {
-		resource_meta =
+	Metadata metadata;
+	TEST_CASE("Test Metadata") {
+		metadata =
 		    Metadata::Create({.render_graph = *render_graph, .collection = collection, .dependency = dependency});
 
 		printf("ALLOC:\n");
-		for (const ResourceBase *p_resource : resource_meta.GetAllocIDResources()) {
+		for (const ResourceBase *p_resource : metadata.GetAllocIDResources()) {
 			printf("%s:[alloc_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
 			       Metadata::GetResourceAllocID(p_resource));
 			p_resource->Visit(overloaded(
@@ -267,7 +273,7 @@ TEST_SUITE("Default Executor") {
 			printf("\n");
 		}
 		printf("View:\n");
-		for (const ResourceBase *p_resource : resource_meta.GetViewIDResources()) {
+		for (const ResourceBase *p_resource : metadata.GetViewIDResources()) {
 			printf("%s:[alloc_id=%zu][view_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
 			       Metadata::GetResourceAllocID(p_resource), Metadata::GetResourceViewID(p_resource));
 			p_resource->Visit(overloaded(
@@ -287,10 +293,12 @@ TEST_SUITE("Default Executor") {
 
 	Schedule schedule;
 	TEST_CASE("Test Schedule") {
-		schedule = Schedule::Create({.render_graph = *render_graph,
-		                             .collection = collection,
-		                             .dependency = dependency,
-		                             .resource_meta = resource_meta});
+		schedule = Schedule::Create({
+		    .render_graph = *render_graph,
+		    .collection = collection,
+		    .dependency = dependency,
+		    .metadata = metadata,
+		});
 
 		for (const auto &pass_group : schedule.GetPassGroups()) {
 			printf("Pass Group #%zu: ", Schedule::GetGroupID(pass_group.subpasses[0]));

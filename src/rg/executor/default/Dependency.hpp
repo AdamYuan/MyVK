@@ -26,7 +26,7 @@ public:
 	enum class ResourceEdge { kSubResource, kLastFrame };
 
 private:
-	Graph<const PassBase *, PassEdge> m_pass_graph;
+	Graph<const PassBase *, PassEdge> m_pass_graph, m_pass_indirect_waw_graph;
 	Graph<const ResourceBase *, ResourceEdge> m_resource_graph;
 	std::vector<const PassBase *> m_topo_id_passes;
 	std::vector<const ResourceBase *> m_phys_id_resources;
@@ -48,12 +48,14 @@ private:
 public:
 	static Dependency Create(const Args &args);
 
-	template <ResourceEdge... Types>
-	inline static const auto kResourceEdgeFilter = [](const auto &e) { return ((e == Types) || ...); };
+	// template <ResourceEdge... Types>
+	// inline static const auto kResourceEdgeFilter = [](const auto &e) { return ((e == Types) || ...); };
 	inline static const auto kAnyFilter = [](auto &&) { return true; };
 
+	// Graph
 	inline const auto &GetResourceGraph() const { return m_resource_graph; }
 	inline const auto &GetPassGraph() const { return m_pass_graph; }
+	inline const auto &GetPassIndirectWAWGraph() const { return m_pass_indirect_waw_graph; }
 
 	// Input
 	static const ResourceBase *GetInputResource(const InputBase *p_input) { return get_dep_info(p_input).p_resource; }

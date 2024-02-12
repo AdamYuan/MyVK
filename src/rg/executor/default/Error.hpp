@@ -58,6 +58,12 @@ struct MultipleWrite {
 		return "Alias souce " + alias.GetSourceKey().Format() + " is written multiple times";
 	}
 };
+struct ResourceMultiInput {
+	AliasBase alias;
+	inline std::string Format() const {
+		return "Alias souce " + alias.GetSourceKey().Format() + " is input multiple times in the same pass";
+	}
+};
 struct PassNotDAG {
 	inline std::string Format() const { return "Pass cycle dependencies in Render Graph"; }
 };
@@ -82,9 +88,9 @@ struct ImageNotMerge {
 };
 
 template <typename Error> struct Exception : public std::exception {
-	Error error;
-	explicit Exception(Error error) : error{std::move(error)} {}
-	inline const char *what() const noexcept override { return error.Format().c_str(); }
+	std::string format;
+	explicit Exception(Error error) : format{error.Format()} {}
+	inline const char *what() const noexcept override { return format.c_str(); }
 };
 template <typename Error> void Throw(Error &&error) {
 	throw Exception<Error>{std::forward<Error>(error)};

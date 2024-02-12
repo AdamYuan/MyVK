@@ -87,12 +87,10 @@ struct AccessEdgeInfo {
 	std::optional<std::size_t> opt_write;
 };
 void Dependency::add_war_edges() {
-	auto view = m_pass_graph.MakeView(kAnyFilter, kAnyFilter);
-
-	for (const PassBase *p_pass : view.GetVertices()) {
+	for (const PassBase *p_pass : m_pass_graph.GetVertices()) {
 		std::unordered_map<const ResourceBase *, AccessEdgeInfo> access_edges;
 
-		for (auto [_, e, edge_id] : view.GetOutEdges(p_pass)) {
+		for (auto [_, e, edge_id] : m_pass_graph.GetOutEdges(p_pass)) {
 			auto &info = access_edges[e.p_resource];
 			if (UsageIsReadOnly(e.p_dst_input->GetUsage()))
 				info.reads.push_back(edge_id);
@@ -116,18 +114,21 @@ void Dependency::add_war_edges() {
 
 			std::size_t write_id = *info.opt_write;
 
-			// Remove direct write edge
-			m_pass_graph.RemoveEdge(write_id);
-
 			// Add edges from read to write
-			for (std::size_t read_id : info.reads) {
+			for (std::size_t read_id : info.reads)
 				m_pass_graph.AddEdge(m_pass_graph.GetToVertex(read_id), m_pass_graph.GetToVertex(write_id),
 				                     PassEdge{
 				                         .opt_p_src_input = m_pass_graph.GetEdge(read_id).p_dst_input,
 				                         .p_dst_input = m_pass_graph.GetEdge(write_id).p_dst_input,
 				                         .p_resource = p_resource,
 				                     });
-			}
+
+			// Add to Indirect WAW Graph
+			m_pass_indirect_waw_graph.AddEdge(m_pass_graph.GetFromVertex(write_id), m_pass_graph.GetToVertex(write_id),
+			                                  m_pass_graph.GetEdge(write_id));
+
+			// Remove direct write edge
+			m_pass_graph.RemoveEdge(write_id);
 		}
 	}
 }
@@ -203,8 +204,7 @@ void Dependency::get_resource_relation() {
 			get_dep_info(p_root).access_passes.Reset(GetSortedPassCount());
 
 		// Exclude LastFrame edges
-		auto view = m_pass_graph.MakeView(kAnyFilter, kAnyFilter);
-		for (auto [_, to, e, _1] : view.GetEdges())
+		for (auto [_, to, e, _1] : m_pass_graph.GetEdges())
 			get_dep_info(GetRootResource(e.p_resource)).access_passes.Add(GetPassTopoID(to));
 	}
 

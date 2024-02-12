@@ -165,7 +165,7 @@ void Allocation::create_vk_resources(const Args &args) {
 		    p_lf_resource && !args.dependency.IsResourceLess(p_lf_resource, p_resource);
 	};
 
-	for (const ResourceBase *p_resource : args.resource_meta.GetAllocIDResources()) {
+	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources()) {
 		check_double_buffer(p_resource);
 		p_resource->Visit(overloaded(create_image, create_buffer));
 	}
@@ -310,12 +310,12 @@ void Allocation::alloc_optimal(const Args &args, std::ranges::input_range auto &
 }
 
 void Allocation::create_vk_allocations(const Args &args) {
-	m_resource_alias_relation.Reset(args.resource_meta.GetResourceAllocCount(), args.resource_meta.GetResourceAllocCount());
+	m_resource_alias_relation.Reset(args.metadata.GetResourceAllocCount(), args.metadata.GetResourceAllocCount());
 
 	std::vector<const ResourceBase *> local_resources, lf_resources, random_mapped_resources,
 	    seq_write_mapped_resources;
 
-	for (const ResourceBase *p_resource : args.resource_meta.GetAllocIDResources())
+	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources())
 		p_resource->Visit(overloaded(
 		    [&](const LocalInternalImage auto *p_image) {
 			    if (Dependency::GetLFResource(p_image))
@@ -365,7 +365,7 @@ void Allocation::create_vk_allocations(const Args &args) {
 }
 
 void Allocation::bind_vk_resources(const Args &args) {
-	for (const ResourceBase *p_resource : args.resource_meta.GetAllocIDResources()) {
+	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources()) {
 		auto &vk_alloc = get_vk_alloc(p_resource);
 		auto vma_allocation = vk_alloc.myvk_mem_alloc->GetHandle();
 
@@ -414,7 +414,7 @@ void Allocation::create_vk_image_views(const Args &args) {
 		                                   ? myvk::ImageView::Create(root_vk_alloc.myvk_images[1], create_info)
 		                                   : vk_alloc.myvk_image_views[0];
 	};
-	for (const ResourceBase *p_resource : args.resource_meta.GetViewIDResources())
+	for (const ResourceBase *p_resource : args.metadata.GetViewIDResources())
 		p_resource->Visit(overloaded(create_image_view, [](auto &&) {}));
 }
 

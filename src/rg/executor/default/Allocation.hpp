@@ -18,7 +18,7 @@ private:
 		const RenderGraphBase &render_graph;
 		const Collection &collection;
 		const Dependency &dependency;
-		const Metadata &resource_meta;
+		const Metadata &metadata;
 	};
 
 	myvk::Ptr<myvk::Device> m_device_ptr;
