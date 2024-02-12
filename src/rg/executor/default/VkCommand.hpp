@@ -42,23 +42,12 @@ private:
 		myvk::Ptr<myvk::ImagelessFramebuffer> myvk_framebuffer;
 		std::vector<AttachmentInfo> attachments;
 	};
-	struct BarrierInfo {
-		std::vector<BufferMemoryBarrier> buffer_barriers;
-		std::vector<ImageMemoryBarrier> image_barriers;
-
-		inline bool empty() const { return buffer_barriers.empty() && image_barriers.empty(); }
-		inline void clear() {
-			buffer_barriers.clear();
-			image_barriers.clear();
-		}
-	};
 	struct PassExecutor {
-		const RenderGraphScheduler::PassInfo *p_info{};
-		BarrierInfo prior_barrier_info;
+		std::vector<MemoryBarrier> prior_barriers;
 		RenderPassInfo render_pass_info;
 	};
 	std::vector<PassExecutor> m_pass_executors;
-	BarrierInfo m_post_barrier_info;
+	std::vector<MemoryBarrier> m_post_barriers;
 
 public:
 	static VkCommand Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
