@@ -101,8 +101,7 @@ void Dependency::add_war_edges() {
 					Throw(error::MultipleWrite{.alias = e.p_dst_input->GetInputAlias()});
 				// Forbid writes to last frame resource
 				if (e.p_resource->GetState() == myvk_rg::interface::ResourceState::kLastFrame)
-					Throw(error::WriteToLastFrame{.alias = e.p_dst_input->GetInputAlias(),
-					                              .pass_key = p_pass->GetGlobalKey()});
+					Throw(error::WriteToLastFrame{.alias = e.p_dst_input->GetInputAlias()});
 
 				info.opt_write = edge_id;
 			}

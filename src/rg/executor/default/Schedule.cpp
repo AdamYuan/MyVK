@@ -10,11 +10,12 @@
 namespace default_executor {
 
 Schedule Schedule::Create(const Args &args) {
-	args.collection.ClearInfo(&PassInfo::schedule);
+	args.collection.ClearInfo(&PassInfo::schedule, &ResourceInfo::schedule);
 
 	Schedule s = {};
 	s.make_pass_groups(args, merge_passes(args, make_image_read_graph(args)));
 	s.make_barriers(args);
+	propagate_resource_info(args);
 	return s;
 }
 
@@ -170,10 +171,13 @@ Schedule::BarrierType Schedule::get_valid_barrier_type(const ResourceBase *p_val
 	}
 }
 
-void Schedule::for_each_read_group(const ResourceBase *p_resource, std::vector<const InputBase *> &&reads,
-                                   auto &&func) {
-	if (reads.empty())
-		return;
+void Schedule::push_wrw_barriers(const Args &args, const ResourceBase *p_resource, const InputBase *p_write,
+                                 std::span<const InputBase *> reads, const InputBase *p_next_write) {
+	assert(!reads.empty());
+
+	auto write_span = p_write ? std::span<const InputBase *const>{&p_write, 1} : std::span<const InputBase *const>{};
+	auto next_write_span =
+	    p_next_write ? std::span<const InputBase *const>{&p_next_write, 1} : std::span<const InputBase *const>{};
 
 	std::ranges::sort(reads, [&](auto l_read, auto r_read) {
 		return Dependency::GetPassTopoID(Dependency::GetInputPass(l_read)) <
@@ -181,36 +185,34 @@ void Schedule::for_each_read_group(const ResourceBase *p_resource, std::vector<c
 	});
 
 	if (p_resource->GetType() == ResourceType::kBuffer) {
-		func(std::span<const InputBase *const>{}, reads); // Read-After-Write Barrier
-		func(reads, std::span<const InputBase *const>{}); // Write-After-Read Barrier
+		push_read_barrier(args, p_resource, write_span, reads);
+		push_read_barrier(args, p_resource, reads, next_write_span);
 	} else {
-		std::span<const InputBase *const> prev_span{};
+		std::span<const InputBase *const> prev_span = write_span;
 		for (std::size_t i = 0; i < reads.size();) {
 			std::size_t j = i + 1;
 			while (j < reads.size() && is_image_read_grouped(reads[j - 1], reads[j]))
 				++j;
 
 			std::span<const InputBase *const> span = {reads.data() + i, reads.data() + j};
-			func(prev_span, span);
+			push_read_barrier(args, p_resource, prev_span, span);
 			prev_span = span;
 
 			i = j;
 		}
-		func(prev_span, std::span<const InputBase *const>{});
+		push_read_barrier(args, p_resource, prev_span, next_write_span);
 	}
 }
 
-void Schedule::push_read_barrier(const ResourceBase *p_resource, const InputBase *p_write,
-                                 const InputBase *p_next_write, Schedule::BarrierType raw_barrier_type,
+// Push a Barrier including read accesses
+void Schedule::push_read_barrier(const Args &args, const ResourceBase *p_resource,
                                  std::span<const InputBase *const> src_s, std::span<const InputBase *const> dst_s) {
-	if (src_s.empty() && p_write)
-		src_s = std::span<const InputBase *const>{&p_write, 1};
-	if (dst_s.empty() && p_next_write)
-		dst_s = std::span<const InputBase *const>{&p_next_write, 1};
+	if (dst_s.empty())
+		return;
+	update_resource_info(args, p_resource, dst_s);
 
-	if (std::size_t group;
-	    !src_s.empty() && !dst_s.empty() &&
-	    (group = GetGroupID(Dependency::GetInputPass(src_s[0]))) == GetGroupID(Dependency::GetInputPass(dst_s[0]))) {
+	if (std::size_t group; !src_s.empty() && (group = GetGroupID(Dependency::GetInputPass(src_s[0]))) ==
+	                                             GetGroupID(Dependency::GetInputPass(dst_s[0]))) {
 		// Subpass Barrier
 		assert(src_s.size() == 1 && dst_s.size() == 1);
 		assert(UsageIsAttachment(src_s[0]->GetUsage()) && UsageIsAttachment(dst_s[0]->GetUsage()));
@@ -219,12 +221,39 @@ void Schedule::push_read_barrier(const ResourceBase *p_resource, const InputBase
 		    .p_src = src_s[0],
 		    .p_dst = dst_s[0],
 		});
-	} else if (!dst_s.empty()) {
+	} else {
 		// Ignore Write-after-Read barriers when p_next_write is null
 		m_pass_barriers.push_back({.p_resource = p_resource,
 		                           .src_s = std::vector<const InputBase *>{src_s.begin(), src_s.end()},
 		                           .dst_s = std::vector<const InputBase *>{dst_s.begin(), dst_s.end()},
-		                           .type = src_s.empty() ? raw_barrier_type : BarrierType::kLocal});
+		                           .type = src_s.empty() ? get_valid_barrier_type(p_resource) : BarrierType::kLocal});
+	}
+}
+
+// Push a Write-Only Barrier
+void Schedule::push_write_barrier(const Args &args, const ResourceBase *p_resource, const InputBase *p_write,
+                                  const InputBase *p_next_write) {
+	if (p_next_write == nullptr)
+		return;
+	update_resource_info(args, p_resource, {&p_next_write, 1});
+
+	if (std::size_t group; p_write && (group = GetGroupID(Dependency::GetInputPass(p_write))) ==
+	                                      GetGroupID(Dependency::GetInputPass(p_next_write))) {
+		// Subpass Barrier
+		assert(p_resource->GetType() == ResourceType::kImage && UsageIsAttachment(p_write->GetUsage()) &&
+		       UsageIsAttachment(p_next_write->GetUsage()));
+		m_pass_groups[group].subpass_deps.push_back(SubpassBarrier{
+		    .p_attachment = static_cast<const ImageBase *>(p_resource),
+		    .p_src = p_write,
+		    .p_dst = p_next_write,
+		});
+	} else {
+		m_pass_barriers.push_back({
+		    .p_resource = p_resource,
+		    .src_s = p_write ? std::vector<const InputBase *>{p_write} : std::vector<const InputBase *>{},
+		    .dst_s = {p_next_write},
+		    .type = p_write == nullptr ? get_valid_barrier_type(p_resource) : BarrierType::kLocal,
+		});
 	}
 }
 
@@ -248,74 +277,55 @@ void Schedule::make_barriers(const Schedule::Args &args) {
 	// Write-After-Write or Write validation Barriers are directly added, WAR and RAW Barriers are remained to be
 	// processed (push to local_reads and valid_reads)
 	for (auto [from, to, e, _] : args.dependency.GetPassGraph().GetEdges()) {
+		// from == nullptr <==> Validation
 		if (from == nullptr) {
-			// Validation
 			auto [_, p_dst_input, p_resource] = e;
 			// Not Local Dependency, should be Valid / LFValid / ExtValid
 			bool dst_write = !UsageIsReadOnly(p_dst_input->GetUsage());
-			if (dst_write) {
+			if (dst_write)
 				// Write Validation, push directly
-				m_pass_barriers.push_back({
-				    .p_resource = p_resource,
-				    .src_s = {},
-				    .dst_s = {p_dst_input},
-				    .type = get_valid_barrier_type(p_resource),
-				});
-			} else {
+				push_write_barrier(args, p_resource, nullptr, p_dst_input);
+			else
 				// Read Validation, push to Valid Read Edges
 				valid_reads[p_resource].reads.push_back(p_dst_input);
-			}
 		} else {
 			auto [p_src_input, p_dst_input, p_resource] = e;
-
 			bool src_write = !UsageIsReadOnly(p_src_input->GetUsage()),
 			     dst_write = !UsageIsReadOnly(p_dst_input->GetUsage());
 			assert(src_write || dst_write); // Should have a write access
-
-			if (src_write && dst_write) {
+			if (src_write && dst_write)
 				// Both are write access, push directly
-				if (GetGroupID(from) == GetGroupID(to)) {
-					m_pass_groups[GetGroupID(from)].subpass_deps.push_back(SubpassBarrier{
-					    .p_attachment = static_cast<const ImageBase *>(p_resource),
-					    .p_src = p_src_input,
-					    .p_dst = p_dst_input,
-					});
-					assert(p_resource->GetType() == ResourceType::kImage &&
-					       UsageIsAttachment(e.opt_p_src_input->GetUsage()) &&
-					       UsageIsAttachment(e.p_dst_input->GetUsage()));
-				} else {
-					m_pass_barriers.push_back({
-					    .p_resource = e.p_resource,
-					    .src_s = {p_src_input},
-					    .dst_s = {p_dst_input},
-					    .type = BarrierType::kLocal,
-					});
-				}
-			} else if (src_write) {
+				push_write_barrier(args, p_resource, p_src_input, p_dst_input);
+			else if (src_write)
 				// Read after Write, push to RAW edges
 				local_reads[p_src_input].reads.push_back(p_dst_input);
-			}
 		}
 	}
-
+	// Push barriers with read accesses
 	for (auto &[p_input, read_info] : local_reads) {
-		const ResourceBase *p_resource = Dependency::GetInputResource(p_input);
-		const InputBase *p_next_write = read_info.p_next_write;
-
-		assert(!read_info.reads.empty());
-		for_each_read_group(p_resource, std::move(read_info.reads), [&](auto src_s, auto dst_s) {
-			push_read_barrier(p_resource, p_input, p_next_write, BarrierType::kLocal, src_s, dst_s);
-		});
+		auto p_resource = Dependency::GetInputResource(p_input);
+		push_wrw_barriers(args, p_resource, p_input, read_info.reads, read_info.p_next_write);
 	}
-	for (auto &[p_resource, read_info] : valid_reads) {
-		const InputBase *p_next_write = read_info.p_next_write;
-		BarrierType barrier_type = get_valid_barrier_type(p_resource);
+	for (auto &[p_resource, read_info] : valid_reads)
+		push_wrw_barriers(args, p_resource, nullptr, read_info.reads, read_info.p_next_write);
+}
 
-		assert(!read_info.reads.empty());
-		for_each_read_group(p_resource, std::move(read_info.reads), [&](auto src_s, auto dst_s) {
-			push_read_barrier(p_resource, nullptr, p_next_write, barrier_type, src_s, dst_s);
-		});
+void Schedule::update_resource_info(const Args &args, const ResourceBase *p_resource,
+                                    std::span<const InputBase *const> accesses) {
+	p_resource = Dependency::GetRootResource(p_resource);
+	auto &last_accesses = get_sched_info(p_resource).last_accesses;
+	if (last_accesses.empty() ||
+	    args.dependency.IsPassLess(Dependency::GetInputPass(last_accesses[0]), Dependency::GetInputPass(accesses[0]))) {
+
+		last_accesses.resize(accesses.size());
+		std::ranges::copy(accesses, last_accesses.begin());
 	}
+}
+
+void Schedule::propagate_resource_info(const Schedule::Args &args) {
+	for (const ResourceBase *p_resource : args.dependency.GetResourceGraph().GetVertices())
+		if (!Dependency::IsRootResource(p_resource))
+			get_sched_info(p_resource) = get_sched_info(Dependency::GetRootResource(p_resource));
 }
 
 } // namespace default_executor

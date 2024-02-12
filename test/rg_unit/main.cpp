@@ -406,5 +406,14 @@ TEST_SUITE("Default Executor") {
 			}
 			printf("\ntype=%d\n\n", static_cast<int>(pass_barrier.type));
 		}
+
+		printf("Last Accesses:\n");
+		for (const auto *p_resource : dependency.GetPhysIDResources()) {
+			printf("resource=%s: ", p_resource->GetGlobalKey().Format().c_str());
+			CHECK_FALSE(Schedule::GetLastAccesses(p_resource).empty());
+			for (const auto *p_access : Schedule::GetLastAccesses(p_resource))
+				printf("%s, ", p_access->GetGlobalKey().Format().c_str());
+			printf("\n");
+		}
 	}
 }

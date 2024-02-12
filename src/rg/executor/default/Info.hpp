@@ -93,9 +93,17 @@ struct ResourceInfo {
 		};
 	} metadata{};
 
+	// Schedule
+	struct {
+		friend class Schedule;
+
+	private:
+		std::vector<const InputBase *> last_accesses;
+	} schedule{};
+
 	// VkAllocation
 	struct {
-		friend class Allocation;
+		friend class VkAllocation;
 
 	private:
 		bool double_buffer{};

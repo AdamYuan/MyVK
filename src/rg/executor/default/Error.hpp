@@ -47,9 +47,8 @@ struct AliasNoMatch {
 };
 struct WriteToLastFrame {
 	AliasBase alias;
-	GlobalKey pass_key;
 	inline std::string Format() const {
-		return "Write to last frame source " + alias.GetSourceKey().Format() + " in pass " + pass_key.Format();
+		return "Write to last frame source " + alias.GetSourceKey().Format();
 	}
 };
 struct MultipleWrite {
