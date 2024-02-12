@@ -1,8 +1,6 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
-#include "magic_enum.hpp"
-
 #include <myvk_rg/executor/DefaultExecutor.hpp>
 #include <myvk_rg/interface/Input.hpp>
 #include <myvk_rg/interface/Key.hpp>
@@ -400,13 +398,11 @@ TEST_SUITE("Default Executor") {
 		for (const auto &pass_barrier : schedule.GetPassBarriers()) {
 			printf("resource = %s\nfrom=", pass_barrier.p_resource->GetGlobalKey().Format().c_str());
 			for (const auto &p_src : pass_barrier.src_s) {
-				printf("%s:0x%x; ", p_src->GetInputAlias().GetSourceKey().Format().c_str(),
-				       static_cast<int>(p_src->GetUsage()));
+				printf("%s:use=%d; ", p_src->GetGlobalKey().Format().c_str(), static_cast<int>(p_src->GetUsage()));
 			}
 			printf("\nto=");
 			for (const auto &p_dst : pass_barrier.dst_s) {
-				printf("%s:0x%x; ", p_dst->GetInputAlias().GetSourceKey().Format().c_str(),
-				       static_cast<int>(p_dst->GetUsage()));
+				printf("%s:use=%d; ", p_dst->GetGlobalKey().Format().c_str(), static_cast<int>(p_dst->GetUsage()));
 			}
 			printf("\ntype=%d\n\n", static_cast<int>(pass_barrier.type));
 		}

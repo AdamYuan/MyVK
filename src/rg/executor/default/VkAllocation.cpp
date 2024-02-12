@@ -2,7 +2,7 @@
 // Created by adamyuan on 2/8/24.
 //
 
-#include "Allocation.hpp"
+#include "VkAllocation.hpp"
 #include <algorithm>
 
 #include "../VkHelper.hpp"
@@ -73,10 +73,10 @@ public:
 	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 };
 
-Allocation Allocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args) {
-	args.collection.ClearInfo(&ResourceInfo::allocation);
+VkAllocation VkAllocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args) {
+	args.collection.ClearInfo(&ResourceInfo::vk_allocation);
 
-	Allocation alloc = {};
+	VkAllocation alloc = {};
 	alloc.m_device_ptr = device_ptr;
 
 	alloc.create_vk_resources(args);
@@ -87,7 +87,7 @@ Allocation Allocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, const A
 	return alloc;
 }
 
-void Allocation::create_vk_resources(const Args &args) {
+void VkAllocation::create_vk_resources(const Args &args) {
 	const auto create_image = [&](const ImageBase *p_image) {
 		auto &vk_alloc = get_vk_alloc(p_image);
 
@@ -173,7 +173,7 @@ void Allocation::create_vk_resources(const Args &args) {
 
 inline static constexpr VkDeviceSize DivCeil(VkDeviceSize l, VkDeviceSize r) { return (l / r) + (l % r ? 1 : 0); }
 
-std::tuple<VkDeviceSize, uint32_t> Allocation::fetch_memory_requirements(std::ranges::input_range auto &&resources) {
+std::tuple<VkDeviceSize, uint32_t> VkAllocation::fetch_memory_requirements(std::ranges::input_range auto &&resources) {
 	VkDeviceSize alignment = 1;
 	uint32_t memory_type_bits = -1;
 	for (const ResourceBase *p_resource : resources) {
@@ -183,7 +183,7 @@ std::tuple<VkDeviceSize, uint32_t> Allocation::fetch_memory_requirements(std::ra
 	}
 	return {alignment, memory_type_bits};
 }
-void Allocation::alloc_naive(std::ranges::input_range auto &&resources, const VmaAllocationCreateInfo &create_info) {
+void VkAllocation::alloc_naive(std::ranges::input_range auto &&resources, const VmaAllocationCreateInfo &create_info) {
 	auto [alignment, memory_type_bits] = fetch_memory_requirements(resources);
 	VkDeviceSize mem_total = 0;
 	for (const ResourceBase *p_resource : resources) {
@@ -225,7 +225,7 @@ struct MemEvent {
 };
 } // namespace alloc_optimal
 
-void Allocation::alloc_optimal(const Args &args, std::ranges::input_range auto &&resources,
+void VkAllocation::alloc_optimal(const Args &args, std::ranges::input_range auto &&resources,
                                const VmaAllocationCreateInfo &create_info) {
 	auto [alignment, memory_type_bits] = fetch_memory_requirements(resources);
 
@@ -309,7 +309,7 @@ void Allocation::alloc_optimal(const Args &args, std::ranges::input_range auto &
 		get_vk_alloc(p_resource).myvk_mem_alloc = mem_alloc;
 }
 
-void Allocation::create_vk_allocations(const Args &args) {
+void VkAllocation::create_vk_allocations(const Args &args) {
 	m_resource_alias_relation.Reset(args.metadata.GetResourceAllocCount(), args.metadata.GetResourceAllocCount());
 
 	std::vector<const ResourceBase *> local_resources, lf_resources, random_mapped_resources,
@@ -364,7 +364,7 @@ void Allocation::create_vk_allocations(const Args &args) {
 	            });
 }
 
-void Allocation::bind_vk_resources(const Args &args) {
+void VkAllocation::bind_vk_resources(const Args &args) {
 	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources()) {
 		auto &vk_alloc = get_vk_alloc(p_resource);
 		auto vma_allocation = vk_alloc.myvk_mem_alloc->GetHandle();
@@ -393,7 +393,7 @@ void Allocation::bind_vk_resources(const Args &args) {
 	}
 }
 
-void Allocation::create_vk_image_views(const Args &args) {
+void VkAllocation::create_vk_image_views(const Args &args) {
 	const auto create_image_view = [&](const LocalInternalImage auto *p_image) {
 		const auto &root_vk_alloc = get_vk_alloc(Meta::GetAllocResource(p_image)).image;
 

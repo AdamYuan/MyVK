@@ -12,7 +12,7 @@
 
 namespace default_executor {
 
-class Allocation {
+class VkAllocation {
 private:
 	struct Args {
 		const RenderGraphBase &render_graph;
@@ -25,7 +25,7 @@ private:
 
 	Relation m_resource_alias_relation;
 
-	static auto &get_vk_alloc(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).allocation; }
+	static auto &get_vk_alloc(const ResourceBase *p_resource) { return GetResourceInfo(p_resource).vk_allocation; }
 
 	void create_vk_resources(const Args &args);
 	static std::tuple<VkDeviceSize, uint32_t> fetch_memory_requirements(std::ranges::input_range auto &&resources);
@@ -37,7 +37,7 @@ private:
 	void create_vk_image_views(const Args &args);
 
 public:
-	static Allocation Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
+	static VkAllocation Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
 
 	// Resource Alias Relationship
 	inline bool IsResourceAliased(std::size_t alloc_id_l, std::size_t alloc_id_r) const {

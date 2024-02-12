@@ -93,7 +93,7 @@ struct ResourceInfo {
 		};
 	} metadata{};
 
-	// Allocation
+	// VkAllocation
 	struct {
 		friend class Allocation;
 
@@ -110,7 +110,7 @@ struct ResourceInfo {
 		VkMemoryRequirements vk_mem_reqs{};
 		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
 		std::array<VkDeviceSize, 2> mem_offsets{};
-	} allocation{};
+	} vk_allocation{};
 };
 
 inline PassInfo &GetPassInfo(const PassBase *p_pass) { return *p_pass->__GetPExecutorInfo<PassInfo>(); }

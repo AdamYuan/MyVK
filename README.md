@@ -9,6 +9,6 @@ My personal Vulkan abstraction library.
 * Vulkan Object Abstraction
 * Render Graph
   * Automatic Pass Scheduling
-  * Optimal Resource Allocation
+  * Optimal Resource VkAllocation
   * Last Frame Resource Access
   * Async Compute & Transfer (WIP)
