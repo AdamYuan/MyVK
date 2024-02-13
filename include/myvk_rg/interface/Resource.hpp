@@ -540,6 +540,8 @@ template <typename T>
 concept LocalInternalBuffer = InternalBuffer<T> && !LastFrameResource<T>;
 template <typename T>
 concept LocalInternalResource = InternalResource<T> && !LastFrameResource<T>;
+template <typename T>
+concept AttachmentImage = std::derived_from<T, ImageAttachmentInfo<T>>;
 
 } // namespace myvk_rg::interface
 
