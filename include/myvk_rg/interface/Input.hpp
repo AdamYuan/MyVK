@@ -13,46 +13,59 @@
 
 namespace myvk_rg::interface {
 
-class ImageInput;
-
 struct DescriptorIndex {
 	uint32_t binding, array_element;
 };
 
+class ImageInput;
+class BufferInput;
+
 class InputBase : public ObjectBase {
 private:
-	AliasBase m_resource{};
+	AliasBase m_input_alias{};
 	Usage m_usage{};
 	VkPipelineStageFlags2 m_pipeline_stages{};
 	std::optional<DescriptorIndex> m_opt_descriptor_index;
 
 public:
-	inline InputBase(Parent parent, const AliasBase &resource, Usage usage, VkPipelineStageFlags2 pipeline_stages,
-	                 std::optional<uint32_t> opt_descriptor_binding = std::nullopt,
-	                 std::optional<uint32_t> = std::nullopt)
-	    : ObjectBase(parent), m_resource{resource}, m_usage{usage}, m_pipeline_stages{pipeline_stages},
-	      m_opt_descriptor_binding{opt_descriptor_binding} {}
-	inline virtual ~InputBase() = default;
+	inline InputBase(Parent parent, const AliasBase &input_alias, Usage usage, VkPipelineStageFlags2 pipeline_stages,
+	                 std::optional<DescriptorIndex> opt_descriptor_index)
+	    : ObjectBase(parent), m_input_alias{input_alias}, m_usage{usage}, m_pipeline_stages{pipeline_stages},
+	      m_opt_descriptor_index{opt_descriptor_index} {}
+	inline ~InputBase() override = default;
 	inline Usage GetUsage() const { return m_usage; }
 	inline VkPipelineStageFlags2 GetPipelineStages() const { return m_pipeline_stages; }
 	inline const auto &GetOptDescriptorIndex() const { return m_opt_descriptor_index; }
 
-	inline const AliasBase &GetInputAlias() const { return m_resource; }
-	inline ResourceType GetType() const { return m_resource.GetType(); }
+	inline const AliasBase &GetInputAlias() const { return m_input_alias; }
+	inline ResourceType GetType() const { return m_input_alias.GetType(); }
 
 	template <typename Visitor> inline std::invoke_result_t<Visitor, ImageInput *> Visit(Visitor &&visitor) const;
 };
 
 class ImageInput final : public InputBase {
 private:
-	std::optional<uint32_t> m_opt_attachment_index;
+	std::optional<uint32_t> m_opt_attachment_index{};
+	myvk::Ptr<myvk::Sampler> m_sampler{};
 
 public:
+	inline ImageInput(Parent parent, const ImageAliasBase &resource, Usage usage, VkPipelineStageFlags2 pipeline_stages)
+	    : InputBase(parent, resource, usage, pipeline_stages, std::nullopt) {}
+	// Descriptor Index
 	inline ImageInput(Parent parent, const ImageAliasBase &resource, Usage usage, VkPipelineStageFlags2 pipeline_stages,
-	                  std::optional<uint32_t> opt_descriptor_binding = std::nullopt,
-	                  std::optional<uint32_t> opt_attachment_index = std::nullopt)
-	    : InputBase(parent, resource, usage, pipeline_stages, opt_descriptor_binding),
-	      m_opt_attachment_index{opt_attachment_index} {}
+	                  DescriptorIndex descriptor_index)
+	    : InputBase(parent, resource, usage, pipeline_stages, descriptor_index) {}
+	inline ImageInput(Parent parent, const ImageAliasBase &resource, Usage usage, VkPipelineStageFlags2 pipeline_stages,
+	                  DescriptorIndex descriptor_index, myvk::Ptr<myvk::Sampler> sampler)
+	    : InputBase(parent, resource, usage, pipeline_stages, descriptor_index), m_sampler{std::move(sampler)} {}
+	// Attachment Index
+	inline ImageInput(Parent parent, const ImageAliasBase &resource, Usage usage, VkPipelineStageFlags2 pipeline_stages,
+	                  uint32_t attachment_index)
+	    : InputBase(parent, resource, usage, pipeline_stages, std::nullopt), m_opt_attachment_index{attachment_index} {}
+	inline ImageInput(Parent parent, const ImageAliasBase &resource, Usage usage, VkPipelineStageFlags2 pipeline_stages,
+	                  uint32_t attachment_index, DescriptorIndex descriptor_index)
+	    : InputBase(parent, resource, usage, pipeline_stages, descriptor_index),
+	      m_opt_attachment_index{attachment_index} {}
 	inline ~ImageInput() final = default;
 
 	inline const ImageAliasBase &GetInputAlias() const {
@@ -66,10 +79,11 @@ public:
 class BufferInput final : public InputBase {
 public:
 	inline BufferInput(Parent parent, const BufferAliasBase &resource, Usage usage,
-	                   VkPipelineStageFlags2 pipeline_stages,
-	                   std::optional<uint32_t> opt_descriptor_binding = std::nullopt,
-	                   std::optional<uint32_t> = std::nullopt)
-	    : InputBase(parent, resource, usage, pipeline_stages, opt_descriptor_binding) {}
+	                   VkPipelineStageFlags2 pipeline_stages)
+	    : InputBase(parent, resource, usage, pipeline_stages, std::nullopt) {}
+	inline BufferInput(Parent parent, const BufferAliasBase &resource, Usage usage,
+	                   VkPipelineStageFlags2 pipeline_stages, DescriptorIndex descriptor_index)
+	    : InputBase(parent, resource, usage, pipeline_stages, descriptor_index) {}
 	inline ~BufferInput() final = default;
 
 	inline const BufferAliasBase &GetInputAlias() const {

@@ -31,9 +31,7 @@ using ExternalBufferBase = interface::ExternalBufferBase;
 using SubImageSize = interface::SubImageSize;
 using RenderPassArea = interface::RenderPassArea;
 
-using BufferDescriptorInput = interface::BufferDescriptorInput;
-using ImageDescriptorInput = interface::ImageDescriptorInput;
-using SamplerDescriptorInput = interface::SamplerDescriptorInput;
+using DescriptorIndex = interface::DescriptorIndex;
 
 using DefaultExecutor = executor::DefaultExecutor;
 

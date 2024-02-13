@@ -72,10 +72,10 @@ private:
 	public:
 		inline GaussianBlurSubpass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
 		    : myvk_rg::GraphicsPassBase(parent) {
-			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"in"}, image,
-			                                                                                              nullptr);
+			AddDescriptorInput<myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({0}, {"in"},
+			                                                                                           image, nullptr);
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img->AsInput());
+			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->AsInput());
 		}
 		inline ~GaussianBlurSubpass() final = default;
 		inline void CreatePipeline() final {}
@@ -107,9 +107,9 @@ private:
 public:
 	inline DimPass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
 	    : myvk_rg::GraphicsPassBase(parent) {
-		AddInputAttachmentInput<0, 0>({"in"}, image);
+		AddInputAttachmentInput(0, {0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image->AsInput());
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
 	}
 	inline ~DimPass() final = default;
 	inline void CreatePipeline() final {}
@@ -167,9 +167,9 @@ class InputAttPass final : public myvk_rg::GraphicsPassBase {
 public:
 	inline InputAttPass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
 	    : myvk_rg::GraphicsPassBase(parent) {
-		AddInputAttachmentInput<0, 0>({"in"}, image);
+		AddInputAttachmentInput(0, {0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image->AsInput());
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
 	}
 	inline ~InputAttPass() final = default;
 	inline void CreatePipeline() final {}
@@ -181,10 +181,10 @@ class SamplerPass final : public myvk_rg::GraphicsPassBase {
 public:
 	inline SamplerPass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
 	    : myvk_rg::GraphicsPassBase(parent) {
-		AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({"in"}, image,
-		                                                                                              nullptr);
+		AddDescriptorInput<myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({0}, {"in"}, image,
+		                                                                                           nullptr);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image->AsInput());
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
 	}
 	inline ~SamplerPass() final = default;
 	inline void CreatePipeline() final {}
@@ -196,10 +196,10 @@ class ImageRPass final : public myvk_rg::ComputePassBase {
 public:
 	inline ImageRPass(myvk_rg::Parent parent, const myvk_rg::Image &image, VkFormat format)
 	    : myvk_rg::ComputePassBase(parent) {
-		AddDescriptorInput<0, myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({"in"}, image);
+		AddDescriptorInput<myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddDescriptorInput<1, myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
-		    {"out"}, out_image->AsInput());
+		AddDescriptorInput<myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
+		    {1}, {"out"}, out_image->AsInput());
 	}
 	inline ~ImageRPass() final = default;
 	inline void CreatePipeline() final {}
@@ -210,7 +210,8 @@ public:
 class ImageWPass final : public myvk_rg::ComputePassBase {
 public:
 	inline ImageWPass(myvk_rg::Parent parent, const myvk_rg::Image &image) : myvk_rg::ComputePassBase(parent) {
-		AddDescriptorInput<0, myvk_rg::Usage::kStorageImageRW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({"out"}, image);
+		AddDescriptorInput<myvk_rg::Usage::kStorageImageRW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({0}, {"out"},
+		                                                                                            image);
 	}
 	inline ~ImageWPass() final = default;
 	inline void CreatePipeline() final {}

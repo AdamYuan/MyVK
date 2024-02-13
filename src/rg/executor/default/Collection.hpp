@@ -49,47 +49,6 @@ public:
 		return it->second;
 	}
 
-	inline const ImageBase *FindAliasSource(const RawImageAlias &alias) const {
-		const ResourceBase *p_resource = FindResource(alias.GetSourceKey());
-		return p_resource->Visit(overloaded([](const ImageBase *i) -> const ImageBase * { return i; },
-		                                    [&](const auto *r) -> const ImageBase * {
-			                                    Throw(error::AliasNoMatch{.alias = alias, .actual_type = r->GetType()});
-			                                    return nullptr;
-		                                    }));
-	}
-	inline const ImageInput *FindAliasSource(const OutputImageAlias &alias) const {
-		const InputBase *p_input = FindInput(alias.GetSourceKey());
-		return p_input->Visit(overloaded([](const ImageInput *i) -> const ImageInput * { return i; },
-		                                 [&](const auto *r) -> const ImageInput * {
-			                                 Throw(error::AliasNoMatch{.alias = alias, .actual_type = r->GetType()});
-			                                 return nullptr;
-		                                 }));
-	}
-	inline const BufferBase *FindAliasSource(const RawBufferAlias &alias) const {
-		const ResourceBase *p_resource = FindResource(alias.GetSourceKey());
-		return p_resource->Visit(overloaded([](const BufferBase *i) -> const BufferBase * { return i; },
-		                                    [&](const auto *r) -> const BufferBase * {
-			                                    Throw(error::AliasNoMatch{.alias = alias, .actual_type = r->GetType()});
-			                                    return nullptr;
-		                                    }));
-	}
-	inline const BufferInput *FindAliasSource(const OutputBufferAlias &alias) const {
-		const InputBase *p_input = FindInput(alias.GetSourceKey());
-		return p_input->Visit(overloaded([](const BufferInput *i) -> const BufferInput * { return i; },
-		                                 [&](const auto *r) -> const BufferInput * {
-			                                 Throw(error::AliasNoMatch{.alias = alias, .actual_type = r->GetType()});
-			                                 return nullptr;
-		                                 }));
-	}
-	/* inline CompileResult<std::variant<const ImageBase *, const ImageInput *>>
-	FindAliasSource(const ImageAliasBase &alias) const {
-	    return alias.Visit(
-	        [this](const auto *alias) -> CompileResult<std::variant<const ImageBase *, const ImageInput *>> {
-	            std::variant<const ImageBase *, const ImageInput *> v;
-	            UNWRAP_ASSIGN(v, FindAliasSource(*alias));
-	            return v;
-	        });
-	} */
 	void ClearInfo() const {}
 	template <typename Info_T, typename Member_T, typename... Args>
 	void ClearInfo(Member_T Info_T::*p_member, Args &&...args) const {
