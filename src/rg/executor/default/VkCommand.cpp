@@ -431,7 +431,7 @@ void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, con
 	pop_barriers(in.prior_barriers, &p_out->prior_barriers);
 
 	// Skip if not RenderPass
-	if (in.subpasses[0]->GetType() == PassType::kGraphics)
+	if (in.subpasses[0]->GetType() != PassType::kGraphics)
 		return;
 
 	// Pop Subpass Dependencies
