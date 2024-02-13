@@ -16,7 +16,7 @@ Schedule Schedule::Create(const Args &args) {
 	s.make_pass_groups(args, merge_passes(args, make_image_read_graph(args)));
 	s.make_barriers(args);
 	s.make_output_barriers(args);
-	propagate_resource_info(args);
+	propagate_last_inputs(args);
 	return s;
 }
 
@@ -113,7 +113,10 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 
 		for (auto [from, e, _] : view.GetInEdges(p_pass)) {
 			std::size_t from_topo_id = Dependency::GetPassTopoID(from);
-			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()))
+			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()) &&
+			    Dependency::GetInputResource(e.opt_p_src_input) == Dependency::GetInputResource(e.p_dst_input)
+			    // Image Combine is not allowed to merge
+			)
 				size = std::min(size, i - from_topo_id + merge_sizes[from_topo_id]);
 			else
 				size = std::min(size, i - from_topo_id);
@@ -164,9 +167,9 @@ void Schedule::make_pass_groups(const Args &args, const std::vector<std::size_t>
 Schedule::BarrierType Schedule::get_valid_barrier_type(const ResourceBase *p_valid_resource) {
 	switch (p_valid_resource->GetState()) {
 	case ResourceState::kExternal:
-		return BarrierType::kExtValidate;
+		return BarrierType::kExtInput;
 	case ResourceState::kLastFrame:
-		return BarrierType::kLFValidate;
+		return BarrierType::kLFInput;
 	default:
 		return BarrierType::kValidate;
 	}
@@ -210,7 +213,12 @@ void Schedule::push_read_barrier(const Args &args, const ResourceBase *p_resourc
                                  std::span<const InputBase *const> src_s, std::span<const InputBase *const> dst_s) {
 	if (dst_s.empty())
 		return;
-	update_resource_info(args, p_resource, dst_s);
+
+	bool validate = src_s.empty();
+
+	update_last_inputs(p_resource, dst_s);
+	if (validate)
+		update_first_inputs(p_resource, dst_s);
 
 	if (std::size_t group; !src_s.empty() && (group = GetGroupID(Dependency::GetInputPass(src_s[0]))) ==
 	                                             GetGroupID(Dependency::GetInputPass(dst_s[0]))) {
@@ -227,7 +235,7 @@ void Schedule::push_read_barrier(const Args &args, const ResourceBase *p_resourc
 		m_pass_barriers.push_back({.p_resource = p_resource,
 		                           .src_s = std::vector<const InputBase *>{src_s.begin(), src_s.end()},
 		                           .dst_s = std::vector<const InputBase *>{dst_s.begin(), dst_s.end()},
-		                           .type = src_s.empty() ? get_valid_barrier_type(p_resource) : BarrierType::kLocal});
+		                           .type = validate ? get_valid_barrier_type(p_resource) : BarrierType::kLocal});
 	}
 }
 
@@ -236,7 +244,13 @@ void Schedule::push_write_barrier(const Args &args, const ResourceBase *p_resour
                                   const InputBase *p_next_write) {
 	if (p_next_write == nullptr)
 		return;
-	update_resource_info(args, p_resource, {&p_next_write, 1});
+
+	bool validate = p_write == nullptr;
+
+	// Update resource info
+	update_last_inputs(p_resource, {&p_next_write, 1});
+	if (validate)
+		update_first_inputs(p_resource, {&p_next_write, 1});
 
 	if (std::size_t group; p_write && (group = GetGroupID(Dependency::GetInputPass(p_write))) ==
 	                                      GetGroupID(Dependency::GetInputPass(p_next_write))) {
@@ -251,9 +265,9 @@ void Schedule::push_write_barrier(const Args &args, const ResourceBase *p_resour
 	} else {
 		m_pass_barriers.push_back({
 		    .p_resource = p_resource,
-		    .src_s = p_write ? std::vector<const InputBase *>{p_write} : std::vector<const InputBase *>{},
+		    .src_s = validate ? std::vector<const InputBase *>{} : std::vector<const InputBase *>{p_write},
 		    .dst_s = {p_next_write},
-		    .type = p_write == nullptr ? get_valid_barrier_type(p_resource) : BarrierType::kLocal,
+		    .type = validate ? get_valid_barrier_type(p_resource) : BarrierType::kLocal,
 		});
 	}
 }
@@ -311,35 +325,41 @@ void Schedule::make_barriers(const Schedule::Args &args) {
 		push_wrw_barriers(args, p_resource, nullptr, read_info.reads, read_info.p_next_write);
 }
 
-void Schedule::update_resource_info(const Args &args, const ResourceBase *p_resource,
-                                    std::span<const InputBase *const> accesses) {
-	p_resource = Dependency::GetRootResource(p_resource);
-	auto &last_accesses = get_sched_info(p_resource).last_accesses;
-	if (last_accesses.empty() ||
-	    args.dependency.IsPassLess(Dependency::GetInputPass(last_accesses[0]), Dependency::GetInputPass(accesses[0]))) {
+void Schedule::update_first_inputs(const ResourceBase *p_resource, std::span<const InputBase *const> accesses) {
+	assert(get_sched_info(p_resource).first_inputs.empty());
+	get_sched_info(p_resource).first_inputs = {accesses.begin(), accesses.end()};
+}
 
+void Schedule::update_last_inputs(const ResourceBase *p_resource, std::span<const InputBase *const> accesses) {
+	const auto get_input_topo = [](const auto *p_input) {
+		return Dependency::GetPassTopoID(Dependency::GetInputPass(p_input));
+	};
+	p_resource = Dependency::GetRootResource(p_resource);
+	auto &last_accesses = get_sched_info(p_resource).last_inputs;
+	if (last_accesses.empty() || get_input_topo(last_accesses[0]) < get_input_topo(accesses[0])) {
 		last_accesses.resize(accesses.size());
 		std::ranges::copy(accesses, last_accesses.begin());
 	}
 }
 
-void Schedule::propagate_resource_info(const Schedule::Args &args) {
+void Schedule::propagate_last_inputs(const Schedule::Args &args) {
 	for (const ResourceBase *p_resource : args.dependency.GetResourceGraph().GetVertices())
 		if (!Dependency::IsRootResource(p_resource))
-			get_sched_info(p_resource) = get_sched_info(Dependency::GetRootResource(p_resource));
+			get_sched_info(p_resource).last_inputs =
+			    get_sched_info(Dependency::GetRootResource(p_resource)).last_inputs;
 }
 
 void Schedule::make_output_barriers(const Args &args) {
 	for (const ResourceBase *p_resource : args.dependency.GetPhysIDResources())
 		if (p_resource->GetState() == ResourceState::kExternal) {
 			m_pass_barriers.push_back({.p_resource = p_resource,
-			                           .src_s = get_sched_info(p_resource).last_accesses,
+			                           .src_s = get_sched_info(p_resource).last_inputs,
 			                           .dst_s = {},
 			                           .type = BarrierType::kExtOutput});
 		} else if (p_resource->GetState() == ResourceState::kLastFrame) {
 			p_resource = Dependency::GetLFResource(p_resource); // Barrier on LFResource in current frame
 			m_pass_barriers.push_back({.p_resource = p_resource,
-			                           .src_s = get_sched_info(p_resource).last_accesses,
+			                           .src_s = get_sched_info(p_resource).last_inputs,
 			                           .dst_s = {},
 			                           .type = BarrierType::kLFOutput});
 		}

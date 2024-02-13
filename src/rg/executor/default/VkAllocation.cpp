@@ -248,11 +248,9 @@ void VkAllocation::alloc_optimal(const Args &args, std::ranges::input_range auto
                                  const VmaAllocationCreateInfo &create_info) {
 	auto [alignment, memory_type_bits] = fetch_memory_requirements(resources);
 
-	std::ranges::sort(resources, [](const ResourceBase *p_l, const ResourceBase *p_r) -> bool {
+	std::ranges::sort(resources, [&](const ResourceBase *p_l, const ResourceBase *p_r) -> bool {
 		const auto &reqs_l = get_vk_alloc(p_l).vk_mem_reqs, reqs_r = get_vk_alloc(p_r).vk_mem_reqs;
-		return reqs_l.size > reqs_r.size ||
-		       (reqs_l.size == reqs_r.size && Dependency::GetResourceAccessPassBitset(p_l).GetFirstBit() <
-		                                          Dependency::GetResourceAccessPassBitset(p_r).GetFirstBit());
+		return reqs_l.size > reqs_r.size || (reqs_l.size == reqs_r.size && args.dependency.IsResourceLess(p_l, p_r));
 	});
 
 	using alloc_optimal::MemBlock;

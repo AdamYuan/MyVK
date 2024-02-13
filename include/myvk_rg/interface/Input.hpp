@@ -15,12 +15,16 @@ namespace myvk_rg::interface {
 
 class ImageInput;
 
+struct DescriptorIndex {
+	uint32_t binding, array_element;
+};
+
 class InputBase : public ObjectBase {
 private:
 	AliasBase m_resource{};
 	Usage m_usage{};
 	VkPipelineStageFlags2 m_pipeline_stages{};
-	std::optional<uint32_t> m_opt_descriptor_binding;
+	std::optional<DescriptorIndex> m_opt_descriptor_index;
 
 public:
 	inline InputBase(Parent parent, const AliasBase &resource, Usage usage, VkPipelineStageFlags2 pipeline_stages,
@@ -31,7 +35,7 @@ public:
 	inline virtual ~InputBase() = default;
 	inline Usage GetUsage() const { return m_usage; }
 	inline VkPipelineStageFlags2 GetPipelineStages() const { return m_pipeline_stages; }
-	inline const auto &GetOptDescriptorBinding() const { return m_opt_descriptor_binding; }
+	inline const auto &GetOptDescriptorIndex() const { return m_opt_descriptor_index; }
 
 	inline const AliasBase &GetInputAlias() const { return m_resource; }
 	inline ResourceType GetType() const { return m_resource.GetType(); }

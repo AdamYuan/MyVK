@@ -53,6 +53,7 @@ struct PassInfo {
 };
 
 class RGMemoryAllocation;
+
 struct ResourceInfo {
 	// Dependency
 	struct {
@@ -98,7 +99,7 @@ struct ResourceInfo {
 		friend class Schedule;
 
 	private:
-		std::vector<const InputBase *> last_accesses;
+		std::vector<const InputBase *> first_inputs, last_inputs;
 	} schedule{};
 
 	// VkAllocation
@@ -119,6 +120,12 @@ struct ResourceInfo {
 		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
 		std::array<VkDeviceSize, 2> mem_offsets{};
 	} vk_allocation{};
+
+	struct {
+		friend class VkCommand;
+
+	private:
+	} vk_command{};
 };
 
 inline PassInfo &GetPassInfo(const PassBase *p_pass) { return *p_pass->__GetPExecutorInfo<PassInfo>(); }

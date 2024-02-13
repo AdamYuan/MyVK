@@ -13,7 +13,7 @@ namespace default_executor {
 
 class Schedule {
 public:
-	enum class BarrierType { kLocal, kValidate, kLFValidate, kExtValidate, kLFOutput, kExtOutput };
+	enum class BarrierType { kLocal, kValidate, kLFInput, kExtInput, kLFOutput, kExtOutput };
 	struct PassBarrier {
 		const ResourceBase *p_resource;
 		std::vector<const InputBase *> src_s, dst_s;
@@ -58,9 +58,9 @@ private:
 	void make_barriers(const Args &args);
 	void make_output_barriers(const Args &args);
 
-	void update_resource_info(const Args &args, const ResourceBase *p_resource,
-	                          std::span<const InputBase *const> accesses);
-	static void propagate_resource_info(const Schedule::Args &args);
+	static void update_last_inputs(const ResourceBase *p_resource, std::span<const InputBase *const> accesses);
+	static void update_first_inputs(const ResourceBase *p_resource, std::span<const InputBase *const> accesses);
+	static void propagate_last_inputs(const Schedule::Args &args);
 
 public:
 	static Schedule Create(const Args &args);
@@ -68,8 +68,10 @@ public:
 	inline const auto &GetPassBarriers() const { return m_pass_barriers; }
 	static std::size_t GetGroupID(const PassBase *p_pass) { return get_sched_info(p_pass).group_id; }
 	static std::size_t GetSubpassID(const PassBase *p_pass) { return get_sched_info(p_pass).subpass_id; }
-	static const auto &GetLastAccesses(const ResourceBase *p_resource) {
-		return get_sched_info(p_resource).last_accesses;
+	static uint32_t GetU32SubpassID(const PassBase *p_pass) { return GetSubpassID(p_pass); }
+	static const auto &GetLastInputs(const ResourceBase *p_resource) { return get_sched_info(p_resource).last_inputs; }
+	static const auto &GetFirstInputs(const ResourceBase *p_resource) {
+		return get_sched_info(p_resource).first_inputs;
 	}
 };
 
