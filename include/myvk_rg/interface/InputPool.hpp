@@ -12,7 +12,7 @@ private:
 	using PoolBase = Pool<Derived, Variant<BufferInput, ImageInput>>;
 
 	template <typename InputType, typename... Args> inline auto add_input(const PoolKey &input_key, Args &&...args) {
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kInputChanged);
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInputChanged);
 		return PoolBase::template Construct<InputType>(input_key, std::forward<Args>(args)...);
 	}
 
@@ -69,18 +69,19 @@ protected:
 	}
 	inline void ClearInputs() {
 		InputPool::Clear();
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kInputChanged);
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInputChanged);
 	}
 };
 
 template <typename Derived> class DescriptorInputSlot {
 private:
 	template <typename InputType, typename... Args> inline auto add_input(const PoolKey &input_key, Args &&...args) {
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kDescriptorChanged);
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kDescriptorChanged);
 		static_assert(std::is_base_of_v<InputPool<Derived>, Derived>);
 		return static_cast<InputPool<Derived> *>(static_cast<Derived *>(this))
 		    ->template add_input<InputType>(input_key, std::forward<Args>(args)...);
 	}
+	template <typename> friend class AttachmentInputSlot;
 
 public:
 	inline DescriptorInputSlot() = default;
@@ -155,10 +156,11 @@ protected:
 
 template <typename Derived> class AttachmentInputSlot {
 private:
-	template <typename InputType, typename... Args> inline auto add_input(const PoolKey &input_key, Args &&...args) {
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kAttachmentChanged);
-		static_assert(std::is_base_of_v<InputPool<Derived>, Derived>);
-		return static_cast<InputPool<Derived> *>(static_cast<Derived *>(this))
+	template <typename InputType, template <typename> typename InputPoolBase, typename... Args>
+	inline auto add_input(const PoolKey &input_key, Args &&...args) {
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kAttachmentChanged);
+		static_assert(std::derived_from<Derived, InputPoolBase<Derived>>);
+		return static_cast<InputPoolBase<Derived> *>(static_cast<Derived *>(this))
 		    ->template add_input<InputType>(input_key, std::forward<Args>(args)...);
 	}
 
@@ -170,22 +172,21 @@ protected:
 	template <Usage Usage, typename = std::enable_if_t<kUsageIsColorAttachment<Usage>>>
 	inline void AddColorAttachmentInput(uint32_t index, const PoolKey &input_key, const ImageAliasBase &image) {
 		static_assert(kUsageHasSpecifiedPipelineStages<Usage>);
-		add_input<ImageInput>(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>, index);
+		add_input<ImageInput, InputPool>(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>, index);
 	}
 
 	inline void AddInputAttachmentInput(uint32_t attachment_index, DescriptorIndex descriptor_index,
 	                                    const PoolKey &input_key, const ImageAliasBase &image) {
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kDescriptorChanged);
 		static_assert(kUsageHasSpecifiedPipelineStages<Usage::kInputAttachment>);
-		add_input<ImageInput>(input_key, image, Usage::kInputAttachment,
-		                      kUsageGetSpecifiedPipelineStages<Usage::kInputAttachment>, attachment_index,
-		                      descriptor_index);
+		add_input<ImageInput, DescriptorInputSlot>(input_key, image, Usage::kInputAttachment,
+		                                           kUsageGetSpecifiedPipelineStages<Usage::kInputAttachment>,
+		                                           attachment_index, descriptor_index);
 	}
 
 	template <Usage Usage, typename = std::enable_if_t<kUsageIsDepthAttachment<Usage>>>
 	inline void AddDepthAttachmentInput(const PoolKey &input_key, const ImageAliasBase &image) {
 		static_assert(kUsageHasSpecifiedPipelineStages<Usage>);
-		add_input<ImageInput>(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>);
+		add_input<ImageInput, InputPool>(input_key, image, Usage, kUsageGetSpecifiedPipelineStages<Usage>);
 	}
 };
 

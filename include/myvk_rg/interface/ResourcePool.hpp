@@ -24,11 +24,11 @@ protected:
 	template <typename Type, typename... Args,
 	          typename = std::enable_if_t<std::is_base_of_v<BufferBase, Type> || std::is_base_of_v<ImageBase, Type>>>
 	inline Type *CreateResource(const PoolKey &resource_key, Args &&...args) {
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResourceChanged);
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResourceChanged);
 		return PoolBase::template Construct<Type>(resource_key, std::forward<Args>(args)...);
 	}
 	inline void DeleteResource(const PoolKey &resource_key) {
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResourceChanged);
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResourceChanged);
 		return PoolBase::Delete(resource_key);
 	}
 
@@ -49,7 +49,7 @@ protected:
 		return PoolBase::template Get<ResourceType>(resource_image_key);
 	}
 	inline void ClearResources() {
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kResourceChanged);
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResourceChanged);
 		PoolBase::Clear();
 	}
 };

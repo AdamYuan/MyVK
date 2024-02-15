@@ -72,9 +72,9 @@ public:
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor) const;
 	inline RawBufferAlias AsInput() const { return RawBufferAlias{this}; }
 
-	/* inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
-	    return Visit([](auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return buffer->GetVkBuffer(); });
-	}; */
+	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
+		return Visit([](auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return buffer->GetVkBuffer(); });
+	};
 };
 
 class ImageBase : public ResourceBase {
@@ -88,10 +88,10 @@ public:
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
 	inline RawImageAlias AsInput() const { return RawImageAlias{this}; }
 
-	/* inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
-	    return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
+	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
+		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });
 	};
-	inline VkFormat GetFormat() const {
+	/* inline VkFormat GetFormat() const {
 	    return Visit([](auto *image) -> VkFormat { return image->GetFormat(); });
 	} */
 };
@@ -238,20 +238,18 @@ public:
 		m_size_func = nullptr;
 		if (m_size != size) {
 			m_size = size;
-			static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(kResizeEvent);
+			static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(kResizeEvent);
 		}
 	}
 	inline void SetSizeFunc(const SizeFunc &func) {
 		m_size_func = func;
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(kResizeEvent);
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(kResizeEvent);
 	}
 };
 
 class ManagedBuffer final : public BufferBase, public ManagedResourceInfo<ManagedBuffer, VkDeviceSize> {
 private:
 	BufferMapType m_map_type{BufferMapType::kNone};
-
-	void *get_mapped_data() const;
 
 public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kManaged; }
@@ -264,13 +262,13 @@ public:
 			EmitEvent(Event::kBufferMapTypeChanged);
 		}
 	}
-	void *GetMappedData() const;
-
-	inline ManagedBuffer(Parent parent) : BufferBase(parent, ResourceState::kManaged) {}
+	inline explicit ManagedBuffer(Parent parent) : BufferBase(parent, ResourceState::kManaged) {}
 	~ManagedBuffer() override = default;
 
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
-	template <typename T = void> inline T *GetMappedData() const { return reinterpret_cast<T *>(get_mapped_data()); }
+
+	void *GetMappedData() const;
+	template <typename T = void> inline T *GetMappedData() const { return reinterpret_cast<T *>(GetMappedData()); }
 };
 
 class SubImageSize {
@@ -423,9 +421,8 @@ private:
 
 public:
 	inline void SetInitTransferFunc(const InitTransferFunc &func) {
-		if ((m_init_transfer_func == nullptr) != (func == nullptr))
-			static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kInitTransferChanged);
-		static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->EmitEvent(Event::kInitTransferFuncChanged);
+		// if ((m_init_transfer_func == nullptr) != (func == nullptr))
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInitTransferChanged);
 		m_init_transfer_func = func;
 	}
 	inline const InitTransferFunc &GetInitTransferFunc() const { return m_init_transfer_func; }
@@ -440,7 +437,7 @@ public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameImage; }
 
-	inline LastFrameImage(Parent parent) : ImageBase(parent, ResourceState::kLastFrame) {}
+	inline explicit LastFrameImage(Parent parent) : ImageBase(parent, ResourceState::kLastFrame) {}
 	inline LastFrameImage(Parent parent, const OutputImageAlias &image_alias)
 	    : ImageBase(parent, ResourceState::kLastFrame), m_pointed_image{image_alias} {}
 	inline ~LastFrameImage() final = default;
@@ -461,7 +458,7 @@ public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameBuffer; }
 
-	inline LastFrameBuffer(Parent parent) : BufferBase(parent, ResourceState::kLastFrame) {}
+	inline explicit LastFrameBuffer(Parent parent) : BufferBase(parent, ResourceState::kLastFrame) {}
 	inline LastFrameBuffer(Parent parent, const OutputBufferAlias &buffer_alias)
 	    : BufferBase(parent, ResourceState::kLastFrame), m_pointed_buffer{buffer_alias} {}
 	inline LastFrameBuffer(LastFrameBuffer &&) = default;
@@ -472,6 +469,9 @@ public:
 	inline const auto &GetPointedAlias() const { return m_pointed_buffer; }
 
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
+
+	void *GetMappedData() const;
+	template <typename T = void> inline T *GetMappedData() const { return reinterpret_cast<T *>(GetMappedData()); }
 };
 
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) const {

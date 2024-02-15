@@ -18,7 +18,7 @@ private:
 		const Dependency &dependency;
 	};
 
-	std::vector<const ResourceBase *> m_alloc_id_resources, m_view_id_resources;
+	std::vector<const ResourceBase *> m_alloc_resources, m_view_resources;
 
 	void tag_resources(const Args &args);
 	void fetch_alloc_sizes(const Args &p_view_image);
@@ -37,10 +37,8 @@ public:
 	static Metadata Create(const Args &args);
 
 	// Alloc ID (Internal & Local & Physical Resources)
-	static std::size_t GetResourceAllocID(const ResourceBase *p_resource) { return get_meta(p_resource).alloc_id; }
-	inline std::size_t GetResourceAllocCount() const { return m_alloc_id_resources.size(); }
-	inline const ResourceBase *GetAllocIDResource(std::size_t alloc_id) const { return m_alloc_id_resources[alloc_id]; }
-	inline const auto &GetAllocIDResources() const { return m_alloc_id_resources; }
+	inline std::size_t GetResourceAllocCount() const { return m_alloc_resources.size(); }
+	inline const auto &GetAllocResources() const { return m_alloc_resources; }
 	static const ResourceBase *GetAllocResource(const ResourceBase *p_resource) {
 		return get_meta(p_resource).p_alloc_resource;
 	}
@@ -57,10 +55,9 @@ public:
 	static const auto &GetAllocInfo(const BufferBase *p_buffer) { return get_alloc(p_buffer); }
 
 	// View ID (Internal & Local Resources)
-	static std::size_t GetResourceViewID(const ResourceBase *p_resource) { return get_meta(p_resource).view_id; }
-	inline std::size_t GetResourceViewCount() const { return m_view_id_resources.size(); }
-	inline const ResourceBase *GetViewIDResource(std::size_t view_id) const { return m_view_id_resources[view_id]; }
-	inline const auto &GetViewIDResources() const { return m_view_id_resources; }
+	inline std::size_t GetResourceViewCount() const { return m_view_resources.size(); }
+	inline const ResourceBase *GetViewResource(std::size_t view_id) const { return m_view_resources[view_id]; }
+	inline const auto &GetViewResources() const { return m_view_resources; }
 	static const ResourceBase *GetViewResource(const ResourceBase *p_resource) {
 		return get_meta(p_resource).p_view_resource;
 	}

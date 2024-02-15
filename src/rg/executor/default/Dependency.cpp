@@ -1,5 +1,7 @@
 #include "Dependency.hpp"
 
+#include <algorithm>
+
 namespace default_executor {
 
 Dependency Dependency::Create(const Args &args) {
@@ -9,12 +11,17 @@ Dependency Dependency::Create(const Args &args) {
 
 	for (const auto &it : args.render_graph.GetResultPoolData())
 		it.second.Visit([&](const auto *p_alias) { g.traverse_output_alias(args, *p_alias); });
+	g.tag_resources();
+
 	g.add_war_edges();
 	g.sort_passes();
-	g.get_pass_relation();
 
-	g.tag_resources();
+	// Less Relation: pass or resource is used totally prior than another pass or resource
+	g.get_pass_relation();
 	g.get_resource_relation();
+
+	// For scheduler
+	g.add_image_read_edges();
 
 	return g;
 }
@@ -85,24 +92,18 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 
 struct AccessEdgeInfo {
 	std::vector<std::size_t> reads;
-	const ResourceBase *p_read_dst_resource = nullptr;
 	std::optional<std::size_t> opt_write;
-	const ResourceBase *p_write_dst_resource = nullptr;
 };
 void Dependency::add_war_edges() {
-	for (const PassBase *p_pass : m_pass_graph.GetVertices()) {
+	auto view = m_pass_graph.MakeView(kAnyFilter, kPassEdgeFilter<PassEdgeType::kBarrier>);
+
+	for (const PassBase *p_pass : view.GetVertices()) {
 		std::unordered_map<const ResourceBase *, AccessEdgeInfo> access_edges;
 
-		for (auto [_, e, edge_id] : m_pass_graph.GetOutEdges(p_pass)) {
+		for (auto [_, e, edge_id] : view.GetOutEdges(p_pass)) {
 			auto &info = access_edges[e.p_resource];
 			if (UsageIsReadOnly(e.p_dst_input->GetUsage())) {
-				// GetInputResource(e.p_dst_input) can be different from e.p_resource (if used as CombinedImage)
-				// All read access should have the same dst resource
-				if (info.p_read_dst_resource && info.p_read_dst_resource != GetInputResource(e.p_dst_input))
-					Throw(error::ResourceMultiForm{.alias = e.p_dst_input->GetInputAlias()});
-
 				info.reads.push_back(edge_id);
-				info.p_read_dst_resource = GetInputResource(e.p_dst_input);
 			} else {
 				// Forbid multiple writes
 				if (info.opt_write)
@@ -112,7 +113,6 @@ void Dependency::add_war_edges() {
 					Throw(error::WriteToLastFrame{.alias = e.p_dst_input->GetInputAlias()});
 
 				info.opt_write = edge_id;
-				info.p_write_dst_resource = GetInputResource(e.p_dst_input);
 			}
 		}
 
@@ -124,40 +124,23 @@ void Dependency::add_war_edges() {
 			std::size_t write_id = *info.opt_write;
 			const InputBase *p_write_dst = m_pass_graph.GetEdge(write_id).p_dst_input;
 
-			// If read_dst_resource != write_dst_resource, then write_dst_resource must be a combined image including
-			// p_resource and read_dst_resource must be p_resource
-			if (info.p_read_dst_resource != info.p_write_dst_resource) {
-				bool well_formed =
-				    info.p_read_dst_resource == p_resource &&
-				    info.p_write_dst_resource->GetState() == myvk_rg::interface::ResourceState::kCombinedImage;
-
-				if (!well_formed)
-					Throw(error::ResourceMultiForm{.alias = p_write_dst->GetInputAlias()});
-			}
-
 			// Add edges from read to write
-			for (std::size_t read_id : info.reads) {
+			for (std::size_t read_id : info.reads)
 				m_pass_graph.AddEdge(m_pass_graph.GetToVertex(read_id), m_pass_graph.GetToVertex(write_id),
-				                     PassEdge{
-				                         .opt_p_src_input = m_pass_graph.GetEdge(read_id).p_dst_input,
-				                         .p_dst_input = p_write_dst,
-				                         .p_resource = p_resource,
-				                     });
-			}
+				                     PassEdge{.opt_p_src_input = m_pass_graph.GetEdge(read_id).p_dst_input,
+				                              .p_dst_input = p_write_dst,
+				                              .p_resource = p_resource});
 
-			// Add to Indirect WAW Graph
-			m_pass_indirect_waw_graph.AddEdge(m_pass_graph.GetFromVertex(write_id), m_pass_graph.GetToVertex(write_id),
-			                                  m_pass_graph.GetEdge(write_id));
-
-			// Remove direct write edge
-			m_pass_graph.RemoveEdge(write_id);
+			// Turn to Indirect WAW Edge
+			m_pass_graph.GetEdge(write_id).type = PassEdgeType::kIndirectWAW;
 		}
 	}
 }
 
 void Dependency::sort_passes() {
-	// Exclude nullptr Pass, use Local edges only
-	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; }, kAnyFilter);
+	// Exclude nullptr Pass, use Barrier edges only
+	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; },
+	                                  kPassEdgeFilter<PassEdgeType::kBarrier>);
 
 	auto kahn_result = view.KahnTopologicalSort();
 
@@ -165,8 +148,8 @@ void Dependency::sort_passes() {
 		Throw(error::PassNotDAG{});
 
 	// Assign topo-id to passes
-	m_topo_id_passes = std::move(kahn_result.sorted);
-	for (std::size_t topo_id = 0; const PassBase *p_pass : m_topo_id_passes)
+	m_passes = std::move(kahn_result.sorted);
+	for (std::size_t topo_id = 0; const PassBase *p_pass : m_passes)
 		get_dep_info(p_pass).topo_id = topo_id++;
 }
 
@@ -182,11 +165,14 @@ void Dependency::tag_resources() {
 			// LastFrame Resource should not have parent resource
 			if (!m_resource_graph.GetInEdges(p_resource).empty())
 				Throw(error::ResourceLFParent{.key = p_resource->GetGlobalKey()});
+
+			m_lf_resources.push_back(p_resource);
 		} else if (p_resource->GetState() == ResourceState::kExternal) {
 			// External Resource should not have parent resource
 			if (!m_resource_graph.GetInEdges(p_resource).empty())
 				Throw(error::ResourceExtParent{.key = p_resource->GetGlobalKey()});
 		}
+		m_resources.push_back(p_resource);
 	}
 
 	// Resolve Resource Tree
@@ -200,59 +186,100 @@ void Dependency::tag_resources() {
 	if (!find_trees_result.is_forest)
 		Throw(error::ResourceNotTree{});
 
-	// Assign physical-id to resources
-	for (const ResourceBase *p_resource : m_resource_graph.GetVertices())
+	// Assign Root ID to resources
+	for (const ResourceBase *p_resource : m_resources)
 		if (IsRootResource(p_resource)) {
-			std::size_t phys_id = m_phys_id_resources.size();
-			get_dep_info(p_resource).phys_id = phys_id;
-			m_phys_id_resources.push_back(p_resource);
+			std::size_t root_id = m_root_resources.size();
+			get_dep_info(p_resource).root_id = root_id;
+			m_root_resources.push_back(p_resource);
 		}
-	for (const ResourceBase *p_resource : m_resource_graph.GetVertices())
+	for (const ResourceBase *p_resource : m_resources)
 		if (!IsRootResource(p_resource))
-			get_dep_info(p_resource).phys_id = get_dep_info(GetRootResource(p_resource)).phys_id;
+			get_dep_info(p_resource).root_id = get_dep_info(GetRootResource(p_resource)).root_id;
 }
 
 void Dependency::get_pass_relation() {
-	// Exclude nullptr Pass, use Local edges only
-	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; }, kAnyFilter);
+	// Exclude nullptr Pass, use Barrier edges only
+	auto view = m_pass_graph.MakeView([](const PassBase *p_pass) -> bool { return p_pass; },
+	                                  kPassEdgeFilter<PassEdgeType::kBarrier>);
 
 	m_pass_relation =
 	    view.TransitiveClosure(GetPassTopoID, [this](std::size_t topo_id) { return GetTopoIDPass(topo_id); });
 }
 
 void Dependency::get_resource_relation() {
-	{ // Tag access bits of physical resources
-		for (const ResourceBase *p_root : m_phys_id_resources)
-			get_dep_info(p_root).access_passes.Reset(GetSortedPassCount());
-
-		// Exclude LastFrame edges
-		for (auto [_, to, e, _1] : m_pass_graph.GetEdges())
-			get_dep_info(GetRootResource(e.p_resource)).access_passes.Add(GetPassTopoID(to));
+	Relation resource_pass_access{GetRootResourceCount(), GetPassCount()};
+	// Tag access bits of root resources
+	for (std::size_t topo_id = 0; const PassBase *p_pass : m_passes) {
+		for (const InputBase *p_input : GetPassInputs(p_pass))
+			resource_pass_access.Add(GetResourceRootID(GetInputResource(p_input)), topo_id);
+		++topo_id;
 	}
 
 	// Pass < Resource
-	Relation pass_resource_relation{GetSortedPassCount(), GetPhysResourceCount()};
-	for (std::size_t res_phys_id = 0; const ResourceBase *p_root : m_phys_id_resources) {
-		for (std::size_t pass_topo_id = 0; pass_topo_id < GetSortedPassCount(); ++pass_topo_id) {
+	Relation pass_resource_relation{GetPassCount(), GetRootResourceCount()};
+	for (std::size_t pass_topo_id = 0; pass_topo_id < GetPassCount(); ++pass_topo_id)
+		for (std::size_t root_id = 0; root_id < GetRootResourceCount(); ++root_id) {
 			// Pass < Resource <==> forall x in Resource Access Passes, Pass < x
-			if (m_pass_relation.All(pass_topo_id, get_dep_info(p_root).access_passes))
-				pass_resource_relation.Add(pass_topo_id, res_phys_id);
+			if (m_pass_relation.All(pass_topo_id, resource_pass_access.GetRowData(root_id)))
+				pass_resource_relation.Add(pass_topo_id, root_id);
 		}
-		++res_phys_id;
-	}
 
 	// Resource > Pass
 	Relation resource_pass_relation = pass_resource_relation.GetInversed();
 
 	// Resource < Resource
-	m_resource_relation.Reset(GetPhysResourceCount(), GetPhysResourceCount());
-	for (std::size_t l_phys_id = 0; const ResourceBase *p_root : m_phys_id_resources) {
-		for (std::size_t r_phys_id = 0; r_phys_id < GetPhysResourceCount(); ++r_phys_id) {
+	m_resource_relation.Reset(GetRootResourceCount(), GetRootResourceCount());
+	for (std::size_t l_root_id = 0; l_root_id < GetRootResourceCount(); ++l_root_id)
+		for (std::size_t r_root_id = 0; r_root_id < GetRootResourceCount(); ++r_root_id) {
 			// Resource_L < Resource_R <==> forall x in Resource_L Access Passes, Resource_R > x
-			if (resource_pass_relation.All(r_phys_id, get_dep_info(p_root).access_passes))
-				m_resource_relation.Add(l_phys_id, r_phys_id);
+			if (resource_pass_relation.All(r_root_id, resource_pass_access.GetRowData(l_root_id)))
+				m_resource_relation.Add(l_root_id, r_root_id);
 		}
-		++l_phys_id;
+}
+
+void Dependency::add_image_read_edges() {
+	// Add extra image read edges, since multiple reads to the same image can break merging if, for example the first
+	// (topo_id) reads as Input attachment and the second reads as Sampler
+
+	// Only process Barrier & Image access Edges
+	auto view = m_pass_graph.MakeView(Dependency::kAnyFilter, [](const Dependency::PassEdge &e) -> bool {
+		return e.type == PassEdgeType::kBarrier && e.p_resource->GetType() == ResourceType::kImage;
+	});
+
+	for (const PassBase *p_pass : view.GetVertices()) {
+		std::vector<std::size_t> out_edge_ids;
+		for (auto [_, _1, edge_id] : view.GetOutEdges(p_pass))
+			out_edge_ids.push_back(edge_id);
+
+		// Sort Output Edges with Topological Order of its 'To' Vertex
+		std::ranges::sort(out_edge_ids, [&](std::size_t l_edge_id, std::size_t r_edge_id) {
+			const PassBase *p_l_pass = m_pass_graph.GetToVertex(l_edge_id),
+			               *p_r_pass = m_pass_graph.GetToVertex(r_edge_id);
+			return Dependency::GetPassTopoID(p_l_pass) < Dependency::GetPassTopoID(p_r_pass);
+		});
+
+		std::unordered_map<const ResourceBase *, std::size_t> access_edges;
+
+		for (std::size_t edge_id : out_edge_ids) {
+			const auto &e = m_pass_graph.GetEdge(edge_id);
+			const ResourceBase *p_resource = e.p_resource;
+
+			auto it = access_edges.find(p_resource);
+			if (it == access_edges.end())
+				access_edges[p_resource] = edge_id;
+			else {
+				std::size_t prev_edge_id = it->second;
+				it->second = edge_id;
+
+				const auto &prev_e = m_pass_graph.GetEdge(prev_edge_id);
+				m_pass_graph.AddEdge(m_pass_graph.GetToVertex(prev_edge_id), m_pass_graph.GetToVertex(edge_id),
+				                     {.opt_p_src_input = prev_e.p_dst_input,
+				                      .p_dst_input = e.p_dst_input,
+				                      .p_resource = p_resource,
+				                      .type = PassEdgeType::kImageRead});
+			}
+		}
 	}
 }
 

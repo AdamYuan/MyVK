@@ -33,21 +33,7 @@ using RenderPassArea = interface::RenderPassArea;
 
 using DescriptorIndex = interface::DescriptorIndex;
 
-using DefaultExecutor = executor::DefaultExecutor;
-
-template <typename Executor = DefaultExecutor> class RenderGraphBase : public interface::RenderGraphBase {
-private:
-	inline static const interface::PoolKey kEXEKey = {"[EXE]"};
-
-public:
-	inline explicit RenderGraphBase()
-	    : interface::RenderGraphBase(
-	          myvk::MakeUPtr<Executor>(Parent{.p_pool_key = &kEXEKey, .p_var_parent = (RenderGraphBase *)this})) {}
-	inline ~RenderGraphBase() override = default;
-	inline const Executor *GetExecutor() const {
-		return static_cast<const Executor *>(interface::RenderGraphBase::GetExecutor());
-	}
-};
+using RenderGraphBase = interface::RenderGraphBase;
 
 } // namespace myvk_rg
 

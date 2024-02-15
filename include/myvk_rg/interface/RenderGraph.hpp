@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_DETAILS_RENDER_GRAPH_HPP
 #define MYVK_RG_DETAILS_RENDER_GRAPH_HPP
 
-#include "Executor.hpp"
+#include "../executor/Executor.hpp"
 #include "Object.hpp"
 #include "Pass.hpp"
 #include "Resource.hpp"
@@ -16,15 +16,17 @@ class RenderGraphBase : public ObjectBase,
                         public ResultPool<RenderGraphBase> {
 private:
 	inline static const PoolKey kRGKey = {"[RG]"};
+	inline static const interface::PoolKey kEXEKey = {"[EXE]"};
 
 	VkExtent2D m_canvas_size{};
-	myvk::UPtr<ExecutorBase> m_executor{};
+	myvk::UPtr<executor::Executor> m_executor{};
 
 	friend class ObjectBase;
 
 public:
-	inline explicit RenderGraphBase(myvk::UPtr<ExecutorBase> executor)
-	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}), m_executor(std::move(executor)) {}
+	inline explicit RenderGraphBase()
+	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}),
+	      m_executor(myvk::MakeUPtr<executor::Executor>(Parent{.p_pool_key = &kEXEKey, .p_var_parent = this})) {}
 	inline ~RenderGraphBase() override = default;
 
 	RenderGraphBase(const RenderGraphBase &) = delete;
@@ -39,7 +41,7 @@ public:
 		}
 	}
 	inline const VkExtent2D &GetCanvasSize() const { return m_canvas_size; }
-	inline const ExecutorBase *GetExecutor() const { return m_executor.get(); }
+	inline const executor::Executor *GetExecutor() const { return m_executor.get(); }
 };
 
 } // namespace myvk_rg::interface

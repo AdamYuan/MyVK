@@ -13,58 +13,11 @@ Schedule Schedule::Create(const Args &args) {
 	args.collection.ClearInfo(&PassInfo::schedule, &ResourceInfo::schedule);
 
 	Schedule s = {};
-	s.make_pass_groups(args, merge_passes(args, make_image_read_graph(args)));
+	s.make_pass_groups(args, merge_passes(args));
 	s.make_barriers(args);
+	finalize_last_inputs(args);
 	s.make_output_barriers(args);
-	propagate_last_inputs(args);
 	return s;
-}
-
-Graph<const PassBase *, Dependency::PassEdge> Schedule::make_image_read_graph(const Schedule::Args &args) {
-	// Add extra image read edges, since multiple reads to the same image can break merging if, for example the first
-	// (topo_id) reads as Input attachment and the second reads as Sampler
-	Graph<const PassBase *, Dependency::PassEdge> extra_graph;
-
-	const auto &pass_graph = args.dependency.GetPassGraph();
-	// Only process Local & Image access Edges
-	auto view = pass_graph.MakeView(Dependency::kAnyFilter, [](const Dependency::PassEdge &e) -> bool {
-		return e.p_resource->GetType() == ResourceType::kImage;
-	});
-
-	for (const PassBase *p_pass : view.GetVertices()) {
-		extra_graph.AddVertex(p_pass);
-
-		std::vector<std::size_t> out_edge_ids;
-		for (auto [_, _1, edge_id] : view.GetOutEdges(p_pass))
-			out_edge_ids.push_back(edge_id);
-
-		// Sort Output Edges with Topological Order of its 'To' Vertex
-		std::ranges::sort(out_edge_ids, [&](std::size_t l_edge_id, std::size_t r_edge_id) {
-			const PassBase *p_l_pass = pass_graph.GetToVertex(l_edge_id), *p_r_pass = pass_graph.GetToVertex(r_edge_id);
-			return Dependency::GetPassTopoID(p_l_pass) < Dependency::GetPassTopoID(p_r_pass);
-		});
-
-		std::unordered_map<const ResourceBase *, std::size_t> access_edges;
-
-		for (std::size_t edge_id : out_edge_ids) {
-			const auto &e = pass_graph.GetEdge(edge_id);
-			const ResourceBase *p_resource = e.p_resource;
-
-			auto it = access_edges.find(p_resource);
-			if (it == access_edges.end())
-				access_edges[p_resource] = edge_id;
-			else {
-				std::size_t prev_edge_id = it->second;
-				it->second = edge_id;
-
-				const auto &prev_e = pass_graph.GetEdge(prev_edge_id);
-				extra_graph.AddEdge(
-				    pass_graph.GetToVertex(prev_edge_id), pass_graph.GetToVertex(edge_id),
-				    {.opt_p_src_input = prev_e.p_dst_input, .p_dst_input = e.p_dst_input, .p_resource = p_resource});
-			}
-		}
-	}
-	return extra_graph;
 }
 
 inline static bool is_image_read_grouped(const InputBase *p_l, const InputBase *p_r) {
@@ -72,8 +25,7 @@ inline static bool is_image_read_grouped(const InputBase *p_l, const InputBase *
 	return !UsageIsAttachment(ul) && !UsageIsAttachment(ur) && UsageGetImageLayout(ul) == UsageGetImageLayout(ur);
 }
 
-std::vector<std::size_t>
-Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependency::PassEdge> &image_read_pass_graph) {
+std::vector<std::size_t> Schedule::merge_passes(const Args &args) {
 	// Compute Merge Size
 
 	// Calculate merge_size, Complexity: O(N + M)
@@ -82,11 +34,11 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 	// merge_size >  1: The pass is a graphics pass, and it can be merged to a group of merge_size with the passes
 	// before
 
-	std::vector<std::size_t> merge_sizes(args.dependency.GetSortedPassCount());
+	std::vector<std::size_t> merge_sizes(args.dependency.GetPassCount());
 
 	// Initial Merge Sizes
 	merge_sizes[0] = args.dependency.GetTopoIDPass(0)->GetType() == PassType::kGraphics;
-	for (std::size_t i = 1; i < args.dependency.GetSortedPassCount(); ++i) {
+	for (std::size_t i = 1; i < args.dependency.GetPassCount(); ++i) {
 		const PassBase *p_pass = args.dependency.GetTopoIDPass(i);
 		if (p_pass->GetType() == PassType::kGraphics) {
 			// Both are RenderPass and have equal RenderArea
@@ -101,17 +53,19 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 
 	// Exclude nullptr Pass
 	const auto node_filter = [](const PassBase *p_pass) -> bool { return p_pass; };
-	auto view = args.dependency.GetPassGraph().MakeView(node_filter, Dependency::kAnyFilter);
-	auto image_read_view = image_read_pass_graph.MakeView(node_filter, Dependency::kAnyFilter);
+	auto barrier_view = args.dependency.GetPassGraph().MakeView(
+	    node_filter, Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kBarrier>);
+	auto image_read_view = args.dependency.GetPassGraph().MakeView(
+	    node_filter, Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kImageRead>);
 
-	for (std::size_t i = 0; i < args.dependency.GetSortedPassCount(); ++i) {
+	for (std::size_t i = 0; i < args.dependency.GetPassCount(); ++i) {
 		if (i == 0)
 			continue;
 
 		const PassBase *p_pass = args.dependency.GetTopoIDPass(i);
 		std::size_t &size = merge_sizes[i];
 
-		for (auto [from, e, _] : view.GetInEdges(p_pass)) {
+		for (auto [from, e, _] : barrier_view.GetInEdges(p_pass)) {
 			std::size_t from_topo_id = Dependency::GetPassTopoID(from);
 			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()) &&
 			    Dependency::GetInputResource(e.opt_p_src_input) == Dependency::GetInputResource(e.p_dst_input)
@@ -133,7 +87,7 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 	}
 
 	// Regularize Merge Sizes
-	for (std::size_t i = 0, prev_size = 0; i < args.dependency.GetSortedPassCount(); ++i) {
+	for (std::size_t i = 0, prev_size = 0; i < args.dependency.GetPassCount(); ++i) {
 		const PassBase *p_pass = args.dependency.GetTopoIDPass(i);
 		auto &size = merge_sizes[i];
 		if (size > prev_size)
@@ -148,7 +102,7 @@ Schedule::merge_passes(const Args &args, const Graph<const PassBase *, Dependenc
 }
 
 void Schedule::make_pass_groups(const Args &args, const std::vector<std::size_t> &merge_sizes) {
-	for (std::size_t topo_id = 0; const PassBase *p_pass : args.dependency.GetTopoIDPasses()) {
+	for (std::size_t topo_id = 0; const PassBase *p_pass : args.dependency.GetPasses()) {
 		std::size_t merge_size = merge_sizes[topo_id];
 		if (merge_size <= 1) {
 			get_sched_info(p_pass).group_id = m_pass_groups.size();
@@ -285,16 +239,20 @@ void Schedule::make_barriers(const Schedule::Args &args) {
 	std::unordered_map<const ResourceBase *, ReadInfo> valid_reads;
 
 	// Fetch p_next_write from Indirect WAW Graph, set to local_reads and valid_reads
-	for (auto [from, to, e, _] : args.dependency.GetPassIndirectWAWGraph().GetEdges()) {
+	auto indirect_waw_view = args.dependency.GetPassGraph().MakeView(
+	    Dependency::kAnyFilter, Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kIndirectWAW>);
+	for (auto [from, to, e, _] : indirect_waw_view.GetEdges()) {
 		ReadInfo &info = from == nullptr ? valid_reads[e.p_resource] : local_reads[e.opt_p_src_input];
 		info.p_next_write = e.p_dst_input;
 	}
 	// Write-After-Write or Write validation Barriers are directly added, WAR and RAW Barriers are remained to be
 	// processed (push to local_reads and valid_reads)
-	for (auto [from, to, e, _] : args.dependency.GetPassGraph().GetEdges()) {
+	auto barrier_view = args.dependency.GetPassGraph().MakeView(
+	    Dependency::kAnyFilter, Dependency::kPassEdgeFilter<Dependency::PassEdgeType::kBarrier>);
+	for (auto [from, to, e, _] : barrier_view.GetEdges()) {
 		// from == nullptr <==> Validation
 		if (from == nullptr) {
-			auto [_, p_dst_input, p_resource] = e;
+			auto [_, p_dst_input, p_resource, _1] = e;
 			// Not Local Dependency, should be Valid / LFValid / ExtValid
 			bool dst_write = !UsageIsReadOnly(p_dst_input->GetUsage());
 			if (dst_write)
@@ -304,7 +262,7 @@ void Schedule::make_barriers(const Schedule::Args &args) {
 				// Read Validation, push to Valid Read Edges
 				valid_reads[p_resource].reads.push_back(p_dst_input);
 		} else {
-			auto [p_src_input, p_dst_input, p_resource] = e;
+			auto [p_src_input, p_dst_input, p_resource, _1] = e;
 			bool src_write = !UsageIsReadOnly(p_src_input->GetUsage()),
 			     dst_write = !UsageIsReadOnly(p_dst_input->GetUsage());
 			assert(src_write || dst_write); // Should have a write access
@@ -342,15 +300,22 @@ void Schedule::update_last_inputs(const ResourceBase *p_resource, std::span<cons
 	}
 }
 
-void Schedule::propagate_last_inputs(const Schedule::Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetResourceGraph().GetVertices())
-		if (!Dependency::IsRootResource(p_resource))
+void Schedule::finalize_last_inputs(const Schedule::Args &args) {
+	for (const ResourceBase *p_resource : args.dependency.GetResources()) {
+		if (Dependency::IsRootResource(p_resource)) {
+			// Check whether Last Inputs are on the root resource
+			for (const InputBase *p_input : get_sched_info(p_resource).last_inputs)
+				if (Dependency::GetInputResource(p_input) != p_resource)
+					Throw(error::ResourceLastInputNotRoot{.key = p_resource->GetGlobalKey()});
+		} else {
 			get_sched_info(p_resource).last_inputs =
 			    get_sched_info(Dependency::GetRootResource(p_resource)).last_inputs;
+		}
+	}
 }
 
 void Schedule::make_output_barriers(const Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetPhysIDResources())
+	for (const ResourceBase *p_resource : args.dependency.GetRootResources())
 		if (p_resource->GetState() == ResourceState::kExternal) {
 			m_pass_barriers.push_back({.p_resource = p_resource,
 			                           .src_s = get_sched_info(p_resource).last_inputs,

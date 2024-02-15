@@ -45,9 +45,7 @@ private:
 
 	static BarrierType get_valid_barrier_type(const ResourceBase *p_valid_resource);
 
-	static Graph<const PassBase *, Dependency::PassEdge> make_image_read_graph(const Schedule::Args &args);
-	static std::vector<std::size_t>
-	merge_passes(const Args &args, const Graph<const PassBase *, Dependency::PassEdge> &image_read_pass_graph);
+	static std::vector<std::size_t> merge_passes(const Args &args);
 	void make_pass_groups(const Args &args, const std::vector<std::size_t> &merge_sizes);
 	void push_wrw_barriers(const Args &args, const ResourceBase *p_resource, const InputBase *p_write,
 	                       std::span<const InputBase *> reads, const InputBase *p_next_write);
@@ -60,7 +58,7 @@ private:
 
 	static void update_last_inputs(const ResourceBase *p_resource, std::span<const InputBase *const> accesses);
 	static void update_first_inputs(const ResourceBase *p_resource, std::span<const InputBase *const> accesses);
-	static void propagate_last_inputs(const Schedule::Args &args);
+	static void finalize_last_inputs(const Schedule::Args &args);
 
 public:
 	static Schedule Create(const Args &args);

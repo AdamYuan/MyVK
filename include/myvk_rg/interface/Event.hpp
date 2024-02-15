@@ -28,7 +28,6 @@ enum class Event {
 	kBufferMapTypeChanged,
 
 	kInitTransferChanged,
-	kInitTransferFuncChanged,
 
 	kExternalStageChanged,
 	kExternalAccessChanged,

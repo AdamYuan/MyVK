@@ -50,6 +50,14 @@ struct PassInfo {
 	private:
 		std::size_t group_id{}, subpass_id{};
 	} schedule{};
+
+	// VkCommand
+	struct {
+		friend class VkCommand;
+
+	private:
+		bool update_pipeline{true};
+	} vk_command{};
 };
 
 class RGMemoryAllocation;
@@ -60,9 +68,8 @@ struct ResourceInfo {
 		friend class Dependency;
 
 	private:
-		std::size_t phys_id{};
+		std::size_t root_id{};
 		const ResourceBase *p_root_resource{}, *p_lf_resource{};
-		Bitset access_passes;
 	} dependency{};
 
 	// Metadata
@@ -70,7 +77,6 @@ struct ResourceInfo {
 		friend class Metadata;
 
 	private:
-		std::size_t alloc_id{}, view_id{};
 		const ResourceBase *p_alloc_resource{}, *p_view_resource{};
 
 		union {

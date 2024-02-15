@@ -49,6 +49,15 @@ public:
 	static VkCommand Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
 	inline const auto &GetPassCommands() const { return m_pass_commands; }
 	inline const auto &GetPostBarriers() const { return m_post_barriers; }
+	static void CreatePipeline(const PassBase *p_pass) {
+		if (GetPassInfo(p_pass).vk_command.update_pipeline) {
+			GetPassInfo(p_pass).vk_command.update_pipeline = false;
+			((PassBase *)p_pass)
+			    ->Visit(overloaded([](PassWithPipeline auto *p_pipeline_pass) { p_pipeline_pass->CreatePipeline(); },
+			                       [](auto &&) {}));
+		}
+	}
+	static void UpdatePipeline(const PassBase *p_pass) { GetPassInfo(p_pass).vk_command.update_pipeline = true; }
 };
 
 } // namespace default_executor

@@ -55,12 +55,6 @@ struct MultipleWrite {
 		return "Alias source " + alias.GetSourceKey().Format() + " is written multiple times";
 	}
 };
-struct ResourceMultiForm {
-	AliasBase alias;
-	inline std::string Format() const {
-		return "Alias source " + alias.GetSourceKey().Format() + " is further used in multiple form";
-	}
-};
 struct ResourceMultiInput {
 	AliasBase alias;
 	inline std::string Format() const {
@@ -92,6 +86,12 @@ struct ImageNotMerge {
 struct DupAttachmentIndex {
 	GlobalKey key;
 	inline std::string Format() const { return "Duplicated attachment index with " + key.Format(); }
+};
+struct ResourceLastInputNotRoot {
+	GlobalKey key;
+	inline std::string Format() const {
+		return "Last inputs for resource " + key.Format() + " is not on its root resource";
+	}
 };
 
 template <typename Error> struct Exception : public std::exception {

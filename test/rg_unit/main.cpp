@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "doctest.h"
 
-#include <myvk_rg/executor/DefaultExecutor.hpp>
+#include <myvk_rg/executor/Executor.hpp>
 #include <myvk_rg/interface/Input.hpp>
 #include <myvk_rg/interface/Key.hpp>
 #include <myvk_rg/interface/Pool.hpp>
@@ -118,7 +118,7 @@ public:
 	inline void SetDim(float dim) { m_dim = dim; }
 };
 
-class MyRenderGraph final : public myvk_rg::RenderGraphBase<> {
+class MyRenderGraph final : public myvk_rg::RenderGraphBase {
 public:
 	inline MyRenderGraph() {
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -219,7 +219,7 @@ public:
 	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 };
 
-class MyRenderGraph2 final : public myvk_rg::RenderGraphBase<> {
+class MyRenderGraph2 final : public myvk_rg::RenderGraphBase {
 public:
 	inline MyRenderGraph2() {
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -295,14 +295,15 @@ TEST_SUITE("Default Executor") {
 		    },
 		    [](const Dependency::PassEdge &e) {
 			    return e.p_dst_input->GetGlobalKey().Format() + ";" +
-			           std::to_string(Dependency::GetResourcePhysID(e.p_resource));
+			           std::to_string(Dependency::GetResourceRootID(e.p_resource)) + ":" +
+			           std::to_string(static_cast<int>(e.type));
 		    });
 
 		dependency.GetResourceGraph().WriteGraphViz(
 		    std::cout,
 		    [](const ResourceBase *p_resource) {
 			    return p_resource->GetGlobalKey().Format() + ";" +
-			           std::to_string(Dependency::GetResourcePhysID(p_resource));
+			           std::to_string(Dependency::GetResourceRootID(p_resource));
 		    },
 		    [](const Dependency::ResourceEdge &e) {
 			    return e == Dependency::ResourceEdge::kSubResource ? "SUB" : "LF";
@@ -310,16 +311,16 @@ TEST_SUITE("Default Executor") {
 
 		{
 			printf("Pass Less:\n");
-			for (std::size_t i = 0; i < dependency.GetSortedPassCount(); ++i) {
-				for (std::size_t j = 0; j < dependency.GetSortedPassCount(); ++j)
+			for (std::size_t i = 0; i < dependency.GetPassCount(); ++i) {
+				for (std::size_t j = 0; j < dependency.GetPassCount(); ++j)
 					printf(dependency.IsPassLess(i, j) ? "1" : "0");
 				printf("\n");
 			}
 		}
 		{
 			printf("Resource Less:\n");
-			for (std::size_t i = 0; i < dependency.GetPhysResourceCount(); ++i) {
-				for (std::size_t j = 0; j < dependency.GetPhysResourceCount(); ++j)
+			for (std::size_t i = 0; i < dependency.GetRootResourceCount(); ++i) {
+				for (std::size_t j = 0; j < dependency.GetRootResourceCount(); ++j)
 					printf(dependency.IsResourceLess(i, j) ? "1" : "0");
 				printf("\n");
 			}
@@ -342,9 +343,8 @@ TEST_SUITE("Default Executor") {
 		    Metadata::Create({.render_graph = *render_graph, .collection = collection, .dependency = dependency});
 
 		printf("ALLOC:\n");
-		for (const ResourceBase *p_resource : metadata.GetAllocIDResources()) {
-			printf("%s:[alloc_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
-			       Metadata::GetResourceAllocID(p_resource));
+		for (const ResourceBase *p_resource : metadata.GetAllocResources()) {
+			printf("%s, ", p_resource->GetGlobalKey().Format().c_str());
 			p_resource->Visit(overloaded(
 			    [](const myvk_rg::interface::ImageBase *p_image) {
 				    const auto &view = Metadata::GetViewInfo(p_image);
@@ -359,9 +359,8 @@ TEST_SUITE("Default Executor") {
 			printf("\n");
 		}
 		printf("View:\n");
-		for (const ResourceBase *p_resource : metadata.GetViewIDResources()) {
-			printf("%s:[alloc_id=%zu][view_id=%zu], ", p_resource->GetGlobalKey().Format().c_str(),
-			       Metadata::GetResourceAllocID(p_resource), Metadata::GetResourceViewID(p_resource));
+		for (const ResourceBase *p_resource : metadata.GetViewResources()) {
+			printf("%s, ", p_resource->GetGlobalKey().Format().c_str());
 			p_resource->Visit(overloaded(
 			    [](const myvk_rg::interface::ImageBase *p_image) {
 				    const auto &view = Metadata::GetViewInfo(p_image);
@@ -419,7 +418,7 @@ TEST_SUITE("Default Executor") {
 		printf("\n");
 
 		printf("Last Accesses:\n");
-		for (const auto *p_resource : dependency.GetPhysIDResources()) {
+		for (const auto *p_resource : dependency.GetRootResources()) {
 			printf("resource=%s: ", p_resource->GetGlobalKey().Format().c_str());
 			CHECK_FALSE(Schedule::GetLastInputs(p_resource).empty());
 			for (const auto *p_access : Schedule::GetLastInputs(p_resource))

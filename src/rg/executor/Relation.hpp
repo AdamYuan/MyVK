@@ -32,20 +32,10 @@ public:
 		for (std::size_t i = 0; i < m_size_r; ++i)
 			GetRowData(l_dst)[i] |= GetRowData(l_src)[i];
 	}
-	inline void Apply(const Relation &src_relation, std::size_t l_src, std::size_t l_dst) {
-		// assert(m_size_r == src_relation.m_size_r);
-		for (std::size_t i = 0; i < m_size_r; ++i)
-			GetRowData(l_dst)[i] |= src_relation.GetRowData(l_src)[i];
-	}
-	inline void Apply(const Bitset &src, std::size_t l_dst) {
-		// assert(m_size_r == src.m_size)
-		for (std::size_t i = 0; i < m_size_r; ++i)
-			GetRowData(l_dst)[i] |= src.GetData()[i];
-	}
-	inline bool All(std::size_t l, const Bitset &r_set) const {
+	inline bool All(std::size_t l, const uint64_t *r_row_data) const {
 		// assert(m_size_r == r_set.m_size)
 		for (std::size_t i = 0; i < m_size_r; ++i) {
-			if ((GetRowData(l)[i] & r_set.GetData()[i]) != r_set.GetData()[i])
+			if ((GetRowData(l)[i] & r_row_data[i]) != r_row_data[i])
 				return false;
 		}
 		return true;

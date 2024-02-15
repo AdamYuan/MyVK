@@ -224,7 +224,7 @@ private:
 
 	void add_validate_barrier(const Args &args, const Schedule::PassBarrier &pass_barrier, VkAttachmentLoadOp load_op) {
 		std::vector<const ResourceBase *> alias_resources;
-		for (const ResourceBase *p_resource : args.dependency.GetPhysIDResources()) {
+		for (const ResourceBase *p_resource : args.dependency.GetRootResources()) {
 			if (args.dependency.IsResourceLess(p_resource, pass_barrier.p_resource) &&
 			    args.vk_allocation.IsResourceAliased(p_resource, pass_barrier.p_resource))
 				alias_resources.push_back(p_resource);
@@ -389,12 +389,11 @@ private:
 
 	inline static void pop_barriers(const std::unordered_map<const ResourceBase *, Barrier> &in,
 	                                std::vector<BarrierCmd> *p_out) {
-		for (const auto &[p_resource, barrier] : in) {
+		for (const auto &[p_resource, barrier] : in)
 			if (IsValidBarrier(barrier)) {
 				p_out->push_back({.p_resource = p_resource});
 				CopyBarrier(barrier, &p_out->back());
 			}
-		}
 	};
 
 	inline static void pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, const PassData &in, PassCmd *p_out);
@@ -434,7 +433,12 @@ void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, con
 	if (in.subpasses[0]->GetType() != PassType::kGraphics)
 		return;
 
-	// Pop Subpass Dependencies
+	// Fill Attachment Image Data
+	p_out->attachments.resize(in.attachment_data_s.size());
+	for (const auto &[p_attachment, att_data] : in.attachment_data_s)
+		p_out->attachments[att_data.id] = p_attachment;
+
+	// Subpass Dependencies
 	std::vector<VkSubpassDependency2> vk_subpass_dependencies;
 	std::vector<VkMemoryBarrier2> vk_subpass_dep_barriers;
 	{
@@ -520,7 +524,6 @@ void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, con
 		for (const auto &[p_attachment, att_data] : in.attachment_data_s) {
 			if (used_attachments.contains(p_attachment))
 				continue;
-
 			if (att_data.first_subpass <= subpass && subpass <= att_data.last_subpass)
 				vk_desc.preserve_attachments.push_back(att_data.id);
 		}
@@ -562,11 +565,13 @@ void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, con
 	for (const auto &[p_attachment, att_data] : in.attachment_data_s) {
 		vk_att_formats.push_back(Metadata::GetAllocInfo(p_attachment).vk_format);
 		const auto &size = Metadata::GetViewInfo(p_attachment).size;
+		auto extent = size.GetBaseMipExtent();
+
 		vk_fb_att_image_infos.push_back({
 		    .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_ATTACHMENT_IMAGE_INFO,
 		    .usage = Metadata::GetAllocInfo(p_attachment).vk_usages,
-		    .width = size.GetExtent().width,
-		    .height = size.GetExtent().height,
+		    .width = extent.width,
+		    .height = extent.height,
 		    .layerCount = size.GetArrayLayers(),
 		    .viewFormatCount = 1,
 		    .pViewFormats = &vk_att_formats.back(),
@@ -578,6 +583,8 @@ void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, con
 }
 
 VkCommand VkCommand::Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args) {
+	args.collection.ClearInfo(&PassInfo::vk_command);
+
 	VkCommand command = {};
 	Builder builder{args};
 	builder.PopResult(device_ptr, &command);

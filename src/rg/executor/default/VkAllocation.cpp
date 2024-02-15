@@ -85,12 +85,13 @@ VkAllocation VkAllocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, con
 	alloc.create_vk_allocations(args);
 	alloc.bind_vk_resources(args);
 	alloc.create_vk_image_views(args);
+	alloc.set_lf_vk_resources(args);
 
 	return alloc;
 }
 
 void VkAllocation::init_alias_relation(const Args &args) {
-	m_resource_alias_relation.Reset(args.dependency.GetPhysResourceCount(), args.dependency.GetPhysResourceCount());
+	m_resource_alias_relation.Reset(args.dependency.GetRootResourceCount(), args.dependency.GetRootResourceCount());
 }
 
 void VkAllocation::check_double_buffer(const VkAllocation::Args &args) {
@@ -104,14 +105,14 @@ void VkAllocation::check_double_buffer(const VkAllocation::Args &args) {
 		get_vk_alloc(p_resource).double_buffer = double_buffer;
 		// If resource have LF reference and is not double_buffered, then aliasing appears
 		if (!double_buffer) {
-			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_resource),
-			                              Dependency::GetResourcePhysID(p_lf_resource));
-			m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_lf_resource),
-			                              Dependency::GetResourcePhysID(p_resource));
+			m_resource_alias_relation.Add(Dependency::GetResourceRootID(p_resource),
+			                              Dependency::GetResourceRootID(p_lf_resource));
+			m_resource_alias_relation.Add(Dependency::GetResourceRootID(p_lf_resource),
+			                              Dependency::GetResourceRootID(p_resource));
 		}
 	};
 
-	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources())
+	for (const ResourceBase *p_resource : args.metadata.GetAllocResources())
 		check_double_buffer(p_resource);
 }
 
@@ -186,7 +187,7 @@ void VkAllocation::create_vk_resources(const Args &args) {
 		                                                         : vk_alloc.buffer.myvk_buffers[0];
 	};
 
-	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources())
+	for (const ResourceBase *p_resource : args.metadata.GetAllocResources())
 		p_resource->Visit(overloaded(create_image, create_buffer));
 }
 
@@ -309,7 +310,7 @@ void VkAllocation::alloc_optimal(const Args &args, std::ranges::input_range auto
 			// Check Overlapping
 			if (alloc_l.mem_offsets[0] + alloc_l.vk_mem_reqs.size > alloc_r.mem_offsets[0] &&
 			    alloc_r.mem_offsets[0] + alloc_r.vk_mem_reqs.size > alloc_l.mem_offsets[0])
-				m_resource_alias_relation.Add(Dependency::GetResourcePhysID(p_l), Dependency::GetResourcePhysID(p_r));
+				m_resource_alias_relation.Add(Dependency::GetResourceRootID(p_l), Dependency::GetResourceRootID(p_r));
 		}
 	}
 
@@ -330,7 +331,7 @@ void VkAllocation::create_vk_allocations(const Args &args) {
 	std::vector<const ResourceBase *> local_resources, lf_resources, random_mapped_resources,
 	    seq_write_mapped_resources;
 
-	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources())
+	for (const ResourceBase *p_resource : args.metadata.GetAllocResources())
 		p_resource->Visit(overloaded(
 		    [&](const LocalInternalImage auto *p_image) {
 			    if (Dependency::GetLFResource(p_image))
@@ -380,7 +381,7 @@ void VkAllocation::create_vk_allocations(const Args &args) {
 }
 
 void VkAllocation::bind_vk_resources(const Args &args) {
-	for (const ResourceBase *p_resource : args.metadata.GetAllocIDResources()) {
+	for (const ResourceBase *p_resource : args.metadata.GetAllocResources()) {
 		auto &vk_alloc = get_vk_alloc(p_resource);
 		auto vma_allocation = vk_alloc.myvk_mem_alloc->GetHandle();
 
@@ -429,8 +430,28 @@ void VkAllocation::create_vk_image_views(const Args &args) {
 		                                   ? myvk::ImageView::Create(root_vk_alloc.myvk_images[1], create_info)
 		                                   : vk_alloc.myvk_image_views[0];
 	};
-	for (const ResourceBase *p_resource : args.metadata.GetViewIDResources())
+	for (const ResourceBase *p_resource : args.metadata.GetViewResources())
 		p_resource->Visit(overloaded(create_image_view, [](auto &&) {}));
+}
+
+void VkAllocation::set_lf_vk_resources(const VkAllocation::Args &args) {
+	const auto lf_swap = [](auto &arr) { std::swap(arr[0], arr[1]); };
+
+	for (const auto *p_resource : args.dependency.GetLFResources()) {
+		auto &vk_alloc = get_vk_alloc(p_resource);
+		auto &cur_vk_alloc = get_vk_alloc(Dependency::GetLFResource(p_resource));
+		p_resource->Visit(overloaded(
+		    [&](const LastFrameImage *p_lf_image) {
+			    vk_alloc.image.myvk_image_views = cur_vk_alloc.image.myvk_image_views;
+			    lf_swap(vk_alloc.image.myvk_image_views);
+		    },
+		    [&](const LastFrameBuffer *p_lf_buffer) {
+			    vk_alloc.buffer = cur_vk_alloc.buffer;
+			    lf_swap(vk_alloc.buffer.myvk_buffers);
+			    lf_swap(vk_alloc.buffer.mapped_ptrs);
+		    },
+		    [](auto &&) {}));
+	}
 }
 
 } // namespace default_executor

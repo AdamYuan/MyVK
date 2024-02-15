@@ -35,8 +35,8 @@ public:
 	inline PassType GetType() const { return m_type; }
 
 	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor) const;
+	template <typename Visitor> inline std::invoke_result_t<Visitor, GraphicsPassBase *> Visit(Visitor &&visitor);
 
-	virtual void CreatePipeline() = 0;
 	virtual void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const = 0;
 };
 
@@ -109,7 +109,8 @@ public:
 		return std::nullopt;
 	}
 
-	inline void UpdatePipeline() const { EmitEvent(Event::kUpdatePipeline); }
+	virtual void CreatePipeline() = 0;
+	inline void UpdatePipeline() { EmitEvent(Event::kUpdatePipeline); }
 };
 
 class ComputePassBase : public PassBase,
@@ -122,7 +123,8 @@ public:
 	inline ComputePassBase(Parent parent) : PassBase(parent, PassType::kCompute) {}
 	inline ~ComputePassBase() override = default;
 
-	inline void UpdatePipeline() const { EmitEvent(Event::kUpdatePipeline); }
+	virtual void CreatePipeline() = 0;
+	inline void UpdatePipeline() { EmitEvent(Event::kUpdatePipeline); }
 };
 
 class TransferPassBase : public PassBase, public InputPool<TransferPassBase>, public ResourcePool<TransferPassBase> {
@@ -131,8 +133,6 @@ public:
 
 	inline TransferPassBase(Parent parent) : PassBase(parent, PassType::kTransfer) {}
 	inline ~TransferPassBase() override = default;
-
-	inline void CreatePipeline() final {}
 };
 
 class PassGroupBase : public PassBase, public ResourcePool<PassGroupBase>, public PassPool<PassGroupBase> {
@@ -143,8 +143,6 @@ public:
 
 	inline PassGroupBase(Parent parent) : PassBase(parent, PassType::kGroup) {}
 	inline ~PassGroupBase() override = default;
-
-	inline void CreatePipeline() final {}
 };
 
 template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> PassBase::Visit(Visitor &&visitor) const {
@@ -162,9 +160,26 @@ template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> Pa
 	}
 	return visitor(static_cast<const GraphicsPassBase *>(nullptr));
 }
+template <typename Visitor> std::invoke_result_t<Visitor, GraphicsPassBase *> PassBase::Visit(Visitor &&visitor) {
+	switch (GetType()) {
+	case PassType::kGraphics:
+		return visitor(static_cast<GraphicsPassBase *>(this));
+	case PassType::kCompute:
+		return visitor(static_cast<ComputePassBase *>(this));
+	case PassType::kTransfer:
+		return visitor(static_cast<TransferPassBase *>(this));
+	case PassType::kGroup:
+		return visitor(static_cast<PassGroupBase *>(this));
+	default:
+		assert(false);
+	}
+	return visitor(static_cast<GraphicsPassBase *>(nullptr));
+}
 
 template <typename T>
-concept PassWithInput = !std::same_as<T, PassGroupBase>;
+concept PassWithInput = !std::derived_from<T, PassGroupBase>;
+template <typename T>
+concept PassWithPipeline = std::derived_from<T, ComputePassBase> || std::derived_from<T, GraphicsPassBase>;
 
 } // namespace myvk_rg::interface
 

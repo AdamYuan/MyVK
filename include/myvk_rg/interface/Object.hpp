@@ -43,7 +43,7 @@ public:
 	inline GlobalKey GetGlobalKey() const {
 		return m_p_parent_object ? GlobalKey{m_p_parent_object->GetGlobalKey(), *m_p_key} : GlobalKey{*m_p_key};
 	}
-	void EmitEvent(Event event) const;
+	void EmitEvent(Event event) ;
 
 	inline void __SetPExecutorInfo(void *p_info) const { m_p_executor_info = p_info; }
 	template <typename T> inline T *__GetPExecutorInfo() const { return (T *)m_p_executor_info; }
