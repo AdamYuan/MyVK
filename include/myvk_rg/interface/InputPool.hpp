@@ -145,13 +145,6 @@ protected:
 	                               const myvk::Ptr<myvk::Sampler> &sampler) {
 		add_input<ImageInput>(input_key, image, Usage, PipelineStageFlags, index, sampler);
 	}
-
-	/* inline const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const {
-	    return m_descriptor_set_data.GetVkDescriptorSetLayout(get_pass_ptr());
-	}
-	inline const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet() const {
-	    return m_descriptor_set_data.GetVkDescriptorSet(get_pass_ptr());
-	} */
 };
 
 template <typename Derived> class AttachmentInputSlot {

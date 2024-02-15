@@ -82,6 +82,8 @@ public:
 
 	uint32_t GetSubpass() const;
 	const myvk::Ptr<myvk::RenderPass> &GetVkRenderPass() const;
+	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
+	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet() const;
 
 	inline void SetRenderArea(VkExtent2D extent, uint32_t layer = 1) {
 		if (m_opt_area_func || !m_opt_area || m_opt_area != RenderPassArea{extent, layer})
@@ -125,6 +127,9 @@ public:
 
 	virtual void CreatePipeline() = 0;
 	inline void UpdatePipeline() { EmitEvent(Event::kUpdatePipeline); }
+
+	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
+	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet() const;
 };
 
 class TransferPassBase : public PassBase, public InputPool<TransferPassBase>, public ResourcePool<TransferPassBase> {

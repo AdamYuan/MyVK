@@ -32,6 +32,8 @@ public:
 	void *GetMappedData(const interface::LastFrameBuffer *p_lf_buffer) const;
 	static uint32_t GetSubpass(const interface::PassBase *p_pass);
 	const myvk::Ptr<myvk::RenderPass> &GetVkRenderPass(const interface::PassBase *p_pass) const;
+	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout(const interface::PassBase *p_pass) const;
+	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet(const interface::PassBase *p_pass) const;
 };
 
 } // namespace myvk_rg::executor

@@ -6,6 +6,7 @@
 #include "Schedule.hpp"
 #include "VkAllocation.hpp"
 #include "VkCommand.hpp"
+#include "VkDescriptor.hpp"
 
 namespace myvk_rg::executor {
 
@@ -26,6 +27,7 @@ using myvk_rg_executor::Metadata;
 using myvk_rg_executor::Schedule;
 using myvk_rg_executor::VkAllocation;
 using myvk_rg_executor::VkCommand;
+using myvk_rg_executor::VkDescriptor;
 
 struct Executor::CompileInfo {
 	Collection collection;
@@ -108,6 +110,13 @@ void *Executor::GetMappedData(const interface::LastFrameBuffer *p_lf_buffer) con
 uint32_t Executor::GetSubpass(const interface::PassBase *p_pass) { return Schedule::GetU32SubpassID(p_pass); }
 const myvk::Ptr<myvk::RenderPass> &Executor::GetVkRenderPass(const interface::PassBase *p_pass) const {
 	return m_p_compile_info->vk_command.GetPassCommands()[Schedule::GetGroupID(p_pass)].myvk_render_pass;
+}
+const myvk::Ptr<myvk::DescriptorSetLayout> &
+Executor::GetVkDescriptorSetLayout(const interface::PassBase *p_pass) const {
+	return VkDescriptor::GetVkDescriptorSetLayout(p_pass);
+}
+const myvk::Ptr<myvk::DescriptorSet> &Executor::GetVkDescriptorSet(const interface::PassBase *p_pass) const {
+	return VkDescriptor::GetVkDescriptorSet(p_pass, m_flip);
 }
 
 } // namespace myvk_rg::executor
