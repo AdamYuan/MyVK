@@ -29,7 +29,7 @@ private:
 		VertexID_T from, to;
 	};
 	std::unordered_map<VertexID_T, VertexInfo> m_vertices;
-	std::vector<std::optional<EdgeInfo>> m_edges;
+	std::vector<EdgeInfo> m_edges;
 
 public:
 	struct InEdgeIterator {
@@ -60,37 +60,29 @@ public:
 		m_vertices[to].in.push_back(edge_id);
 		return edge_id;
 	}
-	void RemoveEdge(std::size_t edge_id) { m_edges[edge_id] = std::nullopt; }
 	bool HasVertex(VertexID_T vertex) const { return m_vertices.count(vertex); }
 
 	auto GetOutEdges(VertexID_T vertex) const {
-		return m_vertices.at(vertex).out |
-		       std::views::filter([this](std::size_t edge_id) { return m_edges[edge_id].has_value(); }) |
-		       std::views::transform([this](std::size_t edge_id) -> OutEdgeIterator {
-			       return OutEdgeIterator{m_edges[edge_id]->to, m_edges[edge_id]->e, edge_id};
+		return m_vertices.at(vertex).out | std::views::transform([this](std::size_t edge_id) -> OutEdgeIterator {
+			       return OutEdgeIterator{m_edges[edge_id].to, m_edges[edge_id].e, edge_id};
 		       });
 	}
 	auto GetInEdges(VertexID_T vertex) const {
-		return m_vertices.at(vertex).in |
-		       std::views::filter([this](std::size_t edge_id) { return m_edges[edge_id].has_value(); }) |
-		       std::views::transform([this](std::size_t edge_id) -> InEdgeIterator {
-			       return InEdgeIterator{m_edges[edge_id]->from, m_edges[edge_id]->e, edge_id};
+		return m_vertices.at(vertex).in | std::views::transform([this](std::size_t edge_id) -> InEdgeIterator {
+			       return InEdgeIterator{m_edges[edge_id].from, m_edges[edge_id].e, edge_id};
 		       });
 	}
 	auto GetEdges() const {
-		return m_edges | std::views::filter([](const std::optional<EdgeInfo> &opt_edge_info) {
-			       return opt_edge_info.has_value();
-		       }) |
-		       std::views::transform([this](const std::optional<EdgeInfo> &opt_edge_info) -> EdgeIterator {
-			       std::size_t edge_id = &opt_edge_info - m_edges.data();
-			       return EdgeIterator{opt_edge_info->from, opt_edge_info->to, opt_edge_info->e, edge_id};
+		return m_edges | std::views::transform([this](const EdgeInfo &edge_info) -> EdgeIterator {
+			       std::size_t edge_id = &edge_info - m_edges.data();
+			       return EdgeIterator{edge_info.from, edge_info.to, edge_info.e, edge_id};
 		       });
 	}
 
-	VertexID_T GetFromVertex(std::size_t edge_id) const { return m_edges[edge_id]->from; }
-	VertexID_T GetToVertex(std::size_t edge_id) const { return m_edges[edge_id]->to; }
-	const Edge_T &GetEdge(std::size_t edge_id) const { return m_edges[edge_id]->e; }
-	Edge_T &GetEdge(std::size_t edge_id) { return m_edges[edge_id]->e; }
+	VertexID_T GetFromVertex(std::size_t edge_id) const { return m_edges[edge_id].from; }
+	VertexID_T GetToVertex(std::size_t edge_id) const { return m_edges[edge_id].to; }
+	const Edge_T &GetEdge(std::size_t edge_id) const { return m_edges[edge_id].e; }
+	Edge_T &GetEdge(std::size_t edge_id) { return m_edges[edge_id].e; }
 
 	auto GetVertices() const {
 		return m_vertices | std::views::transform(

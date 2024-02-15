@@ -4,4 +4,6 @@
 
 #include "VkDescriptor.hpp"
 
-namespace myvk_rg_executor {}
+namespace myvk_rg_executor {
+
+}
