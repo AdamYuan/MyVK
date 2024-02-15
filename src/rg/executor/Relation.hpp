@@ -9,14 +9,22 @@
 #include <cinttypes>
 #include <vector>
 
-#include "Bitset.hpp"
-
 namespace myvk_rg::executor {
 
 class Relation {
 private:
 	std::size_t m_count_l{}, m_count_r{}, m_size_r{};
 	std::vector<uint64_t> m_bit_matrix;
+
+	inline static constexpr std::size_t BitsetSize(std::size_t bit_count) {
+		return (bit_count >> 6u) + ((bit_count & 0x3f) ? 1u : 0u);
+	}
+	inline static constexpr bool BitsetGet(const uint64_t *data, std::size_t bit_pos) {
+		return data[bit_pos >> 6u] & (1ull << (bit_pos & 0x3fu));
+	}
+	inline static constexpr void BitsetAdd(uint64_t *data, std::size_t bit_pos) {
+		data[bit_pos >> 6u] |= (1ull << (bit_pos & 0x3fu));
+	}
 
 public:
 	inline Relation() = default;

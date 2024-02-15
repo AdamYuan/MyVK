@@ -6,11 +6,10 @@
 #ifndef MYVK_INFO_HPP
 #define MYVK_INFO_HPP
 
-#include "../Bitset.hpp"
 #include <array>
 #include <myvk_rg/interface/RenderGraph.hpp>
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 using namespace myvk_rg::interface;
 using namespace myvk_rg::executor;
@@ -140,6 +139,6 @@ inline ResourceInfo &GetResourceInfo(const ResourceBase *p_resource) {
 	return *p_resource->__GetPExecutorInfo<ResourceInfo>();
 }
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif // MYVK_INFO_HPP

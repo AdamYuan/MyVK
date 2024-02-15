@@ -10,7 +10,7 @@
 
 #include <myvk/Device.hpp>
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 class VkAllocation {
 private:
@@ -57,6 +57,6 @@ public:
 	}
 };
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif // MYVK_RG_EXE_DEF_ALLOCATOR_HPP

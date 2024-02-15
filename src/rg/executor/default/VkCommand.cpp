@@ -8,7 +8,7 @@
 
 #include <cassert>
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 struct State {
 	VkPipelineStageFlags2 stage_mask;
@@ -591,4 +591,4 @@ VkCommand VkCommand::Create(const myvk::Ptr<myvk::Device> &device_ptr, const Arg
 	return command;
 }
 
-} // namespace default_executor
+} // namespace myvk_rg_executor

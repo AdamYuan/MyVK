@@ -1,6 +1,6 @@
 #include "Collection.hpp"
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 Collection Collection::Create(const RenderGraphBase &rg) {
 	Collection c;
@@ -67,4 +67,4 @@ template <typename Container> void Collection::collect_passes(const Container &p
 	}
 }
 
-} // namespace default_executor
+} // namespace myvk_rg_executor

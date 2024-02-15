@@ -8,7 +8,7 @@
 #include "../VkHelper.hpp"
 #include "Info.hpp"
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 using Meta = Metadata;
 
@@ -454,4 +454,4 @@ void VkAllocation::set_lf_vk_resources(const VkAllocation::Args &args) {
 	}
 }
 
-} // namespace default_executor
+} // namespace myvk_rg_executor

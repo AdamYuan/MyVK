@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cassert>
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 Schedule Schedule::Create(const Args &args) {
 	args.collection.ClearInfo(&PassInfo::schedule, &ResourceInfo::schedule);
@@ -330,4 +330,4 @@ void Schedule::make_output_barriers(const Args &args) {
 		}
 }
 
-} // namespace default_executor
+} // namespace myvk_rg_executor

@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 Dependency Dependency::Create(const Args &args) {
 	args.collection.ClearInfo(&PassInfo::dependency, &InputInfo::dependency, &ResourceInfo::dependency);
@@ -283,4 +283,4 @@ void Dependency::add_image_read_edges() {
 	}
 }
 
-} // namespace default_executor
+} // namespace myvk_rg_executor

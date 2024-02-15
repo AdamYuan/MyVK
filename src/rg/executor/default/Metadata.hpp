@@ -8,7 +8,7 @@
 
 #include "Dependency.hpp"
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 class Metadata {
 private:
@@ -78,6 +78,6 @@ public:
 	static RenderPassArea GetPassRenderArea(const PassBase *p_pass) { return get_meta(p_pass).render_area; }
 };
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif

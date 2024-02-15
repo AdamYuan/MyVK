@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <variant>
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 using namespace myvk_rg::interface;
 
@@ -106,6 +106,6 @@ template <typename Error> void Throw(Error &&error) {
 
 } // namespace error
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif

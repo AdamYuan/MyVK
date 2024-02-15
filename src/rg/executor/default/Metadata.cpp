@@ -6,7 +6,7 @@
 
 #include "../VkHelper.hpp"
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 Metadata Metadata::Create(const Args &args) {
 	args.collection.ClearInfo(&ResourceInfo::metadata, &PassInfo::metadata);
@@ -217,4 +217,4 @@ void Metadata::fetch_render_areas(const Metadata::Args &args) {
 		p_pass->Visit(overloaded(graphics_pass_visitor, [](auto &&) {}));
 }
 
-} // namespace default_executor
+} // namespace myvk_rg_executor

@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <variant>
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 using namespace myvk_rg::interface;
 using namespace myvk_rg::executor;
@@ -112,6 +112,6 @@ public:
 	}
 };
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif // MYVK_GRAPH_HPP

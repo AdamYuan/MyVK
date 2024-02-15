@@ -256,10 +256,10 @@ public:
 TEST_SUITE("Default Executor") {
 	auto render_graph = myvk::MakePtr<MyRenderGraph2>();
 
-	using default_executor::Collection;
-	using default_executor::Dependency;
-	using default_executor::Metadata;
-	using default_executor::Schedule;
+	using myvk_rg_executor::Collection;
+	using myvk_rg_executor::Dependency;
+	using myvk_rg_executor::Metadata;
+	using myvk_rg_executor::Schedule;
 
 	using myvk_rg::interface::PassBase;
 	using myvk_rg::interface::ResourceBase;

@@ -9,7 +9,7 @@
 #include "Schedule.hpp"
 #include "VkAllocation.hpp"
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 class VkCommand {
 public:
@@ -60,6 +60,6 @@ public:
 	static void UpdatePipeline(const PassBase *p_pass) { GetPassInfo(p_pass).vk_command.update_pipeline = true; }
 };
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif

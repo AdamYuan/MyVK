@@ -19,12 +19,12 @@ enum CompileFlag : uint8_t {
 	kVkCommand = 64u,
 };
 
-using default_executor::Collection;
-using default_executor::Dependency;
-using default_executor::Metadata;
-using default_executor::Schedule;
-using default_executor::VkAllocation;
-using default_executor::VkCommand;
+using myvk_rg_executor::Collection;
+using myvk_rg_executor::Dependency;
+using myvk_rg_executor::Metadata;
+using myvk_rg_executor::Schedule;
+using myvk_rg_executor::VkAllocation;
+using myvk_rg_executor::VkCommand;
 using interface::overloaded;
 
 struct Executor::CompileInfo {

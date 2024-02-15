@@ -9,7 +9,7 @@
 #include "Dependency.hpp"
 #include "Metadata.hpp"
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 class Schedule {
 public:
@@ -73,6 +73,6 @@ public:
 	}
 };
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif // MYVK_SCHEDULE_HPP

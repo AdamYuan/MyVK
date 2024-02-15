@@ -9,7 +9,7 @@
 
 #include "Info.hpp"
 
-namespace default_executor {
+namespace myvk_rg_executor {
 
 using namespace myvk_rg::interface;
 
@@ -68,6 +68,6 @@ public:
 	}
 };
 
-} // namespace default_executor
+} // namespace myvk_rg_executor
 
 #endif
