@@ -19,13 +19,13 @@ enum CompileFlag : uint8_t {
 	kVkCommand = 64u,
 };
 
+using interface::overloaded;
 using myvk_rg_executor::Collection;
 using myvk_rg_executor::Dependency;
 using myvk_rg_executor::Metadata;
 using myvk_rg_executor::Schedule;
 using myvk_rg_executor::VkAllocation;
 using myvk_rg_executor::VkCommand;
-using interface::overloaded;
 
 struct Executor::CompileInfo {
 	Collection collection;
@@ -103,6 +103,11 @@ void *Executor::GetMappedData(const interface::ManagedBuffer *p_managed_buffer) 
 }
 void *Executor::GetMappedData(const interface::LastFrameBuffer *p_lf_buffer) const {
 	return VkAllocation::GetMappedData(p_lf_buffer, m_flip);
+}
+
+uint32_t Executor::GetSubpass(const interface::PassBase *p_pass) { return Schedule::GetU32SubpassID(p_pass); }
+const myvk::Ptr<myvk::RenderPass> &Executor::GetVkRenderPass(const interface::PassBase *p_pass) const {
+	return m_p_compile_info->vk_command.GetPassCommands()[Schedule::GetGroupID(p_pass)].myvk_render_pass;
 }
 
 } // namespace myvk_rg::executor

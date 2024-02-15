@@ -132,12 +132,6 @@ private:
 		uint32_t src_subpass, dst_subpass;
 		inline bool operator<=>(const SubpassPair &r) const = default;
 	};
-	struct SubpassPairHash {
-		inline std::size_t operator()(SubpassPair x) const {
-			uint64_t u = (uint64_t(x.src_subpass) << uint64_t(32)) | uint64_t(x.dst_subpass);
-			return std::hash<uint64_t>{}(u);
-		}
-	};
 	struct SubpassDependency {
 		VkPipelineStageFlags2 src_stage_mask{};
 		VkAccessFlags2 src_access_mask{};
@@ -155,7 +149,9 @@ private:
 	struct PassData {
 		std::span<const PassBase *const> subpasses; // pointed to subpasses in Schedule::PassGroup
 		std::unordered_map<const ResourceBase *, Barrier> prior_barriers;
-		std::unordered_map<SubpassPair, SubpassDependency, SubpassPairHash> by_region_subpass_deps, subpass_deps;
+		std::unordered_map<SubpassPair, SubpassDependency,
+		                   U32PairHash<SubpassPair, &SubpassPair::src_subpass, &SubpassPair::dst_subpass>>
+		    by_region_subpass_deps, subpass_deps;
 		std::unordered_map<const ImageBase *, AttachmentData> attachment_data_s;
 	};
 
@@ -226,7 +222,7 @@ private:
 		std::vector<const ResourceBase *> alias_resources;
 		for (const ResourceBase *p_resource : args.dependency.GetRootResources()) {
 			if (args.dependency.IsResourceLess(p_resource, pass_barrier.p_resource) &&
-			    args.vk_allocation.IsResourceAliased(p_resource, pass_barrier.p_resource))
+			    args.vk_allocation.IsAliased(p_resource, pass_barrier.p_resource))
 				alias_resources.push_back(p_resource);
 		}
 
@@ -380,7 +376,7 @@ private:
 				++r_it;
 
 				for (; r_it != att_data_s.end(); ++r_it) {
-					if (args.vk_allocation.IsResourceAliased(l_it->first, r_it->first))
+					if (args.vk_allocation.IsAliased(l_it->first, r_it->first))
 						l_it->second.may_alias = r_it->second.may_alias = true;
 				}
 			}

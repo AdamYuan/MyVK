@@ -30,6 +30,8 @@ public:
 	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const interface::LastFrameBuffer *p_lf_buffer) const;
 	void *GetMappedData(const interface::ManagedBuffer *p_managed_buffer) const;
 	void *GetMappedData(const interface::LastFrameBuffer *p_lf_buffer) const;
+	static uint32_t GetSubpass(const interface::PassBase *p_pass);
+	const myvk::Ptr<myvk::RenderPass> &GetVkRenderPass(const interface::PassBase *p_pass) const;
 };
 
 } // namespace myvk_rg::executor

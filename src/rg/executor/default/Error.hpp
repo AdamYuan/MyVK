@@ -87,6 +87,14 @@ struct DupAttachmentIndex {
 	GlobalKey key;
 	inline std::string Format() const { return "Duplicated attachment index with " + key.Format(); }
 };
+struct DupDescriptorIndex {
+	GlobalKey key;
+	inline std::string Format() const { return "Duplicated descriptor index with " + key.Format(); }
+};
+struct InvalidDescriptorArray {
+	GlobalKey key;
+	inline std::string Format() const { return "Invalid descriptor array in Pass " + key.Format(); }
+};
 struct ResourceLastInputNotRoot {
 	GlobalKey key;
 	inline std::string Format() const {

@@ -9,6 +9,8 @@
 #include <array>
 #include <myvk_rg/interface/RenderGraph.hpp>
 
+#include "../Hash.hpp"
+
 namespace myvk_rg_executor {
 
 using namespace myvk_rg::interface;
@@ -23,6 +25,10 @@ struct InputInfo {
 		const ResourceBase *p_resource{};
 	} dependency{};
 };
+
+using DescriptorBindingMap =
+    std::unordered_map<DescriptorIndex, const InputBase *,
+                       U32PairHash<DescriptorIndex, &DescriptorIndex::binding, &DescriptorIndex::array_element>>;
 
 struct PassInfo {
 	// Dependency
@@ -49,6 +55,18 @@ struct PassInfo {
 	private:
 		std::size_t group_id{}, subpass_id{};
 	} schedule{};
+
+	// VkDescriptor
+	struct {
+		friend class VkDescriptor;
+
+	private:
+		bool double_buffer{false};
+		DescriptorBindingMap bindings, static_bindings, dynamic_bindings;
+
+		std::array<myvk::Ptr<myvk::DescriptorSet>, 2> myvk_sets;
+		myvk::Ptr<myvk::DescriptorSetLayout> myvk_layout;
+	} vk_descriptor;
 
 	// VkCommand
 	struct {

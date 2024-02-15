@@ -43,9 +43,14 @@ public:
 	static VkAllocation Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
 
 	// Resource Alias Relationship
-	inline bool IsResourceAliased(const ResourceBase *p_l, const ResourceBase *p_r) const {
+	inline bool IsAliased(const ResourceBase *p_l, const ResourceBase *p_r) const {
 		return m_resource_alias_relation.Get(Dependency::GetResourceRootID(p_l), Dependency::GetResourceRootID(p_r));
 	}
+
+	static bool IsDoubleBuffered(const ResourceBase *p_resource) {
+		return get_vk_alloc(Metadata::GetAllocResource(p_resource)).double_buffer;
+	}
+
 	static const myvk::Ptr<myvk::ImageView> &GetVkImageView(const InternalImage auto *p_image, bool flip) {
 		return get_vk_alloc(p_image).image.myvk_image_views[flip];
 	}

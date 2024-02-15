@@ -45,6 +45,7 @@ target_link_libraries(MyVK_Vulkan PUBLIC MyVK_Dep_Vulkan)
 add_library(MyVK_RenderGraph STATIC
         src/rg/interface/Alias.cpp
         src/rg/interface/Resource.cpp
+        src/rg/interface/Pass.cpp
         src/rg/interface/Input.cpp
         src/rg/interface/Object.cpp
 

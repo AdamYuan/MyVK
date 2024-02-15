@@ -527,6 +527,9 @@ template <typename T>
 concept LastFrameResource = std::same_as<T, LastFrameBuffer> || std::same_as<T, LastFrameImage>;
 
 template <typename T>
+concept ExternalResource = std::derived_from<T, ExternalResourceInfo<T>>;
+
+template <typename T>
 concept InternalImage =
     std::same_as<T, ManagedImage> || std::same_as<T, CombinedImage> || std::same_as<T, LastFrameImage>;
 template <typename T>

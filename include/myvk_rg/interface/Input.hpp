@@ -15,6 +15,7 @@ namespace myvk_rg::interface {
 
 struct DescriptorIndex {
 	uint32_t binding, array_element;
+	inline bool operator<=>(const DescriptorIndex &r) const = default;
 };
 
 class ImageInput;
@@ -73,6 +74,7 @@ public:
 	}
 	inline static ResourceType GetType() { return ResourceType::kImage; }
 	inline const auto &GetOptAttachmentIndex() const { return m_opt_attachment_index; }
+	inline const auto &GetVkSampler() const { return m_sampler; }
 	inline auto GetOutput() const { return OutputImageAlias(this); }
 };
 
