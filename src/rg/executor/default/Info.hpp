@@ -96,25 +96,21 @@ struct ResourceInfo {
 	private:
 		const ResourceBase *p_alloc_resource{}, *p_view_resource{};
 
-		union {
-			struct {
-				VkImageType vk_type{};
-				VkFormat vk_format{};
-				VkImageUsageFlags vk_usages{};
-			} image_alloc{};
-			struct {
-				VkBufferUsageFlags vk_usages{};
-			} buffer_alloc;
-		};
-		union {
-			struct {
-				SubImageSize size{};
-				uint32_t base_layer{};
-			} image_view{};
-			struct {
-				VkDeviceSize size{};
-			} buffer_view;
-		};
+		struct {
+			VkImageType vk_type{};
+			VkFormat vk_format{};
+			VkImageUsageFlags vk_usages{};
+		} image_alloc{};
+		struct {
+			VkBufferUsageFlags vk_usages{};
+		} buffer_alloc;
+		struct {
+			SubImageSize size{};
+			uint32_t base_layer{};
+		} image_view{};
+		struct {
+			VkDeviceSize size{};
+		} buffer_view;
 	} metadata{};
 
 	// Schedule
