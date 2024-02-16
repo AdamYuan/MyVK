@@ -59,6 +59,7 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 	case Event::kBufferResized:
 	case Event::kImageResized:
 	case Event::kRenderAreaChanged:
+	case Event::kInitTransferChanged:
 		m_compile_flags |= kMetadata;
 		break;
 	case Event::kBufferMapTypeChanged:
@@ -79,8 +80,8 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 	case Event::kUpdatePipeline:
 		VkCommand::UpdatePipeline(static_cast<const interface::PassBase *>(p_object));
 		break;
-	case Event::kInitTransferChanged:
-		// TODO
+	case Event::kInitTransferFuncChanged:
+		m_lf_init = true;
 		break;
 	}
 }
@@ -146,12 +147,17 @@ void Executor::compile(const interface::RenderGraphBase *p_render_graph, const m
 		                                              .metadata = m_p_compile_info->metadata,
 		                                              .schedule = m_p_compile_info->schedule,
 		                                              .vk_allocation = m_p_compile_info->vk_allocation});
-	m_flip = false;
+	m_lf_init = true;
 }
 
 void Executor::CmdExecute(const interface::RenderGraphBase *p_render_graph,
                           const myvk::Ptr<myvk::CommandBuffer> &command_buffer) {
-	compile(p_render_graph, command_buffer->GetCommandPoolPtr()->GetQueuePtr());
+	const auto &queue = command_buffer->GetCommandPoolPtr()->GetQueuePtr();
+	compile(p_render_graph, queue);
+	if (m_lf_init) {
+		VkRunner::LastFrameInit(queue, m_p_compile_info->dependency);
+		m_lf_init = false;
+	}
 	VkRunner::Run(command_buffer, m_p_compile_info->vk_command, m_p_compile_info->vk_descriptor, m_flip);
 	m_flip = !m_flip;
 }

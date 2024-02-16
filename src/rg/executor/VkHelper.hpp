@@ -3,22 +3,6 @@
 
 #include <volk.h>
 
-template <typename Src_T, typename Dst_T> inline static void CopyVkBarrier(const Src_T &src, Dst_T *p_dst) {
-	p_dst->srcStageMask = src.src_stage_mask;
-	p_dst->dstStageMask = src.dst_stage_mask;
-	p_dst->srcAccessMask = src.src_access_mask;
-	p_dst->dstAccessMask = src.dst_access_mask;
-	if constexpr (requires(Src_T src_t, Dst_T dst_t) {
-		              src_t.old_layout;
-		              src_t.new_layout;
-		              dst_t.oldLayout;
-		              dst_t.newLayout;
-	              }) {
-		p_dst->oldLayout = src.old_layout;
-		p_dst->newLayout = src.new_layout;
-	}
-}
-
 inline static void UpdateVkImageTypeFromVkImageViewType(VkImageType *p_image_type, VkImageViewType view_type) {
 	// https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkImageViewCreateInfo.html
 	switch (view_type) {

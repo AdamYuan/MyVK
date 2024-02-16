@@ -8,20 +8,12 @@
 
 #include "Schedule.hpp"
 #include "VkAllocation.hpp"
+#include "../Barrier.hpp"
 
 namespace myvk_rg_executor {
 
 class VkCommand {
 public:
-	struct BarrierCmd {
-		const ResourceBase *p_resource;
-		VkPipelineStageFlags2 src_stage_mask;
-		VkPipelineStageFlags2 dst_stage_mask;
-		VkAccessFlags2 src_access_mask;
-		VkAccessFlags2 dst_access_mask;
-		VkImageLayout old_layout;
-		VkImageLayout new_layout;
-	};
 	struct PassCmd {
 		std::span<const PassBase *const> subpasses; // pointed to subpasses in Schedule::PassGroup
 		std::vector<BarrierCmd> prior_barriers;

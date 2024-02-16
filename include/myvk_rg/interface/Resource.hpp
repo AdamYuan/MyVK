@@ -421,9 +421,10 @@ private:
 
 public:
 	inline void SetInitTransferFunc(const InitTransferFunc &func) {
-		// if ((m_init_transfer_func == nullptr) != (func == nullptr))
-		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInitTransferChanged);
+		if ((m_init_transfer_func == nullptr) != (func == nullptr))
+			static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInitTransferChanged);
 		m_init_transfer_func = func;
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInitTransferFuncChanged);
 	}
 	inline const InitTransferFunc &GetInitTransferFunc() const { return m_init_transfer_func; }
 };

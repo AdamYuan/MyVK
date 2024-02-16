@@ -11,7 +11,13 @@
 
 namespace myvk_rg_executor {
 
-struct VkRunner {
+class VkRunner {
+private:
+	static void cmd_pipeline_barriers(const myvk::Ptr<myvk::CommandBuffer> &command_buffer,
+	                                  std::span<const BarrierCmd> barrier_cmds);
+
+public:
+	static void LastFrameInit(const myvk::Ptr<myvk::Queue> &queue, const Dependency &dependency);
 	static void Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const VkCommand &vk_command,
 	                const VkDescriptor &vk_descriptor, bool flip);
 };

@@ -33,14 +33,12 @@ const InputBase *Dependency::traverse_output_alias(const Dependency::Args &args,
 	return p_src_input;
 }
 
-// TODO: Fix it
 void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 	if (m_pass_graph.HasVertex(p_pass))
 		return;
 	m_pass_graph.AddVertex(p_pass);
 
 	const auto pass_visitor = [&](const PassWithInput auto *p_pass) {
-		printf("%s, %zu\n", p_pass->GetGlobalKey().Format().c_str(), p_pass->GetInputPoolData().size());
 		for (const auto &it : p_pass->GetInputPoolData()) {
 			const InputBase *p_input = it.second.template Get<InputBase>();
 			get_dep_info(p_input).p_pass = p_pass;
@@ -52,7 +50,6 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				    const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
 				    const ResourceBase *p_resource = get_dep_info(p_src_input).p_resource;
 				    get_dep_info(p_input).p_resource = p_resource;
-				    printf("%s, %p -> %p\n", p_input->GetGlobalKey().Format().c_str(), p_input, p_resource);
 
 				    m_pass_graph.AddEdge(p_src_pass, p_pass, PassEdge{p_src_input, p_input, p_resource});
 			    },
@@ -60,7 +57,6 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				    const ResourceBase *p_resource = args.collection.FindResource(p_raw_alias->GetSourceKey());
 				    m_resource_graph.AddVertex(p_resource);
 				    get_dep_info(p_input).p_resource = p_resource;
-				    printf("%s, %p -> %p\n", p_input->GetGlobalKey().Format().c_str(), p_input, p_resource);
 
 				    p_resource->Visit(overloaded(
 				        [&](const CombinedImage *p_combined_image) {
@@ -68,6 +64,10 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 						        const InputBase *p_src_input = traverse_output_alias(args, src_alias);
 						        const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
 						        const ResourceBase *p_sub_image = get_dep_info(p_src_input).p_resource;
+
+						        // This means p_src_pass is present in the stack, so a cycle exists
+						        if (!p_sub_image)
+							        Throw(error::PassNotDAG{});
 
 						        m_pass_graph.AddEdge(p_src_pass, p_pass, PassEdge{p_src_input, p_input, p_sub_image});
 						        m_resource_graph.AddEdge(p_resource, p_sub_image, ResourceEdge::kSubResource);

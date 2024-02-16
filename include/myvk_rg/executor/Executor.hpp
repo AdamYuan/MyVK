@@ -14,7 +14,7 @@ private:
 	struct CompileInfo;
 	uint8_t m_compile_flags{};
 	CompileInfo *m_p_compile_info;
-	bool m_flip{};
+	bool m_flip{}, m_lf_init{};
 
 	void compile(const interface::RenderGraphBase *p_render_graph, const myvk::Ptr<myvk::Queue> &queue);
 

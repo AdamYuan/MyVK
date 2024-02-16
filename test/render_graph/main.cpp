@@ -165,12 +165,12 @@ public:
 		                                           {{1.0, 0.0, 0.0, 1.0}});
 		    }); */
 
-		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image->AsInput(), format);
+		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image->AsInput(), format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
 
 		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass2->GetImageOutput(), format);
 
-		auto imgui_pass = CreatePass<myvk_rg::ImGuiPass>({"imgui_pass"}, blur_pass->GetImageOutput());
+		auto imgui_pass = CreatePass<myvk_rg::ImGuiPass>({"imgui_pass"}, dim_pass->GetImageOutput());
 
 		lf_image->SetPointedAlias(imgui_pass->GetImageOutput());
 
