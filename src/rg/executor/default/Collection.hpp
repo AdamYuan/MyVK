@@ -52,6 +52,9 @@ public:
 	void ClearInfo() const {}
 	template <typename Info_T, typename Member_T, typename... Args>
 	void ClearInfo(Member_T Info_T::*p_member, Args &&...args) const {
+		static_assert(std::convertible_to<Info_T, PassInfo> || std::convertible_to<Info_T, ResourceInfo> ||
+		              std::convertible_to<Info_T, InputInfo>);
+
 		if constexpr (std::convertible_to<Info_T, PassInfo>) {
 			for (PassInfo &pass_info : m_pass_infos)
 				pass_info.*p_member = {};
@@ -61,8 +64,7 @@ public:
 		} else if constexpr (std::convertible_to<Info_T, InputInfo>) {
 			for (InputInfo &input_info : m_input_infos)
 				input_info.*p_member = {};
-		} else
-			static_assert(false);
+		}
 
 		ClearInfo(std::forward<Args>(args)...);
 	}
