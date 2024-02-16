@@ -110,22 +110,6 @@ template <typename Src_T, typename Dst_T> inline static void CopyBarrier(const S
 	}
 }
 
-template <typename Src_T, typename Dst_T> inline static void CopyVkBarrier(const Src_T &src, Dst_T *p_dst) {
-	p_dst->srcStageMask = src.src_stage_mask;
-	p_dst->dstStageMask = src.dst_stage_mask;
-	p_dst->srcAccessMask = src.src_access_mask;
-	p_dst->dstAccessMask = src.dst_access_mask;
-	if constexpr (requires(Src_T src_t, Dst_T dst_t) {
-		              src_t.old_layout;
-		              src_t.new_layout;
-		              dst_t.oldLayout;
-		              dst_t.newLayout;
-	              }) {
-		p_dst->oldLayout = src.old_layout;
-		p_dst->newLayout = src.new_layout;
-	}
-}
-
 class VkCommand::Builder {
 private:
 	struct SubpassPair {
@@ -424,6 +408,7 @@ struct SubpassDesciptionInfo {
 
 void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, const PassData &in, PassCmd *p_out) {
 	pop_barriers(in.prior_barriers, &p_out->prior_barriers);
+	p_out->subpasses = in.subpasses;
 
 	// Skip if not RenderPass
 	if (in.subpasses[0]->GetType() != PassType::kGraphics)

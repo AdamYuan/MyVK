@@ -22,13 +22,14 @@ private:
 		myvk::Ptr<myvk::GraphicsPipeline> m_pipeline;
 
 	public:
-		inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
-			AddDescriptorInput<0, myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
-			    {"in"}, image,
+		inline GaussianBlurSubpass(myvk_rg::Parent parent, myvk_rg::Image image, VkFormat format)
+		    : myvk_rg::GraphicsPassBase(parent) {
+			AddDescriptorInput<myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>(
+			    {0}, {"in"}, image,
 			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR,
 			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-			AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_img);
+			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->AsInput());
 		}
 		inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 		inline void CreatePipeline() final {
@@ -79,12 +80,12 @@ public:
 	using BlurXSubpass = GaussianBlurSubpass<kBlurXSpv, sizeof(kBlurXSpv)>;
 	using BlurYSubpass = GaussianBlurSubpass<kBlurYSpv, sizeof(kBlurYSpv)>;
 
-	inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
+	inline GaussianBlurPass(myvk_rg::Parent parent, myvk_rg::Image image, VkFormat format)
+	    : myvk_rg::PassGroupBase(parent) {
 		auto blur_x_pass = CreatePass<BlurXSubpass>({"blur_x"}, image, format);
 		auto blur_y_pass = CreatePass<BlurYSubpass>({"blur_y"}, blur_x_pass->GetImageOutput(), format);
-		CreateImageAliasOutput({"image"}, blur_y_pass->GetImageOutput());
 	}
-	inline auto GetImageOutput() { return GetImageAliasOutput({"image"}); }
+	inline auto GetImageOutput() { return GetPass<BlurYSubpass>({"blur_y"})->GetImageOutput(); }
 };
 
 class DimPass final : public myvk_rg::GraphicsPassBase {
@@ -94,10 +95,10 @@ private:
 	float m_dim{0.99f};
 
 public:
-	inline void Initialize(myvk_rg::ImageInput image, VkFormat format) {
-		AddInputAttachmentInput<0, 0>({"in"}, image);
+	inline DimPass(myvk_rg::Parent parent, myvk_rg::Image image, VkFormat format) : myvk_rg::GraphicsPassBase(parent) {
+		AddInputAttachmentInput(0, {0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentW>({"out"}, out_image);
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
 	}
 	inline void CreatePipeline() final {
 		// Not the best solution, just to test INPUT_ATTACHMENT
@@ -146,10 +147,11 @@ public:
 	inline void SetDim(float dim) { m_dim = dim; }
 };
 
-class MyRenderGraph final : public myvk_rg::RenderGraph<MyRenderGraph> {
+class MyRenderGraph final : public myvk_rg::RenderGraphBase {
 private:
-	MYVK_RG_RENDER_GRAPH_FRIENDS
-	void Initialize(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+public:
+	inline MyRenderGraph(myvk::Ptr<myvk::Queue> queue_ptr, const myvk::Ptr<myvk::FrameManager> &frame_manager)
+	    : myvk_rg::RenderGraphBase(std::move(queue_ptr)) {
 		/* auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
 		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
 		init_image->SetClearColorValue({0.5f, 0, 0, 1}); */
@@ -163,25 +165,23 @@ private:
 		                                           {{1.0, 0.0, 0.0, 1.0}});
 		    }); */
 
-		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image, format);
+		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image->AsInput(), format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
 
 		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass2->GetImageOutput(), format);
 
 		auto imgui_pass = CreatePass<myvk_rg::ImGuiPass>({"imgui_pass"}, blur_pass->GetImageOutput());
 
-		lf_image->SetCurrentResource(imgui_pass->GetImageOutput());
+		lf_image->SetPointedAlias(imgui_pass->GetImageOutput());
 
 		auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
 		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
 
 		auto copy_pass = CreatePass<myvk_rg::ImageBlitPass>({"blit_pass"}, imgui_pass->GetImageOutput(),
-		                                                    swapchain_image, VK_FILTER_NEAREST);
+		                                                    swapchain_image->AsInput(), VK_FILTER_NEAREST);
 
 		AddResult({"final"}, copy_pass->GetDstOutput());
 	}
-
-public:
 	inline void SetDim(float dim) { GetPass<DimPass>({"dim_pass"})->SetDim(dim); }
 	inline void ReInitBG(const float rgb[3]) {
 		GetResource<myvk_rg::LastFrameImage>({"lf"})->SetInitTransferFunc(
@@ -214,7 +214,7 @@ int main() {
 
 	myvk::Ptr<MyRenderGraph> render_graphs[kFrameCount];
 	for (auto &render_graph : render_graphs) {
-		render_graph = MyRenderGraph::Create(generic_queue, frame_manager);
+		render_graph = myvk::MakePtr<MyRenderGraph>(generic_queue, frame_manager);
 		render_graph->SetCanvasSize(frame_manager->GetExtent());
 	}
 	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});

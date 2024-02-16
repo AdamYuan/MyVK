@@ -7,6 +7,7 @@
 #include "VkAllocation.hpp"
 #include "VkCommand.hpp"
 #include "VkDescriptor.hpp"
+#include "VkRunner.hpp"
 
 namespace myvk_rg::executor {
 
@@ -28,6 +29,7 @@ using myvk_rg_executor::Schedule;
 using myvk_rg_executor::VkAllocation;
 using myvk_rg_executor::VkCommand;
 using myvk_rg_executor::VkDescriptor;
+using myvk_rg_executor::VkRunner;
 
 struct Executor::CompileInfo {
 	Collection collection;
@@ -36,6 +38,7 @@ struct Executor::CompileInfo {
 	Schedule schedule;
 	VkAllocation vk_allocation;
 	VkCommand vk_command;
+	VkDescriptor vk_descriptor;
 };
 
 Executor::Executor(interface::Parent parent) : interface::ObjectBase(parent), m_p_compile_info{new CompileInfo{}} {}
@@ -82,7 +85,76 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 	}
 }
 
-void Executor::CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const {}
+void Executor::compile(const interface::RenderGraphBase *p_render_graph, const myvk::Ptr<myvk::Queue> &queue) {
+	/* digraph {
+	    Collection -> Dependency;
+	    Dependency -> Metadata;
+	    Metadata -> Schedule;
+	    Metadata -> VkAllocation;
+	    VkAllocation -> VkCommand;
+	    Schedule -> VkCommand;
+	    VkAllocation -> VkDescriptor;
+	} */
+	if (m_compile_flags == 0)
+		return;
+
+	uint8_t exe_compile_flags = m_compile_flags;
+	if (m_compile_flags & kCollection)
+		exe_compile_flags |= kDependency | kMetadata | kSchedule | kVkAllocation | kVkCommand | kVkDescriptor;
+	if (m_compile_flags & kDependency)
+		exe_compile_flags |= kMetadata | kSchedule | kVkAllocation | kVkCommand | kVkDescriptor;
+	if (m_compile_flags & kMetadata)
+		exe_compile_flags |= kSchedule | kVkAllocation | kVkCommand | kVkDescriptor;
+	if (m_compile_flags & kSchedule)
+		exe_compile_flags |= kVkCommand;
+	if (m_compile_flags & kVkAllocation)
+		exe_compile_flags |= kVkCommand | kVkDescriptor;
+	m_compile_flags = 0u;
+
+	if (exe_compile_flags & kCollection)
+		m_p_compile_info->collection = Collection::Create(*p_render_graph);
+	if (exe_compile_flags & kDependency)
+		m_p_compile_info->dependency =
+		    Dependency::Create({.render_graph = *p_render_graph, .collection = m_p_compile_info->collection});
+	if (exe_compile_flags & kMetadata)
+		m_p_compile_info->metadata = Metadata::Create({.render_graph = *p_render_graph,
+		                                               .collection = m_p_compile_info->collection,
+		                                               .dependency = m_p_compile_info->dependency});
+	if (exe_compile_flags & kSchedule)
+		m_p_compile_info->schedule = Schedule::Create({.render_graph = *p_render_graph,
+		                                               .collection = m_p_compile_info->collection,
+		                                               .dependency = m_p_compile_info->dependency,
+		                                               .metadata = m_p_compile_info->metadata});
+	if (exe_compile_flags & kVkAllocation)
+		m_p_compile_info->vk_allocation =
+		    VkAllocation::Create(queue->GetDevicePtr(), {.render_graph = *p_render_graph,
+		                                                 .collection = m_p_compile_info->collection,
+		                                                 .dependency = m_p_compile_info->dependency,
+		                                                 .metadata = m_p_compile_info->metadata});
+	if (exe_compile_flags & kVkDescriptor)
+		m_p_compile_info->vk_descriptor =
+		    VkDescriptor::Create(queue->GetDevicePtr(), {.render_graph = *p_render_graph,
+		                                                 .collection = m_p_compile_info->collection,
+		                                                 .dependency = m_p_compile_info->dependency,
+		                                                 .metadata = m_p_compile_info->metadata,
+		                                                 .vk_allocation = m_p_compile_info->vk_allocation});
+	if (exe_compile_flags & kVkCommand)
+		m_p_compile_info->vk_command =
+		    VkCommand::Create(queue->GetDevicePtr(), {.render_graph = *p_render_graph,
+		                                              .collection = m_p_compile_info->collection,
+		                                              .dependency = m_p_compile_info->dependency,
+		                                              .metadata = m_p_compile_info->metadata,
+		                                              .schedule = m_p_compile_info->schedule,
+		                                              .vk_allocation = m_p_compile_info->vk_allocation});
+	m_flip = false;
+}
+
+void Executor::CmdExecute(const interface::RenderGraphBase *p_render_graph,
+                          const myvk::Ptr<myvk::CommandBuffer> &command_buffer) {
+	compile(p_render_graph, command_buffer->GetCommandPoolPtr()->GetQueuePtr());
+	VkRunner::Run(command_buffer, m_p_compile_info->vk_command, m_p_compile_info->vk_descriptor);
+	m_flip = !m_flip;
+}
 
 const myvk::Ptr<myvk::ImageView> &Executor::GetVkImageView(const interface::ManagedImage *p_managed_image) const {
 	return VkAllocation::GetVkImageView(p_managed_image, m_flip);
@@ -111,12 +183,19 @@ uint32_t Executor::GetSubpass(const interface::PassBase *p_pass) { return Schedu
 const myvk::Ptr<myvk::RenderPass> &Executor::GetVkRenderPass(const interface::PassBase *p_pass) const {
 	return m_p_compile_info->vk_command.GetPassCommands()[Schedule::GetGroupID(p_pass)].myvk_render_pass;
 }
-const myvk::Ptr<myvk::DescriptorSetLayout> &
-Executor::GetVkDescriptorSetLayout(const interface::PassBase *p_pass) const {
+const myvk::Ptr<myvk::DescriptorSetLayout> &Executor::GetVkDescriptorSetLayout(const interface::PassBase *p_pass) {
 	return VkDescriptor::GetVkDescriptorSetLayout(p_pass);
 }
 const myvk::Ptr<myvk::DescriptorSet> &Executor::GetVkDescriptorSet(const interface::PassBase *p_pass) const {
 	return VkDescriptor::GetVkDescriptorSet(p_pass, m_flip);
+}
+const interface::ImageBase *Executor::GetInputImage(const interface::InputBase *p_input) {
+	assert(Dependency::GetInputResource(p_input)->GetType() == interface::ResourceType::kImage);
+	return static_cast<const interface::ImageBase *>(Dependency::GetInputResource(p_input));
+}
+const interface::BufferBase *Executor::GetInputBuffer(const interface::InputBase *p_input) {
+	assert(Dependency::GetInputResource(p_input)->GetType() == interface::ResourceType::kBuffer);
+	return static_cast<const interface::BufferBase *>(Dependency::GetInputResource(p_input));
 }
 
 } // namespace myvk_rg::executor

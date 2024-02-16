@@ -524,6 +524,11 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 }
 
 template <typename T>
+concept ImageResource = std::derived_from<T, ImageBase>;
+template <typename T>
+concept BufferResource = std::derived_from<T, BufferBase>;
+
+template <typename T>
 concept LastFrameResource = std::same_as<T, LastFrameBuffer> || std::same_as<T, LastFrameImage>;
 
 template <typename T>

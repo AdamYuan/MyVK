@@ -24,6 +24,11 @@ inline static bool is_image_read_grouped(const InputBase *p_l, const InputBase *
 	myvk_rg::Usage ul = p_l->GetUsage(), ur = p_r->GetUsage();
 	return !UsageIsAttachment(ul) && !UsageIsAttachment(ur) && UsageGetImageLayout(ul) == UsageGetImageLayout(ur);
 }
+inline static bool is_access_mergeable(const InputBase *p_l, const InputBase *p_r) {
+	return UsageIsAttachment(p_l->GetUsage()) && UsageIsAttachment(p_r->GetUsage()) &&
+	       Dependency::GetInputResource(p_l) == Dependency::GetInputResource(p_r);
+	// Image Combine is not allowed to merge
+}
 
 std::vector<std::size_t> Schedule::merge_passes(const Args &args) {
 	// Compute Merge Size
@@ -67,17 +72,14 @@ std::vector<std::size_t> Schedule::merge_passes(const Args &args) {
 
 		for (auto [from, e, _] : barrier_view.GetInEdges(p_pass)) {
 			std::size_t from_topo_id = Dependency::GetPassTopoID(from);
-			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()) &&
-			    Dependency::GetInputResource(e.opt_p_src_input) == Dependency::GetInputResource(e.p_dst_input)
-			    // Image Combine is not allowed to merge
-			)
+			if (is_access_mergeable(e.opt_p_src_input, e.p_dst_input))
 				size = std::min(size, i - from_topo_id + merge_sizes[from_topo_id]);
 			else
 				size = std::min(size, i - from_topo_id);
 		}
 		for (auto [from, e, _] : image_read_view.GetInEdges(p_pass)) {
 			std::size_t from_topo_id = Dependency::GetPassTopoID(from);
-			if (UsageIsAttachment(e.opt_p_src_input->GetUsage()) && UsageIsAttachment(e.p_dst_input->GetUsage()) ||
+			if (is_access_mergeable(e.opt_p_src_input, e.p_dst_input) ||
 			    is_image_read_grouped(e.opt_p_src_input, e.p_dst_input))
 				// Image Reads with same Usage can merge into the same RenderPass
 				size = std::min(size, i - from_topo_id + merge_sizes[from_topo_id]);

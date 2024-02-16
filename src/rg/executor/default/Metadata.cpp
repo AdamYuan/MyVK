@@ -166,7 +166,8 @@ void Metadata::fetch_alloc_usages(const Args &args) {
 	for (const auto *p_pass : args.dependency.GetPasses()) {
 		for (const InputBase *p_input : Dependency::GetPassInputs(p_pass))
 			Dependency::GetInputResource(p_input)->Visit([&](const auto *p_resource) {
-				get_alloc(GetAllocResource(p_resource)).vk_usages |= UsageGetCreationUsages(p_input->GetUsage());
+				if (GetAllocResource(p_resource))
+					get_alloc(GetAllocResource(p_resource)).vk_usages |= UsageGetCreationUsages(p_input->GetUsage());
 			});
 	}
 	for (const auto *p_resource : args.dependency.GetLFResources()) {
@@ -201,7 +202,7 @@ void Metadata::fetch_render_areas(const Metadata::Args &args) {
 				if (!UsageIsAttachment(p_input->GetUsage()))
 					continue;
 				Dependency::GetInputResource(p_input)->Visit(overloaded(
-				    [&](const ImageBase *p_image) {
+				    [&](const ImageResource auto *p_image) {
 					    const auto &size = Metadata::GetViewInfo(p_image).size;
 					    area.layers = std::max(area.layers, size.GetArrayLayers());
 					    auto [width, height, _] = size.GetBaseMipExtent();

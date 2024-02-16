@@ -120,7 +120,7 @@ public:
 
 class MyRenderGraph final : public myvk_rg::RenderGraphBase {
 public:
-	inline MyRenderGraph() {
+	inline MyRenderGraph() : myvk_rg::RenderGraphBase(nullptr) {
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
 		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
@@ -221,7 +221,7 @@ public:
 
 class MyRenderGraph2 final : public myvk_rg::RenderGraphBase {
 public:
-	inline MyRenderGraph2() {
+	inline MyRenderGraph2() : myvk_rg::RenderGraphBase(nullptr) {
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
 		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
@@ -254,7 +254,7 @@ public:
 #include "../../src/rg/executor/default/Metadata.hpp"
 #include "../../src/rg/executor/default/Schedule.hpp"
 TEST_SUITE("Default Executor") {
-	auto render_graph = myvk::MakePtr<MyRenderGraph2>();
+	auto render_graph = myvk::MakePtr<MyRenderGraph>();
 
 	using myvk_rg_executor::Collection;
 	using myvk_rg_executor::Dependency;

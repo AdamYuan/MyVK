@@ -11,7 +11,7 @@ Dependency Dependency::Create(const Args &args) {
 
 	for (const auto &it : args.render_graph.GetResultPoolData())
 		it.second.Visit([&](const auto *p_alias) { g.traverse_output_alias(args, *p_alias); });
-	g.tag_resources();
+	g.tag_resources(args);
 
 	g.add_war_edges();
 	g.sort_passes();
@@ -33,12 +33,14 @@ const InputBase *Dependency::traverse_output_alias(const Dependency::Args &args,
 	return p_src_input;
 }
 
+// TODO: Fix it
 void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 	if (m_pass_graph.HasVertex(p_pass))
 		return;
 	m_pass_graph.AddVertex(p_pass);
 
 	const auto pass_visitor = [&](const PassWithInput auto *p_pass) {
+		printf("%s, %zu\n", p_pass->GetGlobalKey().Format().c_str(), p_pass->GetInputPoolData().size());
 		for (const auto &it : p_pass->GetInputPoolData()) {
 			const InputBase *p_input = it.second.template Get<InputBase>();
 			get_dep_info(p_input).p_pass = p_pass;
@@ -50,6 +52,7 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				    const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
 				    const ResourceBase *p_resource = get_dep_info(p_src_input).p_resource;
 				    get_dep_info(p_input).p_resource = p_resource;
+				    printf("%s, %p -> %p\n", p_input->GetGlobalKey().Format().c_str(), p_input, p_resource);
 
 				    m_pass_graph.AddEdge(p_src_pass, p_pass, PassEdge{p_src_input, p_input, p_resource});
 			    },
@@ -57,6 +60,7 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				    const ResourceBase *p_resource = args.collection.FindResource(p_raw_alias->GetSourceKey());
 				    m_resource_graph.AddVertex(p_resource);
 				    get_dep_info(p_input).p_resource = p_resource;
+				    printf("%s, %p -> %p\n", p_input->GetGlobalKey().Format().c_str(), p_input, p_resource);
 
 				    p_resource->Visit(overloaded(
 				        [&](const CombinedImage *p_combined_image) {
@@ -73,12 +77,10 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 					        m_pass_graph.AddEdge(nullptr, p_pass, PassEdge{nullptr, p_input, p_resource});
 
 					        const auto &src_alias = p_lf_resource->GetPointedAlias();
-					        const InputBase *p_src_input = traverse_output_alias(args, src_alias);
-					        const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
-					        const ResourceBase *p_src_resource = get_dep_info(p_src_input).p_resource;
+					        traverse_output_alias(args, src_alias);
 
-					        // Last Frame Edges
-					        m_resource_graph.AddEdge(p_resource, p_src_resource, ResourceEdge::kLastFrame);
+					        // Last Frame Vertex
+					        m_resource_graph.AddVertex(p_resource);
 				        },
 				        [&](auto &&) {
 					        m_pass_graph.AddEdge(nullptr, p_pass, PassEdge{nullptr, p_input, p_resource});
@@ -153,26 +155,38 @@ void Dependency::sort_passes() {
 		get_dep_info(p_pass).topo_id = topo_id++;
 }
 
-void Dependency::tag_resources() {
+void Dependency::tag_resources(const Args &args) {
 	// Validate and Tag Resources
 	for (const ResourceBase *p_resource : m_resource_graph.GetVertices()) {
-		if (p_resource->GetState() == ResourceState::kLastFrame) {
-			// Assign LF Pointers
-			auto [to, _, _1] = m_resource_graph.GetOutEdges(p_resource).front();
-			get_dep_info(p_resource).p_lf_resource = to;
-			get_dep_info(to).p_lf_resource = p_resource;
+		p_resource->Visit(overloaded(
+		    [&](const LastFrameResource auto *p_resource) {
+			    const auto &src_alias = p_resource->GetPointedAlias();
+			    const InputBase *p_src_input = args.collection.FindInput(src_alias.GetSourceKey());
+			    const ResourceBase *p_src_resource = GetInputResource(p_src_input);
 
-			// LastFrame Resource should not have parent resource
-			if (!m_resource_graph.GetInEdges(p_resource).empty())
-				Throw(error::ResourceLFParent{.key = p_resource->GetGlobalKey()});
+			    // Last Frame Edge
+			    m_resource_graph.AddEdge(p_resource, p_src_resource, ResourceEdge::kLastFrame);
 
-			m_lf_resources.push_back(p_resource);
-		} else if (p_resource->GetState() == ResourceState::kExternal) {
-			// External Resource should not have parent resource
-			if (!m_resource_graph.GetInEdges(p_resource).empty())
-				Throw(error::ResourceExtParent{.key = p_resource->GetGlobalKey()});
-		}
+			    // Assign LF Pointers
+			    get_dep_info(p_resource).p_lf_resource = p_src_resource;
+			    get_dep_info(p_src_resource).p_lf_resource = p_resource;
+
+			    m_lf_resources.push_back(p_resource);
+		    },
+		    [&](const ExternalResource auto *p_resource) {
+			    // External Resource should not have parent resource
+			    if (!m_resource_graph.GetInEdges(p_resource).empty())
+				    Throw(error::ResourceExtParent{.key = p_resource->GetGlobalKey()});
+		    },
+		    [](auto &&) {}));
+
 		m_resources.push_back(p_resource);
+	}
+
+	for (const ResourceBase *p_resource : m_lf_resources) {
+		// LastFrame Resource should not have parent resource
+		if (!m_resource_graph.GetInEdges(p_resource).empty())
+			Throw(error::ResourceLFParent{.key = p_resource->GetGlobalKey()});
 	}
 
 	// Resolve Resource Tree

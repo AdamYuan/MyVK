@@ -9,15 +9,12 @@ class SwapchainImage final : public ExternalImageBase {
 private:
 	myvk::Ptr<myvk::FrameManager> m_frame_manager;
 
-	MYVK_RG_OBJECT_FRIENDS
-	inline void Initialize(const myvk::Ptr<myvk::FrameManager> &frame_manager) {
+public:
+	inline SwapchainImage(myvk_rg::Parent parent, const myvk::Ptr<myvk::FrameManager> &frame_manager)
+	    : ExternalImageBase(parent) {
 		m_frame_manager = frame_manager;
 		SetDstLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}
-
-public:
-	inline SwapchainImage() = default;
-	inline SwapchainImage(SwapchainImage &&) noexcept = default;
 	~SwapchainImage() final = default;
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const final {
 		return m_frame_manager->GetCurrentSwapchainImageView();

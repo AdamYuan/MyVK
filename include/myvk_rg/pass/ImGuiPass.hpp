@@ -13,7 +13,7 @@ private:
 
 public:
 	inline ImGuiPass(Parent parent, const Image &image) : GraphicsPassBase(parent) {
-		AddColorAttachmentInput<0, myvk_rg::Usage::kColorAttachmentRW>({"image"}, image);
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentRW>(0, {"out"}, image);
 	}
 	inline ~ImGuiPass() final = default;
 
@@ -23,7 +23,7 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
 		m_imgui_renderer->CmdDrawPipeline(command_buffer, 0);
 	}
-	inline auto GetImageOutput() { return MakeImageOutput({"image"}); }
+	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 };
 
 } // namespace myvk_rg

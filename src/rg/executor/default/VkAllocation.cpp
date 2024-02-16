@@ -386,14 +386,14 @@ void VkAllocation::bind_vk_resources(const Args &args) {
 		auto vma_allocation = vk_alloc.myvk_mem_alloc->GetHandle();
 
 		p_resource->Visit(overloaded(
-		    [&](const ImageBase *p_image) {
+		    [&](const ImageResource auto *p_image) {
 			    vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offsets[0],
 			                        vk_alloc.image.myvk_images[0]->GetHandle(), nullptr);
 			    if (vk_alloc.double_buffer)
 				    vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offsets[1],
 				                        vk_alloc.image.myvk_images[1]->GetHandle(), nullptr);
 		    },
-		    [&](const BufferBase *p_buffer) {
+		    [&](const BufferResource auto *p_buffer) {
 			    auto *p_mapped = (uint8_t *)vk_alloc.myvk_mem_alloc->GetInfo().pMappedData;
 
 			    vmaBindBufferMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offsets[0],

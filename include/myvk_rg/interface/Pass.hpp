@@ -82,8 +82,12 @@ public:
 
 	uint32_t GetSubpass() const;
 	const myvk::Ptr<myvk::RenderPass> &GetVkRenderPass() const;
+
 	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
 	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet() const;
+
+	const ImageBase *GetInputImage(const PoolKey &input_key) const;
+	const BufferBase *GetInputBuffer(const PoolKey &input_key) const;
 
 	inline void SetRenderArea(VkExtent2D extent, uint32_t layer = 1) {
 		if (m_opt_area_func || !m_opt_area || m_opt_area != RenderPassArea{extent, layer})
@@ -128,6 +132,9 @@ public:
 	virtual void CreatePipeline() = 0;
 	inline void UpdatePipeline() { EmitEvent(Event::kUpdatePipeline); }
 
+	const ImageBase *GetInputImage(const PoolKey &input_key) const;
+	const BufferBase *GetInputBuffer(const PoolKey &input_key) const;
+
 	const myvk::Ptr<myvk::DescriptorSetLayout> &GetVkDescriptorSetLayout() const;
 	const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet() const;
 };
@@ -135,6 +142,9 @@ public:
 class TransferPassBase : public PassBase, public InputPool<TransferPassBase>, public ResourcePool<TransferPassBase> {
 public:
 	inline constexpr PassType GetType() const { return PassType::kTransfer; }
+
+	const ImageBase *GetInputImage(const PoolKey &input_key) const;
+	const BufferBase *GetInputBuffer(const PoolKey &input_key) const;
 
 	inline TransferPassBase(Parent parent) : PassBase(parent, PassType::kTransfer) {}
 	inline ~TransferPassBase() override = default;

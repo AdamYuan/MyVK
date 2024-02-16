@@ -7,25 +7,28 @@
 #include "Resource.hpp"
 #include "ResultPool.hpp"
 #include <memory>
+#include <myvk/Queue.hpp>
 
 namespace myvk_rg::interface {
 
 class RenderGraphBase : public ObjectBase,
                         public PassPool<RenderGraphBase>,
                         public ResourcePool<RenderGraphBase>,
-                        public ResultPool<RenderGraphBase> {
+                        public ResultPool<RenderGraphBase>,
+                        public myvk::DeviceObjectBase {
 private:
 	inline static const PoolKey kRGKey = {"[RG]"};
 	inline static const interface::PoolKey kEXEKey = {"[EXE]"};
 
 	VkExtent2D m_canvas_size{};
 	myvk::UPtr<executor::Executor> m_executor{};
+	myvk::Ptr<myvk::Queue> m_queue_ptr;
 
 	friend class ObjectBase;
 
 public:
-	inline explicit RenderGraphBase()
-	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}),
+	inline explicit RenderGraphBase(myvk::Ptr<myvk::Queue> queue_ptr)
+	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}), m_queue_ptr{std::move(queue_ptr)},
 	      m_executor(myvk::MakeUPtr<executor::Executor>(Parent{.p_pool_key = &kEXEKey, .p_var_parent = this})) {}
 	inline ~RenderGraphBase() override = default;
 
@@ -42,6 +45,12 @@ public:
 	}
 	inline const VkExtent2D &GetCanvasSize() const { return m_canvas_size; }
 	inline const executor::Executor *GetExecutor() const { return m_executor.get(); }
+
+	void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) {
+		m_executor->CmdExecute(this, command_buffer);
+	}
+
+	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_queue_ptr->GetDevicePtr(); }
 };
 
 } // namespace myvk_rg::interface

@@ -39,7 +39,7 @@ private:
 	const InputBase *traverse_output_alias(const Dependency::Args &args, const OutputAlias auto &output_alias);
 	void add_war_edges(); // Write-After-Read Edges
 	void sort_passes();
-	void tag_resources();
+	void tag_resources(const Args &args);
 	void get_pass_relation();
 	void get_resource_relation();
 	void add_image_read_edges(); // Edges for scheduler

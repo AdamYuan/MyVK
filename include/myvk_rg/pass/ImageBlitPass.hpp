@@ -6,13 +6,11 @@
 namespace myvk_rg {
 class ImageBlitPass final : public TransferPassBase {
 private:
-	myvk_rg::Image m_src{}, m_dst{};
 	VkFilter m_filter{};
 
 public:
 	inline ImageBlitPass(Parent parent, const myvk_rg::Image &src, const myvk_rg::Image &dst, VkFilter filter)
 	    : TransferPassBase(parent) {
-		m_src = src, m_dst = dst;
 		m_filter = filter;
 		AddInput<myvk_rg::Usage::kTransferImageSrc, VK_PIPELINE_STAGE_2_BLIT_BIT>({"src"}, src);
 		AddInput<myvk_rg::Usage::kTransferImageDst, VK_PIPELINE_STAGE_2_BLIT_BIT>({"dst"}, dst);
@@ -20,7 +18,8 @@ public:
 	inline ~ImageBlitPass() final = default;
 
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
-		command_buffer->CmdBlitImage(m_src->GetVkImageView(), m_dst->GetVkImageView(), m_filter);
+		command_buffer->CmdBlitImage(GetInputImage({"src"})->GetVkImageView(), GetInputImage({"dst"})->GetVkImageView(),
+		                             m_filter);
 	}
 	inline auto GetDstOutput() { return MakeImageOutput({"dst"}); }
 };
