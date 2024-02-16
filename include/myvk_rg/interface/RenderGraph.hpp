@@ -22,13 +22,13 @@ private:
 
 	VkExtent2D m_canvas_size{};
 	myvk::UPtr<executor::Executor> m_executor{};
-	myvk::Ptr<myvk::Queue> m_queue_ptr;
+	myvk::Ptr<myvk::Device> m_device_ptr;
 
 	friend class ObjectBase;
 
 public:
-	inline explicit RenderGraphBase(myvk::Ptr<myvk::Queue> queue_ptr)
-	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}), m_queue_ptr{std::move(queue_ptr)},
+	inline explicit RenderGraphBase(myvk::Ptr<myvk::Device> device_ptr)
+	    : ObjectBase({.p_pool_key = &kRGKey, .p_var_parent = this}), m_device_ptr{std::move(device_ptr)},
 	      m_executor(myvk::MakeUPtr<executor::Executor>(Parent{.p_pool_key = &kEXEKey, .p_var_parent = this})) {}
 	inline ~RenderGraphBase() override = default;
 
@@ -50,7 +50,7 @@ public:
 		m_executor->CmdExecute(this, command_buffer);
 	}
 
-	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_queue_ptr->GetDevicePtr(); }
+	inline const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
 };
 
 } // namespace myvk_rg::interface
