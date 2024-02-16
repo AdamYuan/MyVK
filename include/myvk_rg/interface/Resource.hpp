@@ -221,9 +221,6 @@ public:
 	using SizeFunc = std::function<SizeType(const VkExtent2D &)>;
 
 private:
-	inline static constexpr Event kResizeEvent =
-	    std::is_base_of_v<ImageBase, Derived> ? Event::kImageResized : Event::kBufferResized;
-
 	SizeType m_size{};
 	SizeFunc m_size_func{};
 
@@ -234,6 +231,9 @@ public:
 		return m_size;
 	}
 	template <typename... Args> inline void SetSize(Args &&...args) {
+		constexpr Event kResizeEvent =
+		    std::is_base_of_v<ImageBase, Derived> ? Event::kImageResized : Event::kBufferResized;
+
 		SizeType size(std::forward<Args>(args)...);
 		m_size_func = nullptr;
 		if (m_size != size) {
@@ -242,6 +242,9 @@ public:
 		}
 	}
 	inline void SetSizeFunc(const SizeFunc &func) {
+		constexpr Event kResizeEvent =
+			std::is_base_of_v<ImageBase, Derived> ? Event::kImageResized : Event::kBufferResized;
+
 		m_size_func = func;
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(kResizeEvent);
 	}
