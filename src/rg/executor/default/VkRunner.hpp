@@ -9,6 +9,8 @@
 #include "VkCommand.hpp"
 #include "VkDescriptor.hpp"
 
+#include <span>
+
 namespace myvk_rg_executor {
 
 class VkRunner {

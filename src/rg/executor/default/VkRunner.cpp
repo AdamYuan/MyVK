@@ -3,7 +3,6 @@
 //
 
 #include "VkRunner.hpp"
-#include <span>
 
 #include "../Barrier.hpp"
 
