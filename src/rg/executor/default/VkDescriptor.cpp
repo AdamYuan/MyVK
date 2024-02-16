@@ -70,7 +70,7 @@ namespace create_vk_sets {
 struct BindingInfo {
 	VkDescriptorType type;
 	VkShaderStageFlags shader_stages;
-	inline bool operator<=>(const BindingInfo &) const = default;
+	inline auto operator<=>(const BindingInfo &) const = default;
 };
 } // namespace create_vk_sets
 

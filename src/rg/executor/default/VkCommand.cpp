@@ -14,7 +14,7 @@ class VkCommand::Builder {
 private:
 	struct SubpassPair {
 		uint32_t src_subpass, dst_subpass;
-		inline bool operator<=>(const SubpassPair &r) const = default;
+		inline auto operator<=>(const SubpassPair &r) const = default;
 	};
 	struct SubpassDependency {
 		VkPipelineStageFlags2 src_stage_mask{};

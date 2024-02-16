@@ -15,7 +15,7 @@ namespace myvk_rg::interface {
 
 struct DescriptorIndex {
 	uint32_t binding, array_element;
-	inline bool operator<=>(const DescriptorIndex &r) const = default;
+	inline auto operator<=>(const DescriptorIndex &r) const = default;
 };
 
 class ImageInput;
