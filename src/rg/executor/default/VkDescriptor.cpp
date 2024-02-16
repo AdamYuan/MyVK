@@ -210,7 +210,7 @@ void VkDescriptor::pass_vk_bind_static(const PassBase *p_pass) {
 	vkUpdateDescriptorSets(m_device_ptr->GetHandle(), writer.writes.size(), writer.writes.data(), 0, nullptr);
 }
 
-void VkDescriptor::BindDynamic(const PassBase *p_pass, bool flip) {
+void VkDescriptor::BindDynamic(const PassBase *p_pass, bool flip) const {
 	auto &desc_info = get_desc_info(p_pass);
 	if (desc_info.dynamic_bindings.empty())
 		return;

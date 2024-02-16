@@ -7,7 +7,7 @@
 namespace myvk_rg_executor {
 
 void VkRunner::Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const VkCommand &vk_command,
-                   const VkDescriptor &vk_descriptor) {
+                   const VkDescriptor &vk_descriptor, bool flip) {
 	const auto cmd_pipeline_barriers = [&](std::span<const VkCommand::BarrierCmd> barrier_cmds) {
 		if (barrier_cmds.empty())
 			return;
@@ -48,6 +48,7 @@ void VkRunner::Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const V
 
 	const auto run_pass = [&](const PassBase *p_pass) {
 		VkCommand::CreatePipeline(p_pass);
+		vk_descriptor.BindDynamic(p_pass, flip);
 		p_pass->CmdExecute(command_buffer);
 	};
 

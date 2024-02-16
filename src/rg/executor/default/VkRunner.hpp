@@ -13,7 +13,7 @@ namespace myvk_rg_executor {
 
 struct VkRunner {
 	static void Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const VkCommand &vk_command,
-	                const VkDescriptor &vk_descriptor);
+	                const VkDescriptor &vk_descriptor, bool flip);
 };
 
 } // namespace myvk_rg_executor

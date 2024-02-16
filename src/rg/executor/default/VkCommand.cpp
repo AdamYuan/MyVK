@@ -33,8 +33,8 @@ struct Barrier {
 };
 
 inline static State GetSrcState(const InputBase *p_src) {
-	return {.stage_mask = UsageGetWriteAccessFlags(p_src->GetUsage()),
-	        .access_mask = p_src->GetPipelineStages(),
+	return {.stage_mask = p_src->GetPipelineStages(),
+	        .access_mask = UsageGetWriteAccessFlags(p_src->GetUsage()),
 	        .layout = UsageGetImageLayout(p_src->GetUsage())};
 }
 inline static State GetSrcState(std::ranges::input_range auto src_s) {
@@ -46,12 +46,12 @@ inline static State GetSrcState(std::ranges::input_range auto src_s) {
 inline static State GetValidateSrcState(std::ranges::input_range auto src_s) {
 	State state = {};
 	for (const InputBase *p_src : src_s)
-		state |= {.access_mask = p_src->GetPipelineStages()};
+		state |= {.stage_mask = p_src->GetPipelineStages()};
 	return state;
 }
 inline static State GetDstState(const InputBase *p_dst) {
-	return {.stage_mask = UsageGetAccessFlags(p_dst->GetUsage()),
-	        .access_mask = p_dst->GetPipelineStages(),
+	return {.stage_mask = p_dst->GetPipelineStages(),
+	        .access_mask = UsageGetAccessFlags(p_dst->GetUsage()),
 	        .layout = UsageGetImageLayout(p_dst->GetUsage())};
 }
 inline static State GetDstState(std::ranges::input_range auto dst_s) {

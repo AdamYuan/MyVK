@@ -152,7 +152,7 @@ void Executor::compile(const interface::RenderGraphBase *p_render_graph, const m
 void Executor::CmdExecute(const interface::RenderGraphBase *p_render_graph,
                           const myvk::Ptr<myvk::CommandBuffer> &command_buffer) {
 	compile(p_render_graph, command_buffer->GetCommandPoolPtr()->GetQueuePtr());
-	VkRunner::Run(command_buffer, m_p_compile_info->vk_command, m_p_compile_info->vk_descriptor);
+	VkRunner::Run(command_buffer, m_p_compile_info->vk_command, m_p_compile_info->vk_descriptor, m_flip);
 	m_flip = !m_flip;
 }
 

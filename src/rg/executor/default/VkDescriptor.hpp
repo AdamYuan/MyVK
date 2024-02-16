@@ -33,7 +33,7 @@ private:
 
 public:
 	static VkDescriptor Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
-	void BindDynamic(const PassBase *p_pass, bool flip);
+	void BindDynamic(const PassBase *p_pass, bool flip) const;
 	static const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet(const PassBase *p_pass, bool flip) {
 		return get_desc_info(p_pass).myvk_sets[flip];
 	}
