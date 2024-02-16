@@ -52,13 +52,13 @@ public:
 	void ClearInfo() const {}
 	template <typename Info_T, typename Member_T, typename... Args>
 	void ClearInfo(Member_T Info_T::*p_member, Args &&...args) const {
-		if constexpr (std::is_same_v<Info_T, PassInfo>) {
+		if constexpr (std::convertible_to<Info_T, PassInfo>) {
 			for (PassInfo &pass_info : m_pass_infos)
 				pass_info.*p_member = {};
-		} else if constexpr (std::is_same_v<Info_T, ResourceInfo>) {
+		} else if constexpr (std::convertible_to<Info_T, ResourceInfo>) {
 			for (ResourceInfo &resource_info : m_resource_infos)
 				resource_info.*p_member = {};
-		} else if constexpr (std::is_same_v<Info_T, InputInfo>) {
+		} else if constexpr (std::convertible_to<Info_T, InputInfo>) {
 			for (InputInfo &input_info : m_input_infos)
 				input_info.*p_member = {};
 		} else
