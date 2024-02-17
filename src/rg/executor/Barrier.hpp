@@ -6,6 +6,7 @@
 #ifndef MYVK_RG_EXE_BARRIER_HPP
 #define MYVK_RG_EXE_BARRIER_HPP
 
+#include "VkHelper.hpp"
 #include <myvk_rg/interface/Input.hpp>
 #include <myvk_rg/interface/Usage.hpp>
 
@@ -30,19 +31,30 @@ struct Barrier {
 	VkImageLayout new_layout;
 };
 
+inline static void SetVkLayout(VkImageLayout *p_dst, VkImageLayout src) {
+	assert(*p_dst == VK_IMAGE_LAYOUT_UNDEFINED || src == VK_IMAGE_LAYOUT_UNDEFINED || layout == r.layout);
+	if (*p_dst == VK_IMAGE_LAYOUT_UNDEFINED)
+		*p_dst = src;
+}
+
 struct State {
-	VkPipelineStageFlags2 stage_mask;
-	VkAccessFlags2 access_mask;
-	VkImageLayout layout;
+	VkPipelineStageFlags2 stage_mask{};
+	VkAccessFlags2 access_mask{};
+	VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
 
 	inline State &operator|=(const State &r) {
 		stage_mask |= r.stage_mask;
 		access_mask |= r.access_mask;
-		assert(!layout || layout == r.layout);
-		layout = r.layout;
+		SetVkLayout(&layout, r.layout);
 		return *this;
 	}
+	inline State operator|(const State &r) const {
+		State l = *this;
+		l |= r;
+		return l;
+	}
 };
+
 inline static State GetSrcState(const interface::InputBase *p_src) {
 	return {.stage_mask = p_src->GetPipelineStages(),
 	        .access_mask = interface::UsageGetWriteAccessFlags(p_src->GetUsage()),
@@ -75,19 +87,15 @@ inline static State GetDstState(std::ranges::input_range auto dst_s) {
 template <typename T> inline static void AddSrcBarrier(T *p_barrier, const State &state) {
 	p_barrier->src_access_mask |= state.access_mask;
 	p_barrier->src_stage_mask |= state.stage_mask;
-	if constexpr (requires(T t) { t.old_layout; }) {
-		assert(p_barrier->old_layout == VK_IMAGE_LAYOUT_UNDEFINED || p_barrier->old_layout == state.layout);
-		p_barrier->old_layout = state.layout;
-	}
+	if constexpr (requires(T t) { t.old_layout; })
+		SetVkLayout(&p_barrier->old_layout, state.layout);
 }
 
 template <typename T> inline static void AddDstBarrier(T *p_barrier, const State &state) {
 	p_barrier->dst_access_mask |= state.access_mask;
 	p_barrier->dst_stage_mask |= state.stage_mask;
-	if constexpr (requires(T t) { t.new_layout; }) {
-		assert(p_barrier->new_layout == VK_IMAGE_LAYOUT_UNDEFINED || p_barrier->new_layout == state.layout);
-		p_barrier->new_layout = state.layout;
-	}
+	if constexpr (requires(T t) { t.new_layout; })
+		SetVkLayout(&p_barrier->new_layout, state.layout);
 }
 template <typename T> inline static void AddBarrier(T *p_barrier, const State &src_state, const State &dst_state) {
 	AddSrcBarrier(p_barrier, src_state);

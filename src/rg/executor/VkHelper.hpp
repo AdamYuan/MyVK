@@ -44,7 +44,8 @@ inline static constexpr VkImageAspectFlags VkImageAspectFlagsFromVkFormat(VkForm
 	}
 }
 
-inline static constexpr VkPipelineStageFlags2 VkAttachmentInitialStagesFromVkFormat(VkFormat format) {
+// Spec 8.5. Render Pass Load Operations
+inline static constexpr VkPipelineStageFlags2 VkAttachmentLoadOpStages(VkFormat format) {
 	VkImageAspectFlags aspects = VkImageAspectFlagsFromVkFormat(format);
 	VkPipelineStageFlags2 ret{};
 	if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
@@ -53,25 +54,57 @@ inline static constexpr VkPipelineStageFlags2 VkAttachmentInitialStagesFromVkFor
 		ret |= VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT;
 	return ret;
 }
-
-inline static constexpr VkAccessFlags2 VkAttachmentInitAccessFromVkFormat(VkFormat format) {
+inline static constexpr VkAccessFlags2 VkAttachmentLoadOpAccesses(VkAttachmentLoadOp load_op, VkFormat format) {
 	VkImageAspectFlags aspects = VkImageAspectFlagsFromVkFormat(format);
-	VkAccessFlags2 ret{};
-	if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
-		ret |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-	if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
-		ret |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-	return ret;
+	switch (load_op) {
+	case VK_ATTACHMENT_LOAD_OP_LOAD: {
+		VkAccessFlags2 ret{};
+		if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
+			ret |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+		if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+			ret |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+		return ret;
+	}
+	case VK_ATTACHMENT_LOAD_OP_DONT_CARE:
+	case VK_ATTACHMENT_LOAD_OP_CLEAR: {
+		VkAccessFlags2 ret{};
+		if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
+			ret |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+		if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+			ret |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		return ret;
+	}
+	default:
+		return {};
+	}
 }
 
-inline static constexpr VkAccessFlags2 VkAttachmentLoadAccessFromVkFormat(VkFormat format) {
+// Spec 8.6. Render Pass Store Operations
+inline static constexpr VkPipelineStageFlags2 VkAttachmentStoreOpStages(VkFormat format) {
 	VkImageAspectFlags aspects = VkImageAspectFlagsFromVkFormat(format);
-	VkAccessFlags2 ret{};
+	VkPipelineStageFlags2 ret{};
 	if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
-		ret |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+		ret |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 	if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
-		ret |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+		ret |= VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
 	return ret;
+}
+inline static constexpr VkAccessFlags2 VkAttachmentStoreOpAccesses(VkAttachmentStoreOp store_op, VkFormat format) {
+	VkImageAspectFlags aspects = VkImageAspectFlagsFromVkFormat(format);
+	switch (store_op) {
+	case VK_ATTACHMENT_STORE_OP_DONT_CARE:
+	case VK_ATTACHMENT_STORE_OP_STORE: {
+		VkAccessFlags2 ret{};
+		if (aspects & VK_IMAGE_ASPECT_COLOR_BIT)
+			ret |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+		if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
+			ret |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		return ret;
+	}
+	case VK_ATTACHMENT_STORE_OP_NONE:
+	default:
+		return {};
+	}
 }
 
 inline static constexpr VkShaderStageFlags VkShaderStagesFromVkPipelineStages(VkPipelineStageFlags2 pipeline_stages) {

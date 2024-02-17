@@ -10,6 +10,17 @@
 
 namespace myvk_rg_executor {
 
+inline static State GetAttachmentStoreOpState(const ResourceBase *p_attachment, VkAttachmentStoreOp vk_store_op) {
+	auto vk_format = Metadata::GetAllocInfo(static_cast<const ImageBase *>(p_attachment)).vk_format;
+	return {.stage_mask = VkAttachmentStoreOpStages(vk_format),
+	        .access_mask = VkAttachmentStoreOpAccesses(vk_store_op, vk_format)};
+}
+inline static State GetAttachmentLoadOpState(const ResourceBase *p_attachment, VkAttachmentLoadOp vk_load_op) {
+	auto vk_format = Metadata::GetAllocInfo(static_cast<const ImageBase *>(p_attachment)).vk_format;
+	return {.stage_mask = VkAttachmentLoadOpStages(vk_format),
+	        .access_mask = VkAttachmentLoadOpAccesses(vk_load_op, vk_format)};
+}
+
 class VkCommand::Builder {
 private:
 	struct SubpassPair {
@@ -25,7 +36,7 @@ private:
 	struct AttachmentData {
 		VkImageLayout initial_layout{}, final_layout{};
 		VkAttachmentLoadOp load_op{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
-		VkAttachmentStoreOp store_op{VK_ATTACHMENT_STORE_OP_NONE};
+		VkAttachmentStoreOp store_op{VK_ATTACHMENT_STORE_OP_DONT_CARE};
 		bool may_alias{false};
 		uint32_t id{};
 		uint32_t first_subpass{}, last_subpass{};
@@ -91,15 +102,18 @@ private:
 	}
 
 	void add_local_barrier(const Schedule::PassBarrier &pass_barrier) {
+		State src_state = GetSrcState(pass_barrier.src_s), dst_state = GetDstState(pass_barrier.dst_s);
 		if (auto [_, p_src_att_data, _1] = get_src_p_pass_att_data(pass_barrier); p_src_att_data) {
 			p_src_att_data->store_op = VK_ATTACHMENT_STORE_OP_STORE;
 			p_src_att_data->final_layout = UsageGetImageLayout(pass_barrier.src_s[0]->GetUsage());
+			src_state |= GetAttachmentStoreOpState(pass_barrier.p_resource, VK_ATTACHMENT_STORE_OP_STORE);
 		}
 		if (auto [_, p_dst_att_data, _1] = get_dst_p_pass_att_data(pass_barrier); p_dst_att_data) {
 			p_dst_att_data->load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
 			p_dst_att_data->initial_layout = UsageGetImageLayout(pass_barrier.dst_s[0]->GetUsage());
+			dst_state |= GetAttachmentLoadOpState(pass_barrier.p_resource, VK_ATTACHMENT_LOAD_OP_LOAD);
 		}
-		AddBarrier(get_p_barrier_data(pass_barrier), GetSrcState(pass_barrier.src_s), GetDstState(pass_barrier.dst_s));
+		AddBarrier(get_p_barrier_data(pass_barrier), src_state, dst_state);
 	}
 
 	void add_validate_barrier(const Args &args, const Schedule::PassBarrier &pass_barrier, VkAttachmentLoadOp load_op) {
@@ -110,11 +124,15 @@ private:
 				alias_resources.push_back(p_resource);
 		}
 
+		State dst_state = GetDstState(pass_barrier.dst_s);
+
 		if (auto [p_dst_pass_data, p_dst_att_data, dst_subpass] = get_dst_p_pass_att_data(pass_barrier);
 		    p_dst_att_data) {
 			// Dst is a RenderPass, so no need for explicit layout transition
 			// p_dst_att_data->initial_layout = VK_IMAGE_LAYOUT_UNDEFINED;
+			dst_state |= GetAttachmentLoadOpState(pass_barrier.p_resource, load_op);
 			p_dst_att_data->load_op = load_op;
+
 			for (const ResourceBase *p_resource : alias_resources) {
 				const auto &last_inputs = Schedule::GetLastInputs(p_resource);
 
@@ -126,12 +144,12 @@ private:
 				} else
 					p_subpass_dep = &p_dst_pass_data->subpass_deps[{VK_SUBPASS_EXTERNAL, dst_subpass}];
 
-				AddBarrier(p_subpass_dep, GetValidateSrcState(last_inputs), GetDstState(pass_barrier.dst_s));
+				AddBarrier(p_subpass_dep, GetValidateSrcState(last_inputs), dst_state);
 			}
 		} else {
 			auto *p_barrier = get_p_barrier_data(pass_barrier);
 			// Might need explicit initial image layout transition
-			AddDstBarrier(p_barrier, GetDstState(pass_barrier.dst_s));
+			AddDstBarrier(p_barrier, dst_state);
 			for (const ResourceBase *p_resource : alias_resources)
 				AddSrcBarrier(p_barrier, GetValidateSrcState(Schedule::GetLastInputs(p_resource)));
 		}
@@ -139,31 +157,39 @@ private:
 
 	void add_input_barrier(const Schedule::PassBarrier &pass_barrier, const State &src_state,
 	                       VkAttachmentLoadOp load_op) {
+		State dst_state = GetDstState(pass_barrier.dst_s);
+
 		if (auto [p_dst_pass_data, p_dst_att_data, dst_subpass] = get_dst_p_pass_att_data(pass_barrier);
 		    p_dst_att_data) {
+			dst_state |= GetAttachmentLoadOpState(pass_barrier.p_resource, load_op);
 			p_dst_att_data->load_op = load_op; // Input ==> Load
 			p_dst_att_data->initial_layout = src_state.layout;
 
 			SubpassDependency *p_subpass_dep = &p_dst_pass_data->subpass_deps[{VK_SUBPASS_EXTERNAL, dst_subpass}];
-			AddBarrier(p_subpass_dep, src_state, GetDstState(pass_barrier.dst_s));
+			AddBarrier(p_subpass_dep, src_state, dst_state);
 		} else {
 			auto *p_barrier = get_p_barrier_data(pass_barrier);
-			AddBarrier(p_barrier, src_state, GetDstState(pass_barrier.dst_s));
+			AddBarrier(p_barrier, src_state, dst_state);
 		}
 	}
 
 	void add_output_barrier(const Schedule::PassBarrier &pass_barrier, const State &dst_state) {
+		State src_state = GetSrcState(pass_barrier.src_s);
+
 		if (auto [p_src_pass_data, p_src_att_data, src_subpass] = get_src_p_pass_att_data(pass_barrier);
 		    p_src_att_data) {
-			p_src_att_data->store_op = dst_state.layout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_ATTACHMENT_STORE_OP_NONE
-			                                                                         : VK_ATTACHMENT_STORE_OP_STORE;
+			VkAttachmentStoreOp store_op = dst_state.layout == VK_IMAGE_LAYOUT_UNDEFINED
+			                                   ? VK_ATTACHMENT_STORE_OP_DONT_CARE
+			                                   : VK_ATTACHMENT_STORE_OP_STORE;
+			src_state |= GetAttachmentStoreOpState(pass_barrier.p_resource, store_op);
+			p_src_att_data->store_op = store_op;
 			p_src_att_data->final_layout = dst_state.layout;
 
 			SubpassDependency *p_subpass_dep = &p_src_pass_data->subpass_deps[{src_subpass, VK_SUBPASS_EXTERNAL}];
-			AddBarrier(p_subpass_dep, GetSrcState(pass_barrier.src_s), dst_state);
+			AddBarrier(p_subpass_dep, src_state, dst_state);
 		} else {
 			auto *p_barrier = get_p_barrier_data(pass_barrier);
-			AddBarrier(p_barrier, GetSrcState(pass_barrier.src_s), dst_state);
+			AddBarrier(p_barrier, src_state, dst_state);
 		}
 	}
 

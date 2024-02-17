@@ -58,12 +58,6 @@ add_library(MyVK_RenderGraph STATIC
         src/rg/executor/default/VkCommand.cpp
         src/rg/executor/default/VkDescriptor.cpp
         src/rg/executor/default/VkRunner.cpp
-        # src/rg/executor/default/RenderGraphAllocator.cpp
-        # src/rg/executor/default/RenderGraphExecutor.cpp
-        # src/rg/executor/default/RenderGraphScheduler.cpp
-        # src/rg/executor/default/RenderGraphDescriptor.cpp
-        # src/rg/executor/default/RenderGraphLFInit.cpp
-        # src/rg/executor/default/RenderGraph.cpp
 )
 add_library(myvk::rg ALIAS MyVK_RenderGraph)
 target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_ENABLE_RG)
