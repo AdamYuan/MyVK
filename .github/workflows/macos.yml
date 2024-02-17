@@ -1,6 +1,6 @@
 name: Mac OS
 
-on: 
+on:
   push:
   pull_request:
   release:
@@ -12,10 +12,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        config: 
-        - {
+        config:
+          - {
             name: "MacOS Clang",
-            os: macos-latest,
+            os: macos-13,
             build_type: "Release",
             generators: "Ninja"
           }
@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           brew install ninja
-          
+
       - name: Configure
         shell: bash
         run: |
