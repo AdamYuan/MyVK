@@ -49,6 +49,11 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				    const InputBase *p_src_input = traverse_output_alias(args, *p_output_alias);
 				    const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
 				    const ResourceBase *p_resource = get_dep_info(p_src_input).p_resource;
+
+				    // This means p_src_pass is present in the stack, so a cycle exists
+				    if (!p_resource)
+					    Throw(error::PassNotDAG{});
+
 				    get_dep_info(p_input).p_resource = p_resource;
 
 				    m_pass_graph.AddEdge(p_src_pass, p_pass, PassEdge{p_src_input, p_input, p_resource});
@@ -76,7 +81,9 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				        [&](const LastFrameResource auto *p_lf_resource) {
 					        m_pass_graph.AddEdge(nullptr, p_pass, PassEdge{nullptr, p_input, p_resource});
 
-					        traverse_output_alias(args, p_lf_resource->GetPointedAlias());
+					        p_lf_resource->GetPointedAlias().Visit(overloaded(
+					            [&](const OutputAlias auto *p_out_alias) { traverse_output_alias(args, *p_out_alias); },
+					            [](auto &&) {}));
 
 					        // Last Frame Vertex
 					        m_resource_graph.AddVertex(p_resource);
@@ -160,8 +167,17 @@ void Dependency::tag_resources(const Args &args) {
 		p_resource->Visit(overloaded(
 		    [&](const LastFrameResource auto *p_resource) {
 			    const auto &src_alias = p_resource->GetPointedAlias();
-			    const InputBase *p_src_input = args.collection.FindInput(src_alias.GetSourceKey());
-			    const ResourceBase *p_src_resource = GetInputResource(p_src_input);
+			    const ResourceBase *p_src_resource = p_resource->GetPointedAlias().Visit(overloaded(
+			        [&](const OutputAlias auto *p_output_alias) {
+				        const InputBase *p_src_input = args.collection.FindInput(p_output_alias->GetSourceKey());
+				        return GetInputResource(p_src_input);
+			        },
+			        [&](const RawAlias auto *p_raw_alias) {
+				        const ResourceBase *p_src_resource = args.collection.FindResource(p_raw_alias->GetSourceKey());
+				        if (!m_resource_graph.HasVertex(p_src_resource))
+					        Throw(error::LFResourceSrcUnused{.key = p_resource->GetGlobalKey()});
+				        return p_src_resource;
+			        }));
 
 			    // Last Frame Edge
 			    m_resource_graph.AddEdge(p_resource, p_src_resource, ResourceEdge::kLastFrame);

@@ -89,6 +89,7 @@ public:
 	inline GlobalKey GetPrefix() const {
 		return m_keys.empty() ? GlobalKey{} : GlobalKey{{m_keys.begin(), m_keys.end() - 1}};
 	}
+	inline bool Empty() const { return m_keys.empty(); }
 	inline bool operator<(const GlobalKey &r) const { return m_keys < r.m_keys; }
 	inline bool operator>(const GlobalKey &r) const { return m_keys > r.m_keys; }
 	inline bool operator==(const GlobalKey &r) const { return m_keys == r.m_keys; }

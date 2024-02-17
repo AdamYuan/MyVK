@@ -49,6 +49,10 @@ struct WriteToLastFrame {
 	AliasBase alias;
 	inline std::string Format() const { return "Write to last frame source " + alias.GetSourceKey().Format(); }
 };
+struct LFResourceSrcUnused {
+	GlobalKey key;
+	inline std::string Format() const { return "Last frame resource " + key.Format() + " has unused source resource"; }
+};
 struct MultipleWrite {
 	AliasBase alias;
 	inline std::string Format() const {

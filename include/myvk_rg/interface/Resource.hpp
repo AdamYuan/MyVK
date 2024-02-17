@@ -243,7 +243,7 @@ public:
 	}
 	inline void SetSizeFunc(const SizeFunc &func) {
 		constexpr Event kResizeEvent =
-			std::is_base_of_v<ImageBase, Derived> ? Event::kImageResized : Event::kBufferResized;
+		    std::is_base_of_v<ImageBase, Derived> ? Event::kImageResized : Event::kBufferResized;
 
 		m_size_func = func;
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(kResizeEvent);
@@ -435,18 +435,18 @@ public:
 // Last Frame Resources
 class LastFrameImage final : public ImageBase, public LastFrameResourceInfo<LastFrameImage, myvk::ImageBase> {
 private:
-	OutputImageAlias m_pointed_image{};
+	ImageAliasBase m_pointed_image{};
 
 public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameImage; }
 
 	inline explicit LastFrameImage(Parent parent) : ImageBase(parent, ResourceState::kLastFrame) {}
-	inline LastFrameImage(Parent parent, const OutputImageAlias &image_alias)
+	inline LastFrameImage(Parent parent, const ImageAliasBase &image_alias)
 	    : ImageBase(parent, ResourceState::kLastFrame), m_pointed_image{image_alias} {}
 	inline ~LastFrameImage() final = default;
 
-	inline void SetPointedAlias(const OutputImageAlias &image_alias) { m_pointed_image = image_alias; }
+	inline void SetPointedAlias(const ImageAliasBase &image_alias) { m_pointed_image = image_alias; }
 
 	inline const auto &GetPointedAlias() const { return m_pointed_image; }
 
@@ -456,19 +456,19 @@ public:
 
 class LastFrameBuffer final : public BufferBase, public LastFrameResourceInfo<LastFrameBuffer, myvk::BufferBase> {
 private:
-	OutputBufferAlias m_pointed_buffer{};
+	BufferAliasBase m_pointed_buffer{};
 
 public:
 	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
 	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameBuffer; }
 
 	inline explicit LastFrameBuffer(Parent parent) : BufferBase(parent, ResourceState::kLastFrame) {}
-	inline LastFrameBuffer(Parent parent, const OutputBufferAlias &buffer_alias)
+	inline LastFrameBuffer(Parent parent, const BufferAliasBase &buffer_alias)
 	    : BufferBase(parent, ResourceState::kLastFrame), m_pointed_buffer{buffer_alias} {}
 	inline LastFrameBuffer(LastFrameBuffer &&) = default;
 	inline ~LastFrameBuffer() final = default;
 
-	inline void SetPointedAlias(const OutputBufferAlias &buffer_alias) { m_pointed_buffer = buffer_alias; }
+	inline void SetPointedAlias(const BufferAliasBase &buffer_alias) { m_pointed_buffer = buffer_alias; }
 
 	inline const auto &GetPointedAlias() const { return m_pointed_buffer; }
 

@@ -44,6 +44,8 @@ public:
 	inline ResourceType GetType() const { return GetResourceType(m_class); }
 	inline AliasState GetState() const { return GetAliasState(m_class); }
 	inline AliasClass GetClass() const { return m_class; }
+	inline bool Empty() const { return m_source.Empty(); }
+	inline explicit operator bool() const { return !Empty(); }
 
 	inline const GlobalKey &GetSourceKey() const { return m_source; }
 
