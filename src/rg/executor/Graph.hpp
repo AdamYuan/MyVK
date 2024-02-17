@@ -104,9 +104,9 @@ private:
 	VertexFilter m_vertex_filter;
 	EdgeFilter m_edge_filter;
 
-	using EdgeIterator = Graph<VertexID_T, Edge_T>::EdgeIterator;
-	using InEdgeIterator = Graph<VertexID_T, Edge_T>::InEdgeIterator;
-	using OutEdgeIterator = Graph<VertexID_T, Edge_T>::OutEdgeIterator;
+	using EdgeIterator = typename Graph<VertexID_T, Edge_T>::EdgeIterator;
+	using InEdgeIterator = typename Graph<VertexID_T, Edge_T>::InEdgeIterator;
+	using OutEdgeIterator = typename Graph<VertexID_T, Edge_T>::OutEdgeIterator;
 
 public:
 	GraphView(const Graph<VertexID_T, Edge_T> &graph_ref, VertexFilter &&vertex_filter, EdgeFilter &&edge_filter)

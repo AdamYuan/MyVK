@@ -76,8 +76,7 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				        [&](const LastFrameResource auto *p_lf_resource) {
 					        m_pass_graph.AddEdge(nullptr, p_pass, PassEdge{nullptr, p_input, p_resource});
 
-					        const auto &src_alias = p_lf_resource->GetPointedAlias();
-					        traverse_output_alias(args, src_alias);
+					        traverse_output_alias(args, p_lf_resource->GetPointedAlias());
 
 					        // Last Frame Vertex
 					        m_resource_graph.AddVertex(p_resource);
