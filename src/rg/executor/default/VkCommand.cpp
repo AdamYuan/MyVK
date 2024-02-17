@@ -36,7 +36,7 @@ private:
 	struct AttachmentData {
 		VkImageLayout initial_layout{}, final_layout{};
 		VkAttachmentLoadOp load_op{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
-		VkAttachmentStoreOp store_op{VK_ATTACHMENT_STORE_OP_DONT_CARE};
+		VkAttachmentStoreOp store_op{VK_ATTACHMENT_STORE_OP_NONE};
 		bool may_alias{false};
 		uint32_t id{};
 		uint32_t first_subpass{}, last_subpass{};
@@ -178,9 +178,8 @@ private:
 
 		if (auto [p_src_pass_data, p_src_att_data, src_subpass] = get_src_p_pass_att_data(pass_barrier);
 		    p_src_att_data) {
-			VkAttachmentStoreOp store_op = dst_state.layout == VK_IMAGE_LAYOUT_UNDEFINED
-			                                   ? VK_ATTACHMENT_STORE_OP_DONT_CARE
-			                                   : VK_ATTACHMENT_STORE_OP_STORE;
+			VkAttachmentStoreOp store_op = dst_state.layout == VK_IMAGE_LAYOUT_UNDEFINED ? VK_ATTACHMENT_STORE_OP_NONE
+			                                                                             : VK_ATTACHMENT_STORE_OP_STORE;
 			src_state |= GetAttachmentStoreOpState(pass_barrier.p_resource, store_op);
 			p_src_att_data->store_op = store_op;
 			p_src_att_data->final_layout = dst_state.layout;
