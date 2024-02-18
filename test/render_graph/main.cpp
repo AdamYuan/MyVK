@@ -29,7 +29,7 @@ private:
 			    myvk::Sampler::Create(GetRenderGraphPtr()->GetDevicePtr(), VK_FILTER_LINEAR,
 			                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE));
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->AsInput());
+			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->Alias());
 		}
 		inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 		inline void CreatePipeline() final {
@@ -98,7 +98,7 @@ public:
 	inline DimPass(myvk_rg::Parent parent, myvk_rg::Image image, VkFormat format) : myvk_rg::GraphicsPassBase(parent) {
 		AddInputAttachmentInput(0, {0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
 	inline void CreatePipeline() final {
 		// Not the best solution, just to test INPUT_ATTACHMENT
@@ -165,7 +165,7 @@ public:
 		                                           {{1.0, 0.0, 0.0, 1.0}});
 		    }); */
 
-		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image->AsInput(), format);
+		auto blur_pass = CreatePass<GaussianBlurPass>({"blur_pass"}, lf_image->Alias(), format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
 
 		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass2->GetImageOutput(), format);
@@ -178,7 +178,7 @@ public:
 		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
 
 		auto copy_pass = CreatePass<myvk_rg::ImageBlitPass>({"blit_pass"}, imgui_pass->GetImageOutput(),
-		                                                    swapchain_image->AsInput(), VK_FILTER_NEAREST);
+		                                                    swapchain_image->Alias(), VK_FILTER_NEAREST);
 
 		AddResult({"final"}, copy_pass->GetDstOutput());
 	}

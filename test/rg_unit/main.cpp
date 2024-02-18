@@ -75,7 +75,7 @@ private:
 			AddDescriptorInput<myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({0}, {"in"},
 			                                                                                           image, nullptr);
 			auto out_img = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->AsInput());
+			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->Alias());
 		}
 		inline ~GaussianBlurSubpass() final = default;
 		inline void CreatePipeline() final {}
@@ -109,7 +109,7 @@ public:
 	    : myvk_rg::GraphicsPassBase(parent) {
 		AddInputAttachmentInput(0, {0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
 	inline ~DimPass() final = default;
 	inline void CreatePipeline() final {}
@@ -130,12 +130,12 @@ public:
 		                                           {{1.0, 0.0, 0.0, 1.0}});
 		    }); */
 
-		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image->AsInput(), format);
+		auto blur_pass = CreatePass<GaussianBlurPass::BlurYSubpass>({"blur_pass"}, lf_image->Alias(), format);
 		auto blur_pass2 = CreatePass<GaussianBlurPass>({"blur_pass2"}, blur_pass->GetImageOutput(), format);
 		auto combined_image = CreateResource<myvk_rg::CombinedImage>(
 		    {"combined"}, VK_IMAGE_VIEW_TYPE_2D_ARRAY,
 		    std::vector{blur_pass->GetImageOutput(), blur_pass2->GetImageOutput()});
-		auto blur_pass3 = CreatePass<GaussianBlurPass>({"blur_pass3"}, combined_image->AsInput(), format);
+		auto blur_pass3 = CreatePass<GaussianBlurPass>({"blur_pass3"}, combined_image->Alias(), format);
 
 		auto dim_pass = CreatePass<DimPass>({"dim_pass"}, blur_pass3->GetImageOutput(), format);
 
@@ -143,7 +143,7 @@ public:
 		    {"combined2"}, VK_IMAGE_VIEW_TYPE_2D_ARRAY,
 		    std::vector{dim_pass->GetImageOutput(), blur_pass3->GetImageOutput()});
 
-		auto dim_pass2 = CreatePass<DimPass>({"dim_pass2"}, combined_image2->AsInput(), format);
+		auto dim_pass2 = CreatePass<DimPass>({"dim_pass2"}, combined_image2->Alias(), format);
 
 		lf_image->SetPointedAlias(dim_pass2->GetImageOutput());
 
@@ -169,7 +169,7 @@ public:
 	    : myvk_rg::GraphicsPassBase(parent) {
 		AddInputAttachmentInput(0, {0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
 	inline ~InputAttPass() final = default;
 	inline void CreatePipeline() final {}
@@ -184,7 +184,7 @@ public:
 		AddDescriptorInput<myvk_rg::Usage::kSampledImage, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT>({0}, {"in"}, image,
 		                                                                                           nullptr);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->AsInput());
+		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
 	inline ~SamplerPass() final = default;
 	inline void CreatePipeline() final {}
@@ -198,8 +198,8 @@ public:
 	    : myvk_rg::ComputePassBase(parent) {
 		AddDescriptorInput<myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({0}, {"in"}, image);
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
-		AddDescriptorInput<myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>(
-		    {1}, {"out"}, out_image->AsInput());
+		AddDescriptorInput<myvk_rg::Usage::kStorageImageR, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({1}, {"out"},
+		                                                                                           out_image->Alias());
 	}
 	inline ~ImageRPass() final = default;
 	inline void CreatePipeline() final {}
@@ -225,7 +225,7 @@ public:
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
 		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
-		auto src_pass = CreatePass<InputAttPass>({"src"}, lf_image->AsInput(), format);
+		auto src_pass = CreatePass<InputAttPass>({"src"}, lf_image->Alias(), format);
 
 		auto read1_pass = CreatePass<InputAttPass>({"read", 1}, src_pass->GetImageOutput(), format);
 		auto read2_pass = CreatePass<InputAttPass>({"read", 2}, src_pass->GetImageOutput(), format);
@@ -238,7 +238,7 @@ public:
 		    std::vector{src_pass->GetImageOutput(), read1_pass->GetImageOutput(), read2_pass->GetImageOutput(),
 		                read3_pass->GetImageOutput(), read4_pass->GetImageOutput(), read5_pass->GetImageOutput()});
 
-		auto write_pass = CreatePass<ImageWPass>({"write"}, combined_image->AsInput());
+		auto write_pass = CreatePass<ImageWPass>({"write"}, combined_image->Alias());
 
 		lf_image->SetPointedAlias(write_pass->GetImageOutput());
 

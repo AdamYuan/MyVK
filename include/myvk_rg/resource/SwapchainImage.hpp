@@ -16,6 +16,7 @@ public:
 		SetDstLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}
 	~SwapchainImage() final = default;
+
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const final {
 		return m_frame_manager->GetCurrentSwapchainImageView();
 	}

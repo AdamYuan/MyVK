@@ -70,7 +70,7 @@ public:
 	    : ResourceBase(parent, MakeResourceClass(ResourceType::kBuffer, state)) {}
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> inline Visit(Visitor &&visitor) const;
-	inline RawBufferAlias AsInput() const { return RawBufferAlias{this}; }
+	inline RawBufferAlias Alias() const { return RawBufferAlias{this}; }
 
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const {
 		return Visit([](auto *buffer) -> const myvk::Ptr<myvk::BufferBase> & { return buffer->GetVkBuffer(); });
@@ -86,7 +86,7 @@ public:
 	    : ResourceBase(parent, MakeResourceClass(ResourceType::kImage, state)) {}
 
 	template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> inline Visit(Visitor &&visitor) const;
-	inline RawImageAlias AsInput() const { return RawImageAlias{this}; }
+	inline RawImageAlias Alias() const { return RawImageAlias{this}; }
 
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const {
 		return Visit([](auto *image) -> const myvk::Ptr<myvk::ImageView> & { return image->GetVkImageView(); });

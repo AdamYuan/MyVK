@@ -8,14 +8,15 @@ class StaticImage final : public myvk_rg::ExternalImageBase {
 private:
 	myvk::Ptr<myvk::ImageView> m_image_view;
 
-	MYVK_RG_OBJECT_FRIENDS
-	inline void Initialize(myvk::Ptr<myvk::ImageView> image_view, VkImageLayout layout) {
+public:
+	inline StaticImage(myvk_rg::Parent parent, myvk::Ptr<myvk::ImageView> image_view, VkImageLayout layout)
+	    : myvk_rg::ExternalImageBase(parent) {
 		m_image_view = std::move(image_view);
 		SetSrcLayout(layout);
 		SetDstLayout(layout);
 	}
+	inline ~StaticImage() final = default;
 
-public:
 	inline const myvk::Ptr<myvk::ImageView> &GetVkImageView() const final { return m_image_view; }
 	inline bool IsStatic() const final { return true; }
 };

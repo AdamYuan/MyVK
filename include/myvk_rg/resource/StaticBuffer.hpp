@@ -11,13 +11,13 @@ private:
 	myvk::Ptr<Buffer> m_buffer;
 	myvk::Ptr<myvk::BufferBase> m_buffer_base;
 
-	MYVK_RG_OBJECT_FRIENDS
-	inline void Initialize(myvk::Ptr<Buffer> buffer) {
+public:
+	inline StaticBuffer(myvk_rg::Parent parent, myvk::Ptr<Buffer> buffer) : myvk_rg::ExternalBufferBase(parent) {
 		m_buffer = std::move(buffer);
 		m_buffer_base = m_buffer;
 	}
+	inline ~StaticBuffer() final = default;
 
-public:
 	inline const auto &GetBuffer() const { return m_buffer; }
 
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const final { return m_buffer_base; }
