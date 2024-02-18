@@ -67,9 +67,13 @@ protected:
 	inline OutputImageAlias MakeImageOutput(const PoolKey &input_key) {
 		return PoolBase::template Get<ImageInput>(input_key)->GetOutput();
 	}
-	inline void ClearInputs() {
-		InputPool::Clear();
+	inline void DeleteInput(const PoolKey &input_key) {
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInputChanged);
+		PoolBase::Delete(input_key);
+	}
+	inline void ClearInputs() {
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInputChanged);
+		PoolBase::Clear();
 	}
 };
 

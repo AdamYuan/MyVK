@@ -26,6 +26,10 @@ protected:
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResultChanged);
 		PoolBase::template Construct<OutputBufferAlias>(result_key, buffer);
 	}
+	inline void DeleteResult(const PoolKey &result_key) {
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResultChanged);
+		PoolBase::Delete(result_key);
+	}
 	inline void ClearResults() {
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResultChanged);
 		PoolBase::Clear();
