@@ -244,7 +244,7 @@ int main() {
 			const auto &command_buffer = frame_manager->GetCurrentCommandBuffer();
 			const auto &render_graph = render_graphs[current_frame];
 
-			command_buffer->Begin();
+			command_buffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
 			render_graph->SetCanvasSize(frame_manager->GetExtent());
 			render_graph->SetDim(1.0f - std::exp(-dim_level));
