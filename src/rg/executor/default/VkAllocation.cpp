@@ -12,43 +12,6 @@ namespace myvk_rg_executor {
 
 using Meta = Metadata;
 
-class RGImage final : public myvk::ImageBase {
-private:
-	myvk::Ptr<myvk::Device> m_device_ptr;
-
-public:
-	inline RGImage(const myvk::Ptr<myvk::Device> &device, const VkImageCreateInfo &create_info) : m_device_ptr{device} {
-		vkCreateImage(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_image);
-		m_extent = create_info.extent;
-		m_mip_levels = create_info.mipLevels;
-		m_array_layers = create_info.arrayLayers;
-		m_format = create_info.format;
-		m_type = create_info.imageType;
-		m_usage = create_info.usage;
-	}
-	inline ~RGImage() final {
-		if (m_image != VK_NULL_HANDLE)
-			vkDestroyImage(GetDevicePtr()->GetHandle(), m_image, nullptr);
-	};
-	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
-};
-class RGBuffer final : public myvk::BufferBase {
-private:
-	myvk::Ptr<myvk::Device> m_device_ptr;
-
-public:
-	inline RGBuffer(const myvk::Ptr<myvk::Device> &device, const VkBufferCreateInfo &create_info)
-	    : m_device_ptr{device} {
-		vkCreateBuffer(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_buffer);
-		m_size = create_info.size;
-	}
-	inline ~RGBuffer() final {
-		if (m_buffer != VK_NULL_HANDLE)
-			vkDestroyBuffer(GetDevicePtr()->GetHandle(), m_buffer, nullptr);
-	}
-	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
-};
-
 class RGMemoryAllocation final : public myvk::DeviceObjectBase {
 private:
 	myvk::Ptr<myvk::Device> m_device_ptr;
@@ -71,6 +34,46 @@ public:
 	inline const VmaAllocationInfo &GetInfo() const { return m_info; }
 	inline VmaAllocation GetHandle() const { return m_allocation; }
 	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
+};
+class RGImage final : public myvk::ImageBase {
+private:
+	myvk::Ptr<myvk::Device> m_device_ptr;
+	myvk::Ptr<RGMemoryAllocation> m_alloc_ptr;
+
+public:
+	inline RGImage(const myvk::Ptr<myvk::Device> &device, const VkImageCreateInfo &create_info) : m_device_ptr{device} {
+		vkCreateImage(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_image);
+		m_extent = create_info.extent;
+		m_mip_levels = create_info.mipLevels;
+		m_array_layers = create_info.arrayLayers;
+		m_format = create_info.format;
+		m_type = create_info.imageType;
+		m_usage = create_info.usage;
+	}
+	inline ~RGImage() final {
+		if (m_image != VK_NULL_HANDLE)
+			vkDestroyImage(GetDevicePtr()->GetHandle(), m_image, nullptr);
+	};
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
+	inline void SetAllocPtr(const myvk::Ptr<RGMemoryAllocation> &alloc_ptr) { m_alloc_ptr = alloc_ptr; }
+};
+class RGBuffer final : public myvk::BufferBase {
+private:
+	myvk::Ptr<myvk::Device> m_device_ptr;
+	myvk::Ptr<RGMemoryAllocation> m_alloc_ptr;
+
+public:
+	inline RGBuffer(const myvk::Ptr<myvk::Device> &device, const VkBufferCreateInfo &create_info)
+	    : m_device_ptr{device} {
+		vkCreateBuffer(GetDevicePtr()->GetHandle(), &create_info, nullptr, &m_buffer);
+		m_size = create_info.size;
+	}
+	inline ~RGBuffer() final {
+		if (m_buffer != VK_NULL_HANDLE)
+			vkDestroyBuffer(GetDevicePtr()->GetHandle(), m_buffer, nullptr);
+	}
+	const myvk::Ptr<myvk::Device> &GetDevicePtr() const final { return m_device_ptr; }
+	inline void SetAllocPtr(const myvk::Ptr<RGMemoryAllocation> &alloc_ptr) { m_alloc_ptr = alloc_ptr; }
 };
 
 VkAllocation VkAllocation::Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args) {
@@ -387,24 +390,33 @@ void VkAllocation::bind_vk_resources(const Args &args) {
 
 		p_resource->Visit(overloaded(
 		    [&](const ImageResource auto *p_image) {
+			    auto &myvk_images = vk_alloc.image.myvk_images;
+
 			    vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offsets[0],
-			                        vk_alloc.image.myvk_images[0]->GetHandle(), nullptr);
-			    if (vk_alloc.double_buffer)
+			                        myvk_images[0]->GetHandle(), nullptr);
+			    static_cast<RGImage *>(myvk_images[0].get())->SetAllocPtr(vk_alloc.myvk_mem_alloc);
+			    if (vk_alloc.double_buffer) {
 				    vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offsets[1],
-				                        vk_alloc.image.myvk_images[1]->GetHandle(), nullptr);
+				                        myvk_images[1]->GetHandle(), nullptr);
+				    static_cast<RGImage *>(myvk_images[1].get())->SetAllocPtr(vk_alloc.myvk_mem_alloc);
+			    }
 		    },
 		    [&](const BufferResource auto *p_buffer) {
 			    auto *p_mapped = (uint8_t *)vk_alloc.myvk_mem_alloc->GetInfo().pMappedData;
+			    auto &myvk_buffers = vk_alloc.buffer.myvk_buffers;
+			    auto &mapped_ptrs = vk_alloc.buffer.mapped_ptrs;
 
 			    vmaBindBufferMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offsets[0],
-			                         vk_alloc.buffer.myvk_buffers[0]->GetHandle(), nullptr);
-			    vk_alloc.buffer.mapped_ptrs[0] = p_mapped + vk_alloc.mem_offsets[0];
+			                         myvk_buffers[0]->GetHandle(), nullptr);
+			    mapped_ptrs[0] = p_mapped + vk_alloc.mem_offsets[0];
+			    static_cast<RGBuffer *>(myvk_buffers[0].get())->SetAllocPtr(vk_alloc.myvk_mem_alloc);
 			    if (vk_alloc.double_buffer) {
 				    vmaBindBufferMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offsets[1],
-				                         vk_alloc.buffer.myvk_buffers[1]->GetHandle(), nullptr);
-				    vk_alloc.buffer.mapped_ptrs[1] = p_mapped + vk_alloc.mem_offsets[1];
+				                         myvk_buffers[1]->GetHandle(), nullptr);
+				    mapped_ptrs[1] = p_mapped + vk_alloc.mem_offsets[1];
+				    static_cast<RGBuffer *>(myvk_buffers[1].get())->SetAllocPtr(vk_alloc.myvk_mem_alloc);
 			    } else
-				    vk_alloc.buffer.mapped_ptrs[1] = vk_alloc.buffer.mapped_ptrs[0];
+				    mapped_ptrs[1] = mapped_ptrs[0];
 		    }));
 	}
 }

@@ -6,9 +6,9 @@
 #ifndef MYVK_RG_DEF_EXE_VKCOMMAND_HPP
 #define MYVK_RG_DEF_EXE_VKCOMMAND_HPP
 
+#include "../Barrier.hpp"
 #include "Schedule.hpp"
 #include "VkAllocation.hpp"
-#include "../Barrier.hpp"
 
 namespace myvk_rg_executor {
 
@@ -21,6 +21,7 @@ public:
 		myvk::Ptr<myvk::RenderPass> myvk_render_pass;
 		myvk::Ptr<myvk::ImagelessFramebuffer> myvk_framebuffer;
 		std::vector<const ImageBase *> attachments;
+		bool has_clear_values;
 	};
 
 private:

@@ -63,15 +63,17 @@ void VkRunner::Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const V
 			// Fetch Attachment Clear Values and Attachment Image Views
 			std::vector<VkClearValue> clear_values;
 			std::vector<VkImageView> attachment_vk_views;
-			clear_values.reserve(attachments.size());
+			if (pass_cmd.has_clear_values)
+				clear_values.reserve(attachments.size());
 			attachment_vk_views.reserve(attachments.size());
 
 			for (const auto &att : attachments) {
-				att->Visit(overloaded(
-				    [&](const AttachmentImage auto *p_att_image) {
-					    clear_values.push_back(p_att_image->GetClearValue());
-				    },
-				    [&](const auto *p_image) { clear_values.push_back({}); }));
+				if (pass_cmd.has_clear_values)
+					att->Visit(overloaded(
+					    [&](const AttachmentImage auto *p_att_image) {
+						    clear_values.push_back(p_att_image->GetClearValue());
+					    },
+					    [&](const auto *p_image) { clear_values.push_back({}); }));
 				attachment_vk_views.push_back(att->GetVkImageView()->GetHandle());
 			}
 

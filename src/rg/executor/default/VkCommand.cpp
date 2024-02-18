@@ -378,7 +378,7 @@ void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, con
 	// Attachment Descriptions
 	std::vector<VkAttachmentDescription2> vk_attachment_descriptions;
 	vk_attachment_descriptions.reserve(in.attachment_data_s.size());
-	for (const auto &[p_image, att_data] : in.attachment_data_s)
+	for (const auto &[p_image, att_data] : in.attachment_data_s) {
 		vk_attachment_descriptions.push_back({
 		    .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
 		    .flags = att_data.may_alias ? VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT : 0u,
@@ -391,6 +391,10 @@ void VkCommand::Builder::pop_pass(const myvk::Ptr<myvk::Device> &device_ptr, con
 		    .initialLayout = att_data.initial_layout,
 		    .finalLayout = att_data.final_layout,
 		});
+
+		if (att_data.load_op == VK_ATTACHMENT_LOAD_OP_CLEAR)
+			p_out->has_clear_values = true;
+	}
 
 	// Subpass Description Info
 	using pop_pass::SubpassDesciptionInfo;
