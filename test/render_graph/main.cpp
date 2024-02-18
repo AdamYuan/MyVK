@@ -150,7 +150,7 @@ public:
 class MyRenderGraph final : public myvk_rg::RenderGraphBase {
 private:
 public:
-	inline MyRenderGraph(const myvk::Ptr<myvk::FrameManager> &frame_manager)
+	inline explicit MyRenderGraph(const myvk::Ptr<myvk::FrameManager> &frame_manager)
 	    : myvk_rg::RenderGraphBase(frame_manager->GetDevicePtr()) {
 		/* auto init_image = CreateResource<myvk_rg::ManagedImage>({"init"}, VK_FORMAT_A2B10G10R10_UNORM_PACK32);
 		init_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_CLEAR);
@@ -213,10 +213,8 @@ int main() {
 	                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
 	myvk::Ptr<MyRenderGraph> render_graphs[kFrameCount];
-	for (auto &render_graph : render_graphs) {
+	for (auto &render_graph : render_graphs)
 		render_graph = myvk::MakePtr<MyRenderGraph>(frame_manager);
-		render_graph->SetCanvasSize(frame_manager->GetExtent());
-	}
 	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
 
 	float init_rgb[3] = {1.0f, 0.0f, 0.0f};
