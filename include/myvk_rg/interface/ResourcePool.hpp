@@ -27,6 +27,10 @@ protected:
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResourceChanged);
 		return PoolBase::template Construct<Type>(resource_key, std::forward<Args>(args)...);
 	}
+	inline void DeleteResource(const PoolKey &resource_key) {
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResourceChanged);
+		return PoolBase::Delete(resource_key);
+	}
 
 	template <typename BufferType = BufferBase, typename = std::enable_if_t<std::is_base_of_v<BufferBase, BufferType> ||
 	                                                                        std::is_same_v<BufferBase, BufferType>>>
@@ -43,10 +47,6 @@ protected:
 	                                      std::is_same_v<ResourceBase, ResourceType>>>
 	inline ResourceType *GetResource(const PoolKey &resource_image_key) const {
 		return PoolBase::template Get<ResourceType>(resource_image_key);
-	}
-	inline void DeleteResource(const PoolKey &resource_key) {
-		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResourceChanged);
-		PoolBase::Delete(resource_key);
 	}
 	inline void ClearResources() {
 		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kResourceChanged);

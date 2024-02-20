@@ -12,69 +12,42 @@ Metadata Metadata::Create(const Args &args) {
 	args.collection.ClearInfo(&ResourceInfo::metadata, &PassInfo::metadata);
 
 	Metadata r = {};
-	r.tag_resources(args);
+	r.fetch_external_infos(args);
 	r.fetch_alloc_sizes(args);
 	fetch_alloc_usages(args);
-	propagate_resource_meta(args);
+	propagate_alloc_info(args);
 	fetch_render_areas(args);
 	return r;
 }
 
-void Metadata::tag_resources(const Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetResources()) {
-		// Skip External Resources
-		if (p_resource->GetState() == ResourceState::kExternal) {
-			get_meta(p_resource).p_alloc_resource = nullptr;
-			get_meta(p_resource).p_view_resource = nullptr;
-			// Set External View and "Alloc" data
-			p_resource->Visit(overloaded(
-			    [](const ExternalImageBase *p_ext_image) {
-				    const auto &myvk_view = p_ext_image->GetVkImageView();
-				    const auto &myvk_image = myvk_view->GetImagePtr();
-				    const auto &vk_sub_range = myvk_view->GetSubresourceRange();
-				    get_view(p_ext_image) = {.size = SubImageSize(myvk_image->GetExtent(), vk_sub_range.layerCount,
-				                                                  vk_sub_range.baseMipLevel, vk_sub_range.levelCount),
-				                             .base_layer = myvk_view->GetSubresourceRange().baseArrayLayer};
-				    get_alloc(p_ext_image) = {.vk_type = myvk_image->GetType(),
-				                              .vk_format = myvk_image->GetFormat(),
-				                              .vk_usages = myvk_image->GetUsage()};
-			    },
-			    [](const ExternalBufferBase *p_ext_buffer) {
-				    const auto &myvk_buffer = p_ext_buffer->GetVkBuffer();
-				    get_view(p_ext_buffer) = {.size = myvk_buffer->GetSize()};
-				    // get_alloc(p_ext_buffer) = {.vk_usages = myvk_buffer->GetUsa}; TODO: External buffer usage
-			    },
-			    [](auto &&) {}));
-			continue;
-		}
-
-		auto p_alloc = Dependency::GetRootResource(p_resource), p_view = p_resource;
-		if (p_resource->GetState() == ResourceState::kLastFrame)
-			p_alloc = p_view = Dependency::GetLFResource(p_alloc);
-
-		auto &alloc_info = get_meta(p_resource);
-
-		alloc_info.p_alloc_resource = p_alloc;
-		alloc_info.p_view_resource = p_view;
-
-		if (IsAllocResource(p_resource))
-			m_alloc_resources.push_back(p_resource);
-		if (IsViewResource(p_resource))
-			m_view_resources.push_back(p_resource);
-	}
+void Metadata::fetch_external_infos(const Args &args) {
+	for (const ResourceBase *p_resource : args.dependency.GetResources())
+		p_resource->Visit(overloaded(
+		    [](const ExternalImageBase *p_ext_image) {
+			    const auto &myvk_view = p_ext_image->GetVkImageView();
+			    const auto &myvk_image = myvk_view->GetImagePtr();
+			    const auto &vk_sub_range = myvk_view->GetSubresourceRange();
+			    get_view(p_ext_image) = {.size = SubImageSize(myvk_image->GetExtent(), vk_sub_range.layerCount,
+			                                                  vk_sub_range.baseMipLevel, vk_sub_range.levelCount),
+			                             .base_layer = myvk_view->GetSubresourceRange().baseArrayLayer};
+			    get_alloc(p_ext_image) = {.vk_type = myvk_image->GetType(),
+			                              .vk_format = myvk_image->GetFormat(),
+			                              .vk_usages = myvk_image->GetUsage()};
+		    },
+		    [](const ExternalBufferBase *p_ext_buffer) {
+			    const auto &myvk_buffer = p_ext_buffer->GetVkBuffer();
+			    get_view(p_ext_buffer) = {.size = myvk_buffer->GetSize()};
+			    get_alloc(p_ext_buffer) = {.vk_usages = myvk_buffer->GetUsage()};
+		    },
+		    [](auto &&) {}));
 }
 
-void Metadata::propagate_resource_meta(const Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetResources()) {
-		if (!IsAllocResource(p_resource) && GetAllocResource(p_resource)) {
-			p_resource->Visit(
-			    [](const auto *p_resource) { get_alloc(p_resource) = get_alloc(GetAllocResource(p_resource)); });
-		}
-		if (!IsViewResource(p_resource) && GetViewResource(p_resource)) {
-			p_resource->Visit(
-			    [](const auto *p_resource) { get_view(p_resource) = get_view(GetViewResource(p_resource)); });
-		}
-	}
+void Metadata::propagate_alloc_info(const Args &args) {
+	for (const ResourceBase *p_resource : args.dependency.GetResources())
+		if (!Dependency::IsRootResource(p_resource))
+			p_resource->Visit([](const auto *p_resource) {
+				get_alloc(p_resource) = get_alloc(Dependency::GetRootResource(p_resource));
+			});
 }
 
 void Metadata::fetch_alloc_sizes(const Args &args) {
@@ -88,10 +61,10 @@ void Metadata::fetch_alloc_sizes(const Args &args) {
 		return std::visit(get_size_visitor, size_variant);
 	};
 
-	const auto combine_size = [&](const LocalInternalImage auto *p_alloc_image) {
+	const auto combine_size = [&](const InternalImage auto *p_alloc_image) {
 		auto &alloc = get_alloc(p_alloc_image);
 
-		const auto combine_size_impl = [&](const LocalInternalImage auto *p_view_image, auto &&combine_size) {
+		const auto combine_size_impl = [&](const InternalImage auto *p_view_image, auto &&combine_size) {
 			auto &view = get_view(p_view_image);
 			UpdateVkImageTypeFromVkImageViewType(&alloc.vk_type, p_view_image->GetViewType());
 			view.size = overloaded(
@@ -103,7 +76,7 @@ void Metadata::fetch_alloc_sizes(const Args &args) {
 				    for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image))
 					    // Foreach Sub-Image
 					    p_sub->Visit(overloaded(
-					        [&](const LocalInternalImage auto *p_sub) {
+					        [&](const InternalImage auto *p_sub) {
 						        combine_size(p_sub, combine_size);
 
 						        const auto &sub_size = get_view(p_sub).size;
@@ -140,7 +113,7 @@ void Metadata::fetch_alloc_sizes(const Args &args) {
 			    for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image)) {
 
 				    p_sub->Visit(overloaded(
-				        [&](const LocalInternalImage auto *p_sub) {
+				        [&](const InternalImage auto *p_sub) {
 					        get_view(p_sub).base_layer += get_view(p_combined_image).base_layer;
 				        },
 				        [](auto &&) {}));
@@ -153,9 +126,9 @@ void Metadata::fetch_alloc_sizes(const Args &args) {
 		accumulate_base_impl(p_alloc_image, accumulate_base_impl);
 	};
 
-	for (const ResourceBase *p_resource : m_alloc_resources)
+	for (const ResourceBase *p_resource : args.dependency.GetRootResources())
 		// Collect Size
-		p_resource->Visit(overloaded([&](const LocalInternalImage auto *p_image) { combine_size(p_image); },
+		p_resource->Visit(overloaded([&](const InternalImage auto *p_image) { combine_size(p_image); },
 		                             [&](const ManagedBuffer *p_managed_buffer) {
 			                             get_view(p_managed_buffer).size = get_size(p_managed_buffer->GetSize());
 		                             },
@@ -165,22 +138,12 @@ void Metadata::fetch_alloc_sizes(const Args &args) {
 void Metadata::fetch_alloc_usages(const Args &args) {
 	for (const auto *p_pass : args.dependency.GetPasses()) {
 		for (const InputBase *p_input : Dependency::GetPassInputs(p_pass))
-			Dependency::GetInputResource(p_input)->Visit([&](const auto *p_resource) {
-				if (GetAllocResource(p_resource))
-					get_alloc(GetAllocResource(p_resource)).vk_usages |= UsageGetCreationUsages(p_input->GetUsage());
-			});
-	}
-	for (const auto *p_resource : args.dependency.GetLFResources()) {
-		p_resource->Visit(overloaded(
-		    [&](const LastFrameImage *p_lf_image) {
-			    if (p_lf_image->GetInitTransferFunc())
-				    get_alloc(GetAllocResource(p_lf_image)).vk_usages |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-		    },
-		    [&](const LastFrameBuffer *p_lf_buffer) {
-			    if (p_lf_buffer->GetInitTransferFunc())
-				    get_alloc(GetAllocResource(p_lf_buffer)).vk_usages |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-		    },
-		    [](auto &&) {}));
+			Dependency::GetInputResource(p_input)->Visit(overloaded(
+			    [&](const InternalResource auto *p_resource) {
+				    get_alloc(Dependency::GetRootResource(p_resource)).vk_usages |=
+				        UsageGetCreationUsages(p_input->GetUsage());
+			    },
+			    [](auto &&) {}));
 	}
 }
 

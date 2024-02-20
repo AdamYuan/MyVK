@@ -48,10 +48,10 @@ void VkRunner::cmd_pipeline_barriers(const myvk::Ptr<myvk::CommandBuffer> &comma
 }
 
 void VkRunner::Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const VkCommand &vk_command,
-                   const VkDescriptor &vk_descriptor, bool flip) {
+                   const VkDescriptor &vk_descriptor) {
 	const auto run_pass = [&](const PassBase *p_pass) {
 		VkCommand::CreatePipeline(p_pass);
-		vk_descriptor.BindDynamic(p_pass, flip);
+		vk_descriptor.BindDynamic(p_pass);
 		p_pass->CmdExecute(command_buffer);
 	};
 
@@ -108,7 +108,7 @@ void VkRunner::Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const V
 	cmd_pipeline_barriers(command_buffer, vk_command.GetPostBarriers());
 }
 
-void VkRunner::LastFrameInit(const myvk::Ptr<myvk::Queue> &queue, const Dependency &dependency) {
+/* void VkRunner::LastFrameInit(const myvk::Ptr<myvk::Queue> &queue, const Dependency &dependency) {
 	std::vector<const ResourceBase *> transfer_resources;
 	std::vector<BarrierCmd> prior_barriers, post_barriers;
 
@@ -168,6 +168,6 @@ void VkRunner::LastFrameInit(const myvk::Ptr<myvk::Queue> &queue, const Dependen
 	auto fence = myvk::Fence::Create(queue->GetDevicePtr());
 	command_buffer->Submit(fence);
 	fence->Wait();
-}
+} */
 
 } // namespace myvk_rg_executor

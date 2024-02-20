@@ -61,10 +61,9 @@ struct PassInfo {
 		friend class VkDescriptor;
 
 	private:
-		bool double_buffer{false};
 		DescriptorBindingMap bindings, static_bindings, dynamic_bindings;
 
-		std::array<myvk::Ptr<myvk::DescriptorSet>, 2> myvk_sets;
+		myvk::Ptr<myvk::DescriptorSet> myvk_set;
 		myvk::Ptr<myvk::DescriptorSetLayout> myvk_layout;
 	} vk_descriptor;
 
@@ -86,7 +85,7 @@ struct ResourceInfo {
 
 	private:
 		std::size_t root_id{};
-		const ResourceBase *p_root_resource{}, *p_lf_resource{};
+		const ResourceBase *p_root_resource{};
 	} dependency{};
 
 	// Metadata
@@ -94,8 +93,6 @@ struct ResourceInfo {
 		friend class Metadata;
 
 	private:
-		const ResourceBase *p_alloc_resource{}, *p_view_resource{};
-
 		struct {
 			VkImageType vk_type{};
 			VkFormat vk_format{};
@@ -126,18 +123,17 @@ struct ResourceInfo {
 		friend class VkAllocation;
 
 	private:
-		bool double_buffer{};
 		struct {
-			std::array<myvk::Ptr<myvk::ImageBase>, 2> myvk_images{};
-			std::array<myvk::Ptr<myvk::ImageView>, 2> myvk_image_views{};
+			myvk::Ptr<myvk::ImageBase> myvk_image{};
+			myvk::Ptr<myvk::ImageView> myvk_image_view{};
 		} image{};
 		struct {
-			std::array<myvk::Ptr<myvk::BufferBase>, 2> myvk_buffers{};
-			std::array<void *, 2> mapped_ptrs{};
+			myvk::Ptr<myvk::BufferBase> myvk_buffer{};
+			void *mapped_ptr{};
 		} buffer{};
 		VkMemoryRequirements vk_mem_reqs{};
 		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
-		std::array<VkDeviceSize, 2> mem_offsets{};
+		VkDeviceSize mem_offset{};
 	} vk_allocation{};
 
 	struct {

@@ -59,13 +59,9 @@ protected:
 	template <typename PassType = PassBase> inline PassType *GetPass(const PoolKey &pass_key) const {
 		return PoolBase::template Get<PassType>(pass_key);
 	}
-	inline void DeletePass(const PoolKey &pass_key) {
-		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kPassChanged);
-		PoolBase::Delete(pass_key);
-	}
 	inline void ClearPasses() {
-		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kPassChanged);
 		PoolBase::Clear();
+		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kPassChanged);
 	}
 };
 

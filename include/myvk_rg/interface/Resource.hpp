@@ -17,21 +17,23 @@
 
 namespace myvk_rg {
 enum class BufferMapType : uint8_t { kNone, kRandom, kSeqWrite };
-}
+enum class ExternalSyncType : uint8_t {
+	kCustom,   // Sync with the stages and accesses (and layouts) specified
+	kLastFrame // Sync with (Load) LastFrame's Resource (LastFrame can be in another RenderGraph)
+};
+} // namespace myvk_rg
 
 namespace myvk_rg::interface {
 
-enum class ResourceState : uint8_t { kManaged, kCombinedImage, kExternal, kLastFrame };
+enum class ResourceState : uint8_t { kManaged, kCombinedImage, kExternal };
 #define MAKE_RESOURCE_CLASS_VAL(Type, State) uint8_t(static_cast<uint8_t>(State) << 1u | static_cast<uint8_t>(Type))
 enum class ResourceClass : uint8_t {
 	kManagedImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kManaged),
 	kExternalImageBase = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kExternal),
 	kCombinedImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kCombinedImage),
-	kLastFrameImage = MAKE_RESOURCE_CLASS_VAL(ResourceType::kImage, ResourceState::kLastFrame),
 
 	kManagedBuffer = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kManaged),
 	kExternalBufferBase = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kExternal),
-	kLastFrameBuffer = MAKE_RESOURCE_CLASS_VAL(ResourceType::kBuffer, ResourceState::kLastFrame)
 };
 inline constexpr ResourceClass MakeResourceClass(ResourceType type, ResourceState state) {
 	return static_cast<ResourceClass>(MAKE_RESOURCE_CLASS_VAL(type, state));
@@ -128,19 +130,13 @@ public:
 // External Resources
 template <typename Derived> class ExternalResourceInfo {
 private:
-	inline RenderGraphBase *get_render_graph_ptr() {
-		static_assert(std::is_base_of_v<ObjectBase, Derived>);
-		return static_cast<ObjectBase *>(static_cast<Derived *>(this))->GetRenderGraphPtr();
-	}
-	inline RenderGraphBase *get_render_graph_ptr() const {
-		static_assert(std::is_base_of_v<ObjectBase, Derived>);
-		return static_cast<const ObjectBase *>(static_cast<const Derived *>(this))->GetRenderGraphPtr();
-	}
-
 	VkPipelineStageFlags2 m_src_stages{VK_PIPELINE_STAGE_2_NONE}, m_dst_stages{VK_PIPELINE_STAGE_2_NONE};
 	VkAccessFlags2 m_src_accesses{VK_ACCESS_2_NONE}, m_dst_accesses{VK_ACCESS_2_NONE};
+	const bool m_is_static{false};
+	const ExternalSyncType m_sync_type{ExternalSyncType::kCustom};
 
 public:
+	ExternalResourceInfo(bool is_static, ExternalSyncType sync_type) : m_is_static{is_static}, m_sync_type{sync_type} {}
 	inline VkPipelineStageFlags2 GetSrcPipelineStages() const { return m_src_stages; }
 	inline void SetSrcPipelineStages(VkPipelineStageFlags2 src_stages) {
 		if (m_src_stages != src_stages) {
@@ -169,7 +165,8 @@ public:
 			static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kExternalAccessChanged);
 		}
 	}
-	inline virtual bool IsStatic() const = 0;
+	inline bool IsStatic() const { return m_is_static; }
+	inline ExternalSyncType GetSyncType() const { return m_sync_type; }
 };
 class ExternalImageBase : public ImageBase,
                           public ImageAttachmentInfo<ExternalImageBase>,
@@ -181,7 +178,8 @@ public:
 	virtual const myvk::Ptr<myvk::ImageView> &GetVkImageView() const = 0;
 	inline VkFormat GetFormat() const { return GetVkImageView()->GetImagePtr()->GetFormat(); }
 
-	inline ExternalImageBase(Parent parent) : ImageBase(parent, ResourceState::kExternal) {}
+	inline ExternalImageBase(Parent parent, bool is_static, ExternalSyncType sync_type)
+	    : ImageBase(parent, ResourceState::kExternal), ExternalResourceInfo<ExternalImageBase>(is_static, sync_type) {}
 	inline ~ExternalImageBase() override = default;
 
 private:
@@ -211,7 +209,12 @@ public:
 
 	virtual const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const = 0;
 
-	inline ExternalBufferBase(Parent parent) : BufferBase(parent, ResourceState::kExternal) {}
+	inline static VkImageLayout GetSrcLayout() { return VK_IMAGE_LAYOUT_UNDEFINED; }
+	inline static VkImageLayout GetDstLayout() { return VK_IMAGE_LAYOUT_UNDEFINED; }
+
+	inline ExternalBufferBase(Parent parent, bool is_static, ExternalSyncType sync_type)
+	    : BufferBase(parent, ResourceState::kExternal), ExternalResourceInfo<ExternalBufferBase>(is_static, sync_type) {
+	}
 	inline ~ExternalBufferBase() override = default;
 };
 
@@ -432,52 +435,6 @@ public:
 	inline const InitTransferFunc &GetInitTransferFunc() const { return m_init_transfer_func; }
 };
 
-// Last Frame Resources
-class LastFrameImage final : public ImageBase, public LastFrameResourceInfo<LastFrameImage, myvk::ImageBase> {
-private:
-	ImageAliasBase m_pointed_image{};
-
-public:
-	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
-	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameImage; }
-
-	inline explicit LastFrameImage(Parent parent) : ImageBase(parent, ResourceState::kLastFrame) {}
-	inline LastFrameImage(Parent parent, const ImageAliasBase &image_alias)
-	    : ImageBase(parent, ResourceState::kLastFrame), m_pointed_image{image_alias} {}
-	inline ~LastFrameImage() final = default;
-
-	inline void SetPointedAlias(const ImageAliasBase &image_alias) { m_pointed_image = image_alias; }
-
-	inline const auto &GetPointedAlias() const { return m_pointed_image; }
-
-	// inline VkFormat GetFormat() const { return m_pointed_image->GetFormat(); }
-	const myvk::Ptr<myvk::ImageView> &GetVkImageView() const;
-};
-
-class LastFrameBuffer final : public BufferBase, public LastFrameResourceInfo<LastFrameBuffer, myvk::BufferBase> {
-private:
-	BufferAliasBase m_pointed_buffer{};
-
-public:
-	inline constexpr ResourceState GetState() const { return ResourceState::kLastFrame; }
-	inline constexpr ResourceClass GetClass() const { return ResourceClass::kLastFrameBuffer; }
-
-	inline explicit LastFrameBuffer(Parent parent) : BufferBase(parent, ResourceState::kLastFrame) {}
-	inline LastFrameBuffer(Parent parent, const BufferAliasBase &buffer_alias)
-	    : BufferBase(parent, ResourceState::kLastFrame), m_pointed_buffer{buffer_alias} {}
-	inline LastFrameBuffer(LastFrameBuffer &&) = default;
-	inline ~LastFrameBuffer() final = default;
-
-	inline void SetPointedAlias(const BufferAliasBase &buffer_alias) { m_pointed_buffer = buffer_alias; }
-
-	inline const auto &GetPointedAlias() const { return m_pointed_buffer; }
-
-	const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const;
-
-	void *GetMappedData() const;
-	template <typename T = void> inline T *GetMappedData() const { return reinterpret_cast<T *>(GetMappedData()); }
-};
-
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) const {
 	switch (m_class) {
 	case ResourceClass::kManagedImage:
@@ -486,15 +443,11 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> Resour
 		return visitor(static_cast<const ExternalImageBase *>(this));
 	case ResourceClass::kCombinedImage:
 		return visitor(static_cast<const CombinedImage *>(this));
-	case ResourceClass::kLastFrameImage:
-		return visitor(static_cast<const LastFrameImage *>(this));
 
 	case ResourceClass::kManagedBuffer:
 		return visitor(static_cast<const ManagedBuffer *>(this));
 	case ResourceClass::kExternalBufferBase:
 		return visitor(static_cast<const ExternalBufferBase *>(this));
-	case ResourceClass::kLastFrameBuffer:
-		return visitor(static_cast<const LastFrameBuffer *>(this));
 	}
 	assert(false);
 	return visitor(static_cast<const ManagedImage *>(nullptr));
@@ -507,8 +460,6 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ImageB
 		return visitor(static_cast<const ExternalImageBase *>(this));
 	case ResourceState::kCombinedImage:
 		return visitor(static_cast<const CombinedImage *>(this));
-	case ResourceState::kLastFrame:
-		return visitor(static_cast<const LastFrameImage *>(this));
 	}
 	assert(false);
 	return visitor(static_cast<const ManagedImage *>(nullptr));
@@ -519,8 +470,6 @@ template <typename Visitor> std::invoke_result_t<Visitor, ManagedBuffer *> Buffe
 		return visitor(static_cast<const ManagedBuffer *>(this));
 	case ResourceState::kExternal:
 		return visitor(static_cast<const ExternalBufferBase *>(this));
-	case ResourceState::kLastFrame:
-		return visitor(static_cast<const LastFrameBuffer *>(this));
 	default:
 		assert(false);
 	}
@@ -533,25 +482,15 @@ template <typename T>
 concept BufferResource = std::derived_from<T, BufferBase>;
 
 template <typename T>
-concept LastFrameResource = std::same_as<T, LastFrameBuffer> || std::same_as<T, LastFrameImage>;
-
-template <typename T>
 concept ExternalResource = std::derived_from<T, ExternalResourceInfo<T>>;
 
 template <typename T>
-concept InternalImage =
-    std::same_as<T, ManagedImage> || std::same_as<T, CombinedImage> || std::same_as<T, LastFrameImage>;
+concept InternalImage = std::same_as<T, ManagedImage> || std::same_as<T, CombinedImage>;
 template <typename T>
-concept InternalBuffer = std::same_as<T, ManagedBuffer> || std::same_as<T, LastFrameBuffer>;
+concept InternalBuffer = std::same_as<T, ManagedBuffer>;
 template <typename T>
 concept InternalResource = InternalImage<T> || InternalBuffer<T>;
 
-template <typename T>
-concept LocalInternalImage = InternalImage<T> && !LastFrameResource<T>;
-template <typename T>
-concept LocalInternalBuffer = InternalBuffer<T> && !LastFrameResource<T>;
-template <typename T>
-concept LocalInternalResource = InternalResource<T> && !LastFrameResource<T>;
 template <typename T>
 concept AttachmentImage = std::derived_from<T, ImageAttachmentInfo<T>>;
 
