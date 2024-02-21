@@ -225,6 +225,20 @@ int main() {
 
 		for (auto &render_graph : render_graphs)
 			render_graph->SetLFImage(lf_image_view);
+
+		auto command_buffer = myvk::CommandBuffer::Create(myvk::CommandPool::Create(generic_queue));
+		command_buffer->Begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+		command_buffer->CmdPipelineBarrier(
+		    VK_PIPELINE_STAGE_NONE, VK_PIPELINE_STAGE_TRANSFER_BIT, {}, {},
+		    {lf_image_view->GetMemoryBarrier(VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_ACCESS_TRANSFER_WRITE_BIT,
+		                                     VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)});
+		command_buffer->CmdClearColorImage(lf_image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		                                   VkClearColorValue{});
+		command_buffer->End();
+
+		auto fence = myvk::Fence::Create(device);
+		command_buffer->Submit(fence);
+		fence->Wait();
 	});
 
 	float init_rgb[3] = {1.0f, 0.0f, 0.0f};
