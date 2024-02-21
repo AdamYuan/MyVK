@@ -150,11 +150,14 @@ void Executor::CmdExecute(const interface::RenderGraphBase *p_render_graph,
                           const myvk::Ptr<myvk::CommandBuffer> &command_buffer) {
 	const auto &queue = command_buffer->GetCommandPoolPtr()->GetQueuePtr();
 	compile(p_render_graph, queue);
-	/* if (m_lf_init) {
-	    VkRunner::LastFrameInit(queue, m_p_compile_info->dependency);
-	    m_lf_init = false;
-	} */
-	VkRunner::Run(command_buffer, m_p_compile_info->vk_command, m_p_compile_info->vk_descriptor);
+	VkRunner::Run(command_buffer, {.render_graph = *p_render_graph,
+	                               .collection = m_p_compile_info->collection,
+	                               .dependency = m_p_compile_info->dependency,
+	                               .metadata = m_p_compile_info->metadata,
+	                               .schedule = m_p_compile_info->schedule,
+	                               .vk_allocation = m_p_compile_info->vk_allocation,
+	                               .vk_command = m_p_compile_info->vk_command,
+	                               .vk_descriptor = m_p_compile_info->vk_descriptor});
 }
 
 const myvk::Ptr<myvk::ImageView> &Executor::GetVkImageView(const interface::ManagedImage *p_managed_image) {
@@ -164,11 +167,17 @@ const myvk::Ptr<myvk::ImageView> &Executor::GetVkImageView(const interface::Comb
 	return VkAllocation::GetVkImageView(p_combined_image);
 }
 
-const myvk::Ptr<myvk::BufferBase> &Executor::GetVkBuffer(const interface::ManagedBuffer *p_managed_buffer) {
-	return VkAllocation::GetVkBuffer(p_managed_buffer);
+const interface::BufferView &Executor::GetBufferView(const interface::ManagedBuffer *p_managed_buffer) {
+	return VkAllocation::GetBufferView(p_managed_buffer);
 }
 void *Executor::GetMappedData(const interface::ManagedBuffer *p_managed_buffer) {
 	return VkAllocation::GetMappedData(p_managed_buffer);
+}
+const interface::BufferView &Executor::GetBufferView(const interface::CombinedBuffer *p_combined_buffer) {
+	return VkAllocation::GetBufferView(p_combined_buffer);
+}
+void *Executor::GetMappedData(const interface::CombinedBuffer *p_combined_buffer) {
+	return VkAllocation::GetMappedData(p_combined_buffer);
 }
 
 uint32_t Executor::GetSubpass(const interface::PassBase *p_pass) { return Schedule::GetU32SubpassID(p_pass); }

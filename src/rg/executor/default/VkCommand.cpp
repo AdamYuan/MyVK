@@ -97,8 +97,6 @@ private:
 	Barrier *get_p_barrier_data(const Schedule::PassBarrier &pass_barrier) {
 		if (pass_barrier.dst_s.empty())
 			return &m_post_barriers[pass_barrier.p_resource];
-		if (pass_barrier.src_s.empty())
-			return &m_pass_data_s[0].prior_barriers[pass_barrier.p_resource];
 		// It is guaranteed dst_s[0] has the smallest GroupID
 		return &get_p_pass_data(pass_barrier.dst_s[0])->prior_barriers[pass_barrier.p_resource];
 	}

@@ -64,18 +64,19 @@ void Dependency::traverse_pass(const Args &args, const PassBase *p_pass) {
 				    get_dep_info(p_input).p_resource = p_resource;
 
 				    p_resource->Visit(overloaded(
-				        [&](const CombinedImage *p_combined_image) {
-					        for (const OutputImageAlias &src_alias : p_combined_image->GetSubImages()) {
+				        [&](const CombinedResource auto *p_combined_resource) {
+					        for (const OutputAlias auto &src_alias : p_combined_resource->GetSubAliases()) {
 						        const InputBase *p_src_input = traverse_output_alias(args, src_alias);
 						        const PassBase *p_src_pass = get_dep_info(p_src_input).p_pass;
-						        const ResourceBase *p_sub_image = get_dep_info(p_src_input).p_resource;
+						        const ResourceBase *p_sub_resource = get_dep_info(p_src_input).p_resource;
 
 						        // This means p_src_pass is present in the stack, so a cycle exists
-						        if (!p_sub_image)
+						        if (!p_sub_resource)
 							        Throw(error::PassNotDAG{});
 
-						        m_pass_graph.AddEdge(p_src_pass, p_pass, PassEdge{p_src_input, p_input, p_sub_image});
-						        m_resource_graph.AddEdge(p_resource, p_sub_image, {});
+						        m_pass_graph.AddEdge(p_src_pass, p_pass,
+						                             PassEdge{p_src_input, p_input, p_sub_resource});
+						        m_resource_graph.AddEdge(p_resource, p_sub_resource, {});
 					        }
 				        },
 				        [&](auto &&) {
@@ -169,13 +170,11 @@ void Dependency::tag_resources(const Args &args) {
 	if (!find_trees_result.is_forest)
 		Throw(error::ResourceNotTree{});
 
+	m_root_resources = std::move(find_trees_result.roots);
+
 	// Assign Root ID to resources
-	for (const ResourceBase *p_resource : m_resources)
-		if (IsRootResource(p_resource)) {
-			std::size_t root_id = m_root_resources.size();
-			get_dep_info(p_resource).root_id = root_id;
-			m_root_resources.push_back(p_resource);
-		}
+	for (std::size_t root_id = 0; const ResourceBase *p_root_resource : m_root_resources)
+		get_dep_info(p_root_resource).root_id = root_id++;
 	for (const ResourceBase *p_resource : m_resources)
 		if (!IsRootResource(p_resource))
 			get_dep_info(p_resource).root_id = get_dep_info(GetRootResource(p_resource)).root_id;

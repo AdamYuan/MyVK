@@ -315,12 +315,12 @@ void Schedule::finalize_last_inputs(const Schedule::Args &args) {
 }
 
 void Schedule::make_output_barriers(const Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetRootResources())
-		if (p_resource->GetState() == ResourceState::kExternal)
-			m_pass_barriers.push_back({.p_resource = p_resource,
-			                           .src_s = get_sched_info(p_resource).last_inputs,
-			                           .dst_s = {},
-			                           .type = BarrierType::kExtOutput});
+	// External Resources
+	for (const ResourceBase *p_resource : args.metadata.GetExtResources())
+		m_pass_barriers.push_back({.p_resource = p_resource,
+		                           .src_s = get_sched_info(p_resource).last_inputs,
+		                           .dst_s = {},
+		                           .type = BarrierType::kExtOutput});
 }
 
 } // namespace myvk_rg_executor

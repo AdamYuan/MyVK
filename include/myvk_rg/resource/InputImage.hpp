@@ -10,11 +10,10 @@ private:
 
 public:
 	inline InputImage(myvk_rg::Parent parent, myvk::Ptr<myvk::ImageView> image_view)
-	    : myvk_rg::ExternalImageBase(parent, true, ExternalSyncType::kLastFrame) {
+	    : myvk_rg::ExternalImageBase(parent, ExternalSyncType::kLastFrame) {
 		SetVkImageView(std::move(image_view));
 	}
-	inline InputImage(myvk_rg::Parent parent)
-	    : myvk_rg::ExternalImageBase(parent, true, ExternalSyncType::kLastFrame) {}
+	inline InputImage(myvk_rg::Parent parent) : myvk_rg::ExternalImageBase(parent, ExternalSyncType::kLastFrame) {}
 	inline ~InputImage() final = default;
 
 	inline void SetVkImageView(myvk::Ptr<myvk::ImageView> image_view) { m_image_view = std::move(image_view); }

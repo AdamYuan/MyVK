@@ -209,6 +209,17 @@ public:
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 };
+class BufferWPass final : public myvk_rg::ComputePassBase {
+public:
+	inline BufferWPass(myvk_rg::Parent parent, const myvk_rg::Buffer &buffer) : myvk_rg::ComputePassBase(parent) {
+		AddDescriptorInput<myvk_rg::Usage::kStorageBufferRW, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT>({0}, {"out"},
+		                                                                                             buffer);
+	}
+	inline ~BufferWPass() final = default;
+	inline void CreatePipeline() final {}
+	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
+	inline auto GetBufferOutput() { return MakeBufferOutput({"out"}); }
+};
 
 class MyRenderGraph2 final : public myvk_rg::RenderGraphBase {
 public:
@@ -217,6 +228,18 @@ public:
 
 		auto lf_image = CreateResource<myvk_rg::ManagedImage>({"lf"}, format);
 		auto src_pass = CreatePass<InputAttPass>({"src"}, lf_image->Alias(), format);
+
+		auto buffer0 = CreateResource<myvk_rg::ManagedBuffer>({"b", 0});
+		buffer0->SetSize(100);
+		auto buffer1 = CreateResource<myvk_rg::ManagedBuffer>({"b", 1});
+		buffer1->SetSize(111);
+
+		auto wb0_pass = CreatePass<BufferWPass>({"wb", 0}, buffer0->Alias());
+		auto wb1_pass = CreatePass<BufferWPass>({"wb", 1}, buffer1->Alias());
+
+		auto cbuffer = CreateResource<myvk_rg::CombinedBuffer>(
+		    {"cb"}, std::vector{wb0_pass->GetBufferOutput(), wb1_pass->GetBufferOutput()});
+		auto wcb_pass = CreatePass<BufferWPass>({"wcb"}, cbuffer->Alias());
 
 		auto read1_pass = CreatePass<InputAttPass>({"read", 1}, src_pass->GetImageOutput(), format);
 		auto read2_pass = CreatePass<InputAttPass>({"read", 2}, src_pass->GetImageOutput(), format);
@@ -232,6 +255,7 @@ public:
 		auto write_pass = CreatePass<ImageWPass>({"write"}, combined_image->Alias());
 
 		AddResult({"final"}, write_pass->GetImageOutput());
+		AddResult({"f2"}, wcb_pass->GetBufferOutput());
 
 		SetCanvasSize({1280, 720});
 	}
@@ -243,7 +267,7 @@ public:
 #include "../../src/rg/executor/default/Metadata.hpp"
 #include "../../src/rg/executor/default/Schedule.hpp"
 TEST_SUITE("Default Executor") {
-	auto render_graph = myvk::MakePtr<MyRenderGraph>();
+	auto render_graph = myvk::MakePtr<MyRenderGraph2>();
 
 	using myvk_rg_executor::Collection;
 	using myvk_rg_executor::Dependency;
@@ -341,7 +365,7 @@ TEST_SUITE("Default Executor") {
 			    },
 			    [](const myvk_rg::interface::BufferBase *p_buffer) {
 				    const auto &view = Metadata::GetViewInfo(p_buffer);
-				    printf("size=%lu", view.size);
+				    printf("offset=%lu, size=%lu", view.offset, view.size);
 			    }));
 			printf("\n");
 		}
@@ -357,7 +381,7 @@ TEST_SUITE("Default Executor") {
 			    },
 			    [](const myvk_rg::interface::BufferBase *p_buffer) {
 				    const auto &view = Metadata::GetViewInfo(p_buffer);
-				    printf("size=%lu", view.size);
+				    printf("offset=%lu, size=%lu", view.offset, view.size);
 			    }));
 			printf("\n");
 		}

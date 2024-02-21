@@ -4,27 +4,19 @@
 #include <myvk_rg/RenderGraph.hpp>
 
 namespace myvk_rg {
-template <typename Buffer = myvk::Buffer> class InputBuffer final : public myvk_rg::ExternalBufferBase {
-	static_assert(std::is_base_of_v<myvk::BufferBase, Buffer>);
-
+class InputBuffer final : public myvk_rg::ExternalBufferBase {
 private:
-	myvk::Ptr<Buffer> m_buffer;
-	myvk::Ptr<myvk::BufferBase> m_buffer_base;
+	BufferView m_buffer_view;
 
 public:
-	inline InputBuffer(myvk_rg::Parent parent, myvk::Ptr<Buffer> buffer)
-	    : myvk_rg::ExternalBufferBase(parent, true, ExternalSyncType::kLastFrame) {
-		SetBuffer(std::move(buffer));
+	inline InputBuffer(myvk_rg::Parent parent, BufferView buffer_view)
+	    : myvk_rg::ExternalBufferBase(parent, ExternalSyncType::kLastFrame) {
+		SetBufferView(std::move(buffer_view));
 	}
-	inline InputBuffer(myvk_rg::Parent parent)
-	    : myvk_rg::ExternalBufferBase(parent, true, ExternalSyncType::kLastFrame) {}
+	inline InputBuffer(myvk_rg::Parent parent) : myvk_rg::ExternalBufferBase(parent, ExternalSyncType::kLastFrame) {}
 	inline ~InputBuffer() final = default;
-	inline void SetBuffer(myvk::Ptr<Buffer> buffer) {
-		m_buffer = std::move(buffer);
-		m_buffer_base = m_buffer;
-	}
-	inline const auto &GetBuffer() const { return m_buffer; }
-	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const final { return m_buffer_base; }
+	inline void SetBufferView(BufferView buffer_view) { m_buffer_view = std::move(buffer_view); }
+	inline const BufferView &GetBufferView() const final { return m_buffer_view; }
 };
 } // namespace myvk_rg
 

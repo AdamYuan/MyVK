@@ -3,6 +3,7 @@
 //
 
 #include "VkDescriptor.hpp"
+#include "VkRunner.hpp" // For IsExtChanged
 
 #include <list>
 
@@ -14,8 +15,9 @@ struct DescriptorWriter {
 	std::list<VkDescriptorBufferInfo> buffer_infos;
 
 	inline void PushBufferWrite(const myvk::Ptr<myvk::DescriptorSet> &set, DescriptorIndex index,
-	                            const myvk::Ptr<myvk::BufferBase> &buffer, const InputBase *p_input) {
-		buffer_infos.push_back({.buffer = buffer->GetHandle(), .offset = 0, .range = buffer->GetSize()});
+	                            const BufferView &buffer_view, const InputBase *p_input) {
+		buffer_infos.push_back(
+		    {.buffer = buffer_view.buffer->GetHandle(), .offset = buffer_view.offset, .range = buffer_view.size});
 		writes.push_back({.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
 		                  .dstSet = set->GetHandle(),
 		                  .dstBinding = index.binding,
@@ -50,15 +52,9 @@ void VkDescriptor::collect_pass_bindings(const PassBase *p_pass) {
 			Throw(error::DupDescriptorIndex{.key = p_input->GetGlobalKey()});
 		get_desc_info(p_pass).bindings[index] = p_input;
 
-		// Separate Static and Dynamic Bindings
-		bool is_static = Dependency::GetInputResource(p_input)->Visit(
-		    overloaded([&](const ExternalResource auto *p_ext_resource) { return p_ext_resource->IsStatic(); },
-		               [](auto &&) { return true; }));
-
-		if (is_static)
-			get_desc_info(p_pass).static_bindings[index] = p_input;
-		else
-			get_desc_info(p_pass).dynamic_bindings[index] = p_input;
+		// External Bindings might need updates
+		if (Dependency::GetInputResource(p_input)->GetState() == ResourceState::kExternal)
+			get_desc_info(p_pass).ext_bindings[index] = p_input;
 	}
 }
 
@@ -167,26 +163,22 @@ void VkDescriptor::create_vk_sets(const VkDescriptor::Args &args) {
 	}
 }
 
-void VkDescriptor::pass_vk_bind_static(const PassBase *p_pass) {
-	auto &desc_info = get_desc_info(p_pass);
-	if (desc_info.static_bindings.empty())
-		return;
-
+void VkDescriptor::pass_vk_bind_internal(std::span<const PassBase *const> passes) {
 	DescriptorWriter writer{};
-	for (const auto &[index, p_input] : desc_info.static_bindings) {
-		Dependency::GetInputResource(p_input)->Visit(overloaded(
-		    [&](const InternalImage auto *p_int_image) {
-			    writer.PushImageWrite(desc_info.myvk_set, index, VkAllocation::GetVkImageView(p_int_image), p_input);
-		    },
-		    [&](const ExternalImageBase *p_ext_image) {
-			    writer.PushImageWrite(desc_info.myvk_set, index, p_ext_image->GetVkImageView(), p_input);
-		    },
-		    [&](const InternalBuffer auto *p_int_buffer) {
-			    writer.PushBufferWrite(desc_info.myvk_set, index, VkAllocation::GetVkBuffer(p_int_buffer), p_input);
-		    },
-		    [&](const ExternalBufferBase *p_ext_buffer) {
-			    writer.PushBufferWrite(desc_info.myvk_set, index, p_ext_buffer->GetVkBuffer(), p_input);
-		    }));
+
+	for (auto p_pass : passes) {
+		auto &desc_info = get_desc_info(p_pass);
+		for (const auto &[index, p_input] : desc_info.bindings) {
+			Dependency::GetInputResource(p_input)->Visit(overloaded(
+			    [&](const InternalImage auto *p_int_image) {
+				    writer.PushImageWrite(desc_info.myvk_set, index, VkAllocation::GetVkImageView(p_int_image),
+				                          p_input);
+			    },
+			    [&](const ExternalImageBase *p_ext_image) {
+				    writer.PushImageWrite(desc_info.myvk_set, index, p_ext_image->GetVkImageView(), p_input);
+			    },
+			    [](auto &&) {}));
+		}
 	}
 
 	if (writer.writes.empty())
@@ -195,21 +187,24 @@ void VkDescriptor::pass_vk_bind_static(const PassBase *p_pass) {
 	vkUpdateDescriptorSets(m_device_ptr->GetHandle(), writer.writes.size(), writer.writes.data(), 0, nullptr);
 }
 
-void VkDescriptor::BindDynamic(const PassBase *p_pass) const {
-	auto &desc_info = get_desc_info(p_pass);
-	if (desc_info.dynamic_bindings.empty())
-		return;
-
+void VkDescriptor::BindExternal(std::span<const PassBase *const> passes) const {
 	DescriptorWriter writer{};
-	for (const auto &[index, p_input] : desc_info.dynamic_bindings) {
-		Dependency::GetInputResource(p_input)->Visit(overloaded(
-		    [&](const ExternalImageBase *p_ext_image) {
-			    writer.PushImageWrite(desc_info.myvk_set, index, p_ext_image->GetVkImageView(), p_input);
-		    },
-		    [&](const ExternalBufferBase *p_ext_buffer) {
-			    writer.PushBufferWrite(desc_info.myvk_set, index, p_ext_buffer->GetVkBuffer(), p_input);
-		    },
-		    [](auto &&) {}));
+
+	for (auto p_pass : passes) {
+		auto &desc_info = get_desc_info(p_pass);
+		for (const auto &[index, p_input] : desc_info.ext_bindings) {
+			const ResourceBase *p_resource = Dependency::GetInputResource(p_input);
+			if (!VkRunner::IsExtChanged(p_resource))
+				continue;
+			Dependency::GetInputResource(p_input)->Visit(overloaded(
+			    [&](const ExternalImageBase *p_ext_image) {
+				    writer.PushImageWrite(desc_info.myvk_set, index, p_ext_image->GetVkImageView(), p_input);
+			    },
+			    [&](const ExternalBufferBase *p_ext_buffer) {
+				    writer.PushBufferWrite(desc_info.myvk_set, index, p_ext_buffer->GetBufferView(), p_input);
+			    },
+			    [](auto &&) {}));
+		}
 	}
 
 	if (writer.writes.empty())
@@ -226,8 +221,7 @@ VkDescriptor VkDescriptor::Create(const myvk::Ptr<myvk::Device> &device_ptr, con
 	for (const PassBase *p_pass : args.dependency.GetPasses())
 		collect_pass_bindings(p_pass);
 	vk_desc.create_vk_sets(args);
-	for (const PassBase *p_pass : args.dependency.GetPasses())
-		vk_desc.pass_vk_bind_static(p_pass);
+	vk_desc.pass_vk_bind_internal(args.dependency.GetPasses());
 	return vk_desc;
 }
 

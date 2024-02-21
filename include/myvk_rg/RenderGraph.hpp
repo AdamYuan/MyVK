@@ -10,6 +10,8 @@ namespace myvk_rg {
 using Key = interface::PoolKey;
 using Parent = interface::Parent;
 
+using BufferView = interface::BufferView;
+
 using GraphicsPassBase = interface::GraphicsPassBase;
 using ComputePassBase = interface::ComputePassBase;
 using TransferPassBase = interface::TransferPassBase;
@@ -24,6 +26,7 @@ using ExternalImageBase = interface::ExternalImageBase;
 using Buffer = interface::BufferAliasBase;
 using BufferOutput = interface::OutputBufferAlias;
 using ManagedBuffer = interface::ManagedBuffer;
+using CombinedBuffer = interface::CombinedBuffer;
 using ExternalBufferBase = interface::ExternalBufferBase;
 
 using SubImageSize = interface::SubImageSize;

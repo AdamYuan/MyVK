@@ -29,11 +29,11 @@ private:
 
 	static void collect_pass_bindings(const PassBase *p_pass);
 	void create_vk_sets(const Args &args);
-	void pass_vk_bind_static(const PassBase *p_pass);
+	void pass_vk_bind_internal(std::span<const PassBase *const> passes);
 
 public:
 	static VkDescriptor Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
-	void BindDynamic(const PassBase *p_pass) const;
+	void BindExternal(std::span<const PassBase *const> passes) const;
 	static const myvk::Ptr<myvk::DescriptorSet> &GetVkDescriptorSet(const PassBase *p_pass) {
 		return get_desc_info(p_pass).myvk_set;
 	}

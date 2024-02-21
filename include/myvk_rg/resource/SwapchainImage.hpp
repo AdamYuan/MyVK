@@ -11,7 +11,7 @@ private:
 
 public:
 	inline SwapchainImage(myvk_rg::Parent parent, const myvk::Ptr<myvk::FrameManager> &frame_manager)
-	    : ExternalImageBase(parent, false, ExternalSyncType::kCustom) {
+	    : ExternalImageBase(parent, ExternalSyncType::kCustom) {
 		m_frame_manager = frame_manager;
 		SetDstLayout(VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 	}

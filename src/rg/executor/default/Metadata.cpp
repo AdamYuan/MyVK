@@ -12,16 +12,30 @@ Metadata Metadata::Create(const Args &args) {
 	args.collection.ClearInfo(&ResourceInfo::metadata, &PassInfo::metadata);
 
 	Metadata r = {};
+	r.classify_resources(args);
 	r.fetch_external_infos(args);
 	r.fetch_alloc_sizes(args);
 	fetch_alloc_usages(args);
-	propagate_alloc_info(args);
+	r.propagate_alloc_info(args);
 	fetch_render_areas(args);
 	return r;
 }
 
+void Metadata::classify_resources(const Metadata::Args &args) {
+	for (const ResourceBase *p_resource : args.dependency.GetResources()) {
+		if (p_resource->GetState() == myvk_rg::interface::ResourceState::kExternal) {
+			assert(Dependency::IsRootResource(p_resource));
+			m_external_resources.push_back(p_resource);
+		} else {
+			m_internal_resources.push_back(p_resource);
+			if (Dependency::IsRootResource(p_resource))
+				m_internal_root_resources.push_back(p_resource);
+		}
+	}
+}
+
 void Metadata::fetch_external_infos(const Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetResources())
+	for (const ResourceBase *p_resource : m_external_resources)
 		p_resource->Visit(overloaded(
 		    [](const ExternalImageBase *p_ext_image) {
 			    const auto &myvk_view = p_ext_image->GetVkImageView();
@@ -35,103 +49,130 @@ void Metadata::fetch_external_infos(const Args &args) {
 			                              .vk_usages = myvk_image->GetUsage()};
 		    },
 		    [](const ExternalBufferBase *p_ext_buffer) {
-			    const auto &myvk_buffer = p_ext_buffer->GetVkBuffer();
-			    get_view(p_ext_buffer) = {.size = myvk_buffer->GetSize()};
-			    get_alloc(p_ext_buffer) = {.vk_usages = myvk_buffer->GetUsage()};
+			    const auto &view = p_ext_buffer->GetBufferView();
+			    get_view(p_ext_buffer) = {.offset = view.offset, .size = view.size};
+			    get_alloc(p_ext_buffer) = {.vk_usages = view.buffer->GetUsage()};
 		    },
 		    [](auto &&) {}));
 }
 
 void Metadata::propagate_alloc_info(const Args &args) {
-	for (const ResourceBase *p_resource : args.dependency.GetResources())
+	for (const ResourceBase *p_resource : m_internal_resources)
 		if (!Dependency::IsRootResource(p_resource))
 			p_resource->Visit([](const auto *p_resource) {
 				get_alloc(p_resource) = get_alloc(Dependency::GetRootResource(p_resource));
 			});
 }
 
-void Metadata::fetch_alloc_sizes(const Args &args) {
-	const auto get_size = [&](const auto &size_variant) {
-		const auto get_size_visitor = overloaded(
-		    [&](const std::invocable<VkExtent2D> auto &size_func) {
-			    return size_func(args.render_graph.GetCanvasSize());
-		    },
-		    [](const auto &size) { return size; });
+auto Metadata::get_size(const Args &args, const auto &size_variant) {
+	const auto get_size_visitor = overloaded(
+	    [&](const std::invocable<VkExtent2D> auto &size_func) { return size_func(args.render_graph.GetCanvasSize()); },
+	    [](const auto &size) { return size; });
 
-		return std::visit(get_size_visitor, size_variant);
-	};
+	return std::visit(get_size_visitor, size_variant);
+}
 
-	const auto combine_size = [&](const InternalImage auto *p_alloc_image) {
-		auto &alloc = get_alloc(p_alloc_image);
+void Metadata::combine_image(const Metadata::Args &args, const InternalImage auto *p_alloc_image) {
+	auto &alloc = get_alloc(p_alloc_image);
 
-		const auto combine_size_impl = [&](const InternalImage auto *p_view_image, auto &&combine_size) {
-			auto &view = get_view(p_view_image);
-			UpdateVkImageTypeFromVkImageViewType(&alloc.vk_type, p_view_image->GetViewType());
-			view.size = overloaded(
-			    // Combined Image
-			    [&](const CombinedImage *p_combined_image) -> SubImageSize {
-				    SubImageSize size = {};
-				    VkFormat format = VK_FORMAT_UNDEFINED;
+	const auto combine_impl = [&](const InternalImage auto *p_view_image, auto &&combine) {
+		auto &view = get_view(p_view_image);
+		UpdateVkImageTypeFromVkImageViewType(&alloc.vk_type, p_view_image->GetViewType());
+		view.size = overloaded(
+		    // Combined Image
+		    [&](const CombinedImage *p_combined_image) -> SubImageSize {
+			    SubImageSize size = {};
+			    VkFormat format = VK_FORMAT_UNDEFINED;
 
-				    for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image))
-					    // Foreach Sub-Image
-					    p_sub->Visit(overloaded(
-					        [&](const InternalImage auto *p_sub) {
-						        combine_size(p_sub, combine_size);
-
-						        const auto &sub_size = get_view(p_sub).size;
-						        if (!size.Merge(sub_size))
-							        Throw(error::ImageNotMerge{.key = p_combined_image->GetGlobalKey()});
-
-						        // Base Layer (Offset)
-						        get_view(p_sub).base_layer = size.GetArrayLayers() - sub_size.GetArrayLayers();
-					        },
-					        [](auto &&) {}));
-
-				    return size;
-			    },
-			    // Managed Image
-			    [&](const ManagedImage *p_managed_image) -> SubImageSize {
-				    // Maintain VkFormat
-				    VkFormat &alloc_format = alloc.vk_format;
-				    if (alloc_format != VK_FORMAT_UNDEFINED && alloc_format != p_managed_image->GetFormat())
-					    Throw(error::ImageNotMerge{.key = p_managed_image->GetGlobalKey()});
-				    alloc_format = p_managed_image->GetFormat();
-
-				    return get_size(p_managed_image->GetSize());
-			    })(p_view_image);
-		};
-		combine_size_impl(p_alloc_image, combine_size_impl);
-
-		// Base Mip Level should be 0
-		if (get_view(p_alloc_image).size.GetBaseMipLevel() != 0)
-			Throw(error::ImageNotMerge{.key = p_alloc_image->GetGlobalKey()});
-
-		// Accumulate Base Layer Offsets
-		const auto accumulate_base_impl = overloaded(
-		    [&](const CombinedImage *p_combined_image, auto &&accumulate_base) -> void {
-			    for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image)) {
-
+			    for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image))
+				    // Foreach Sub-Image
 				    p_sub->Visit(overloaded(
 				        [&](const InternalImage auto *p_sub) {
-					        get_view(p_sub).base_layer += get_view(p_combined_image).base_layer;
+					        combine(p_sub, combine);
+
+					        const auto &sub_size = get_view(p_sub).size;
+					        if (!size.Merge(sub_size))
+						        Throw(error::ImageNotMerge{.key = p_combined_image->GetGlobalKey()});
+
+					        // Base Layer (Offset)
+					        get_view(p_sub).base_layer = size.GetArrayLayers() - sub_size.GetArrayLayers();
 				        },
 				        [](auto &&) {}));
 
-				    p_sub->Visit(overloaded(
-				        [&](const CombinedImage *p_sub) { accumulate_base(p_sub, accumulate_base); }, [](auto &&) {}));
-			    }
+			    return size;
 		    },
-		    [](auto &&, auto &&) {});
-		accumulate_base_impl(p_alloc_image, accumulate_base_impl);
-	};
+		    // Managed Image
+		    [&](const ManagedImage *p_managed_image) -> SubImageSize {
+			    // Maintain VkFormat
+			    VkFormat &alloc_format = alloc.vk_format;
+			    if (alloc_format != VK_FORMAT_UNDEFINED && alloc_format != p_managed_image->GetFormat())
+				    Throw(error::ImageNotMerge{.key = p_managed_image->GetGlobalKey()});
+			    alloc_format = p_managed_image->GetFormat();
 
-	for (const ResourceBase *p_resource : args.dependency.GetRootResources())
+			    return get_size(args, p_managed_image->GetSize());
+		    })(p_view_image);
+	};
+	combine_impl(p_alloc_image, combine_impl);
+
+	// Base Mip Level should be 0
+	if (get_view(p_alloc_image).size.GetBaseMipLevel() != 0)
+		Throw(error::ImageNotMerge{.key = p_alloc_image->GetGlobalKey()});
+
+	// Accumulate Base Layer Offsets
+	const auto accumulate_base_impl = overloaded(
+	    [&](const CombinedImage *p_combined_image, auto &&accumulate_base) -> void {
+		    for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_image)) {
+			    p_sub->Visit(overloaded(
+			        [&](const InternalImage auto *p_sub) {
+				        get_view(p_sub).base_layer += get_view(p_combined_image).base_layer;
+			        },
+			        [](auto &&) {}));
+			    p_sub->Visit(overloaded([&](const CombinedImage *p_sub) { accumulate_base(p_sub, accumulate_base); },
+			                            [](auto &&) {}));
+		    }
+	    },
+	    [](auto &&, auto &&) {});
+	accumulate_base_impl(p_alloc_image, accumulate_base_impl);
+}
+
+void Metadata::combine_buffer(const Metadata::Args &args, const InternalBuffer auto *p_alloc_buffer) {
+	auto &alloc = get_alloc(p_alloc_buffer);
+
+	const auto combine_impl = [&](const InternalBuffer auto *p_view_buffer, VkDeviceSize offset, auto &&combine) {
+		auto &view = get_view(p_view_buffer);
+		view.offset = offset;
+		view.size = overloaded(
+		    // Combined Image
+		    [&](const CombinedBuffer *p_combined_buffer) -> VkDeviceSize {
+			    VkDeviceSize size = 0;
+			    for (auto [p_sub, _, _1] : args.dependency.GetResourceGraph().GetOutEdges(p_combined_buffer))
+				    // Foreach Sub-Image
+				    p_sub->Visit(overloaded(
+				        [&](const InternalBuffer auto *p_sub) {
+					        combine(p_sub, offset + size, combine);
+					        size += get_view(p_sub).size;
+				        },
+				        [](auto &&) {}));
+			    return size;
+		    },
+		    // Managed Buffer
+		    [&](const ManagedBuffer *p_managed_buffer) -> VkDeviceSize {
+			    // Maintain MapType
+			    myvk_rg::BufferMapType &map_type = alloc.map_type;
+			    if (map_type != myvk_rg::BufferMapType::kNone && map_type != p_managed_buffer->GetMapType())
+				    Throw(error::ImageNotMerge{.key = p_managed_buffer->GetGlobalKey()});
+			    map_type = p_managed_buffer->GetMapType();
+			    return get_size(args, p_managed_buffer->GetSize());
+		    })(p_view_buffer);
+	};
+	combine_impl(p_alloc_buffer, 0, combine_impl);
+}
+
+void Metadata::fetch_alloc_sizes(const Args &args) {
+	for (const ResourceBase *p_resource : m_internal_root_resources)
 		// Collect Size
-		p_resource->Visit(overloaded([&](const InternalImage auto *p_image) { combine_size(p_image); },
-		                             [&](const ManagedBuffer *p_managed_buffer) {
-			                             get_view(p_managed_buffer).size = get_size(p_managed_buffer->GetSize());
-		                             },
+		p_resource->Visit(overloaded([&](const InternalImage auto *p_image) { combine_image(args, p_image); },
+		                             [&](const InternalBuffer auto *p_buffer) { combine_buffer(args, p_buffer); },
 		                             [](auto &&) {}));
 }
 

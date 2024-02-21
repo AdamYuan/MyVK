@@ -35,7 +35,7 @@ private:
 	                   const VmaAllocationCreateInfo &create_info);
 	void create_vk_allocations(const Args &args);
 	void bind_vk_resources(const Args &args);
-	void create_vk_image_views(const Args &args);
+	void create_resource_views(const Args &args);
 
 public:
 	static VkAllocation Create(const myvk::Ptr<myvk::Device> &device_ptr, const Args &args);
@@ -48,10 +48,11 @@ public:
 	static const myvk::Ptr<myvk::ImageView> &GetVkImageView(const InternalImage auto *p_image) {
 		return get_vk_alloc(p_image).image.myvk_image_view;
 	}
-	static const myvk::Ptr<myvk::BufferBase> &GetVkBuffer(const InternalBuffer auto *p_buffer) {
-		return get_vk_alloc(p_buffer).buffer.myvk_buffer;
+	static const BufferView &GetBufferView(const InternalBuffer auto *p_buffer) {
+		return get_vk_alloc(p_buffer).buffer.buffer_view;
 	}
 	static void *GetMappedData(const InternalBuffer auto *p_buffer) { return get_vk_alloc(p_buffer).buffer.mapped_ptr; }
+	static void UpdateExternal(const Args &args);
 };
 
 } // namespace myvk_rg_executor
