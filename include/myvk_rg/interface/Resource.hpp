@@ -417,24 +417,6 @@ public:
 	~CombinedImage() override = default;
 };
 
-// Last Frame Resources
-template <typename Derived, typename VkType> class LastFrameResourceInfo {
-public:
-	using InitTransferFunc = std::function<void(const myvk::Ptr<myvk::CommandBuffer> &, const myvk::Ptr<VkType> &)>;
-
-private:
-	InitTransferFunc m_init_transfer_func{};
-
-public:
-	inline void SetInitTransferFunc(const InitTransferFunc &func) {
-		if ((m_init_transfer_func == nullptr) != (func == nullptr))
-			static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInitTransferChanged);
-		m_init_transfer_func = func;
-		static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kInitTransferFuncChanged);
-	}
-	inline const InitTransferFunc &GetInitTransferFunc() const { return m_init_transfer_func; }
-};
-
 template <typename Visitor> std::invoke_result_t<Visitor, ManagedImage *> ResourceBase::Visit(Visitor &&visitor) const {
 	switch (m_class) {
 	case ResourceClass::kManagedImage:

@@ -334,26 +334,28 @@ void VkAllocation::create_vk_allocations(const Args &args) {
 void VkAllocation::bind_vk_resources(const Args &args) {
 	for (const ResourceBase *p_resource : args.dependency.GetRootResources()) {
 		auto &vk_alloc = get_vk_alloc(p_resource);
-		auto vma_allocation = vk_alloc.myvk_mem_alloc->GetHandle();
 
 		p_resource->Visit(overloaded(
-		    [&](const ImageResource auto *p_image) {
+		    [&](const InternalImage auto *p_image) {
 			    auto &myvk_image = vk_alloc.image.myvk_image;
 
+			    auto vma_allocation = vk_alloc.myvk_mem_alloc->GetHandle();
 			    vmaBindImageMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offset,
 			                        myvk_image->GetHandle(), nullptr);
 			    static_cast<RGImage *>(myvk_image.get())->SetAllocPtr(vk_alloc.myvk_mem_alloc);
 		    },
-		    [&](const BufferResource auto *p_buffer) {
+		    [&](const InternalBuffer auto *p_buffer) {
 			    auto *p_mapped = (uint8_t *)vk_alloc.myvk_mem_alloc->GetInfo().pMappedData;
 			    auto &myvk_buffer = vk_alloc.buffer.myvk_buffer;
 			    auto &mapped_ptr = vk_alloc.buffer.mapped_ptr;
 
+			    auto vma_allocation = vk_alloc.myvk_mem_alloc->GetHandle();
 			    vmaBindBufferMemory2(m_device_ptr->GetAllocatorHandle(), vma_allocation, vk_alloc.mem_offset,
 			                         myvk_buffer->GetHandle(), nullptr);
 			    mapped_ptr = p_mapped + vk_alloc.mem_offset;
 			    static_cast<RGBuffer *>(myvk_buffer.get())->SetAllocPtr(vk_alloc.myvk_mem_alloc);
-		    }));
+		    },
+		    [](auto &&) {}));
 	}
 }
 

@@ -14,10 +14,15 @@ private:
 public:
 	inline InputBuffer(myvk_rg::Parent parent, myvk::Ptr<Buffer> buffer)
 	    : myvk_rg::ExternalBufferBase(parent, true, ExternalSyncType::kLastFrame) {
+		SetBuffer(std::move(buffer));
+	}
+	inline InputBuffer(myvk_rg::Parent parent)
+	    : myvk_rg::ExternalBufferBase(parent, true, ExternalSyncType::kLastFrame) {}
+	inline ~InputBuffer() final = default;
+	inline void SetBuffer(myvk::Ptr<Buffer> buffer) {
 		m_buffer = std::move(buffer);
 		m_buffer_base = m_buffer;
 	}
-	inline ~InputBuffer() final = default;
 	inline const auto &GetBuffer() const { return m_buffer; }
 	inline const myvk::Ptr<myvk::BufferBase> &GetVkBuffer() const final { return m_buffer_base; }
 };

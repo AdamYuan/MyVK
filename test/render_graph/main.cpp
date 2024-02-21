@@ -10,6 +10,7 @@
 #include <myvk_rg/RenderGraph.hpp>
 #include <myvk_rg/pass/ImGuiPass.hpp>
 #include <myvk_rg/pass/ImageBlitPass.hpp>
+#include <myvk_rg/resource/InputImage.hpp>
 #include <myvk_rg/resource/SwapchainImage.hpp>
 
 constexpr uint32_t kFrameCount = 3;
@@ -158,7 +159,8 @@ public:
 
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
-		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
+		auto lf_image = CreateResource<myvk_rg::InputImage>({"lf"});
+		lf_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_LOAD);
 		/* lf_image->SetInitTransferFunc(
 		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageView> &image_view) {
 		        command_buffer->CmdClearColorImage(image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -172,23 +174,20 @@ public:
 
 		auto imgui_pass = CreatePass<myvk_rg::ImGuiPass>({"imgui_pass"}, dim_pass->GetImageOutput());
 
-		lf_image->SetPointedAlias(imgui_pass->GetImageOutput());
+		auto lf_copy_pass = CreatePass<myvk_rg::ImageBlitPass>({"lf_blit_pass"}, imgui_pass->GetImageOutput(),
+		                                                       lf_image->Alias(), VK_FILTER_NEAREST);
 
 		auto swapchain_image = CreateResource<myvk_rg::SwapchainImage>({"swapchain_image"}, frame_manager);
 		swapchain_image->SetLoadOp(VK_ATTACHMENT_LOAD_OP_DONT_CARE);
-
 		auto copy_pass = CreatePass<myvk_rg::ImageBlitPass>({"blit_pass"}, imgui_pass->GetImageOutput(),
 		                                                    swapchain_image->Alias(), VK_FILTER_NEAREST);
 
 		AddResult({"final"}, copy_pass->GetDstOutput());
+		AddResult({"lf"}, lf_copy_pass->GetDstOutput());
 	}
 	inline void SetDim(float dim) { GetPass<DimPass>({"dim_pass"})->SetDim(dim); }
-	inline void ReInitBG(const float rgb[3]) {
-		GetResource<myvk_rg::LastFrameImage>({"lf"})->SetInitTransferFunc(
-		    [r = rgb[0], g = rgb[1], b = rgb[2]](const myvk::Ptr<myvk::CommandBuffer> &command_buffer,
-		                                         const myvk::Ptr<myvk::ImageBase> &image) {
-			    command_buffer->CmdClearColorImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {{r, g, b, 1.0}});
-		    });
+	inline void SetLFImage(const myvk::Ptr<myvk::ImageView> &image_view) {
+		GetResource<myvk_rg::InputImage>({"lf"})->SetVkImageView(image_view);
 	}
 };
 
@@ -212,10 +211,21 @@ int main() {
 	    myvk::FrameManager::Create(generic_queue, present_queue, false, kFrameCount,
 	                               VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
+	myvk::Ptr<myvk::ImageView> lf_image_view = nullptr;
+
 	myvk::Ptr<MyRenderGraph> render_graphs[kFrameCount];
 	for (auto &render_graph : render_graphs)
 		render_graph = myvk::MakePtr<MyRenderGraph>(frame_manager);
-	frame_manager->SetResizeFunc([](const VkExtent2D &extent) {});
+
+	frame_manager->SetCallResizeFunc([&](const VkExtent2D &extent) {
+		lf_image_view = myvk::ImageView::Create(
+		    myvk::Image::CreateTexture2D(device, extent, 1, VK_FORMAT_R32G32B32A32_SFLOAT,
+		                                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT),
+		    VK_IMAGE_VIEW_TYPE_2D);
+
+		for (auto &render_graph : render_graphs)
+			render_graph->SetLFImage(lf_image_view);
+	});
 
 	float init_rgb[3] = {1.0f, 0.0f, 0.0f};
 	float dim_level = 5.0;
@@ -227,8 +237,8 @@ int main() {
 		ImGui::DragFloat("Dim Level", &dim_level, 0.1f, 1.0, 10.0);
 		ImGui::ColorPicker3("Init Color", init_rgb);
 		if (ImGui::Button("Re-Init")) {
-			for (const auto &rg : render_graphs)
-				rg->ReInitBG(init_rgb);
+			// for (const auto &rg : render_graphs)
+			// 	rg->ReInitBG(init_rgb);
 		}
 		ImGui::End();
 		ImGui::Begin("Test");

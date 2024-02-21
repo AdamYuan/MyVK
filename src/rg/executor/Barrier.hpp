@@ -32,7 +32,7 @@ struct Barrier {
 };
 
 inline static void SetVkLayout(VkImageLayout *p_dst, VkImageLayout src) {
-	assert(*p_dst == VK_IMAGE_LAYOUT_UNDEFINED || src == VK_IMAGE_LAYOUT_UNDEFINED || layout == r.layout);
+	assert(*p_dst == VK_IMAGE_LAYOUT_UNDEFINED || src == VK_IMAGE_LAYOUT_UNDEFINED || *p_dst == src);
 	if (*p_dst == VK_IMAGE_LAYOUT_UNDEFINED)
 		*p_dst = src;
 }

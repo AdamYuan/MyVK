@@ -208,6 +208,7 @@ private:
 				            .access_mask = p_ext_image->GetSrcAccessFlags(),
 				            .layout = p_ext_image->GetSrcLayout()};
 			    }
+			    return {};
 		    },
 		    [](auto &&) -> State { return {}; });
 		const auto get_ext_dst = overloaded(
@@ -220,6 +221,7 @@ private:
 				            .access_mask = p_ext_image->GetDstAccessFlags(),
 				            .layout = p_ext_image->GetDstLayout()};
 			    }
+			    return {};
 		    },
 		    [](auto &&) -> State { return {}; });
 

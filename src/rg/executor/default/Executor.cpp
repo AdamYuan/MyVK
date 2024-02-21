@@ -59,7 +59,7 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 	case Event::kBufferResized:
 	case Event::kImageResized:
 	case Event::kRenderAreaChanged:
-	case Event::kInitTransferChanged:
+	case Event::kExternalStaticUpdate:
 		m_compile_flags |= kMetadata;
 		break;
 	case Event::kBufferMapTypeChanged:
@@ -79,9 +79,6 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 		break;
 	case Event::kUpdatePipeline:
 		VkCommand::UpdatePipeline(static_cast<const interface::PassBase *>(p_object));
-		break;
-	case Event::kInitTransferFuncChanged:
-		// m_lf_init = true;
 		break;
 	}
 }

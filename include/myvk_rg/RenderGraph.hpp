@@ -19,13 +19,11 @@ using Image = interface::ImageAliasBase;
 using ImageOutput = interface::OutputImageAlias;
 using ManagedImage = interface::ManagedImage;
 using CombinedImage = interface::CombinedImage;
-using LastFrameImage = interface::LastFrameImage;
 using ExternalImageBase = interface::ExternalImageBase;
 
 using Buffer = interface::BufferAliasBase;
 using BufferOutput = interface::OutputBufferAlias;
 using ManagedBuffer = interface::ManagedBuffer;
-using LastFrameBuffer = interface::LastFrameBuffer;
 using ExternalBufferBase = interface::ExternalBufferBase;
 
 using SubImageSize = interface::SubImageSize;
