@@ -163,7 +163,7 @@ void VkDescriptor::create_vk_sets(const VkDescriptor::Args &args) {
 	}
 }
 
-void VkDescriptor::pass_vk_bind_internal(std::span<const PassBase *const> passes) {
+void VkDescriptor::vk_update_internal(std::span<const PassBase *const> passes) {
 	DescriptorWriter writer{};
 
 	for (auto p_pass : passes) {
@@ -187,7 +187,7 @@ void VkDescriptor::pass_vk_bind_internal(std::span<const PassBase *const> passes
 	vkUpdateDescriptorSets(m_device_ptr->GetHandle(), writer.writes.size(), writer.writes.data(), 0, nullptr);
 }
 
-void VkDescriptor::BindExternal(std::span<const PassBase *const> passes) const {
+void VkDescriptor::VkUpdateExternal(std::span<const PassBase *const> passes) const {
 	DescriptorWriter writer{};
 
 	for (auto p_pass : passes) {
@@ -221,7 +221,7 @@ VkDescriptor VkDescriptor::Create(const myvk::Ptr<myvk::Device> &device_ptr, con
 	for (const PassBase *p_pass : args.dependency.GetPasses())
 		collect_pass_bindings(p_pass);
 	vk_desc.create_vk_sets(args);
-	vk_desc.pass_vk_bind_internal(args.dependency.GetPasses());
+	vk_desc.vk_update_internal(args.dependency.GetPasses());
 	return vk_desc;
 }
 

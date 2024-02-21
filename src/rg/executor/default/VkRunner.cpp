@@ -72,7 +72,7 @@ void VkRunner::update_ext_cache(const VkRunner::Args &args) {
 
 void VkRunner::Run(const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const Args &args) {
 	update_ext_cache(args);
-	args.vk_descriptor.BindExternal(args.dependency.GetPasses());
+	args.vk_descriptor.VkUpdateExternal(args.dependency.GetPasses());
 
 	const auto run_pass = [&](const PassBase *p_pass) {
 		VkCommand::CreatePipeline(p_pass);
