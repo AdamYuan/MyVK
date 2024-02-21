@@ -123,7 +123,7 @@ public:
 	inline MyRenderGraph() : myvk_rg::RenderGraphBase(nullptr) {
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
-		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
+		auto lf_image = CreateResource<myvk_rg::ManagedImage>({"lf"}, format);
 		/* lf_image->SetInitTransferFunc(
 		    [](const myvk::Ptr<myvk::CommandBuffer> &command_buffer, const myvk::Ptr<myvk::ImageView> &image_view) {
 		        command_buffer->CmdClearColorImage(image_view->GetImagePtr(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -145,8 +145,6 @@ public:
 
 		auto dim_pass2 = CreatePass<DimPass>({"dim_pass2"}, combined_image2->Alias(), format);
 
-		lf_image->SetPointedAlias(dim_pass2->GetImageOutput());
-
 		AddResult({"final"}, dim_pass2->GetImageOutput());
 
 		SetCanvasSize({1280, 720});
@@ -154,13 +152,6 @@ public:
 	inline ~MyRenderGraph() final = default;
 
 	inline void SetDim(float dim) { GetPass<DimPass>({"dim_pass"})->SetDim(dim); }
-	inline void ReInitBG(const float rgb[3]) {
-		GetResource<myvk_rg::LastFrameImage>({"lf"})->SetInitTransferFunc(
-		    [r = rgb[0], g = rgb[1], b = rgb[2]](const myvk::Ptr<myvk::CommandBuffer> &command_buffer,
-		                                         const myvk::Ptr<myvk::ImageBase> &image) {
-			    command_buffer->CmdClearColorImage(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {{r, g, b, 1.0}});
-		    });
-	}
 };
 
 class InputAttPass final : public myvk_rg::GraphicsPassBase {
@@ -224,7 +215,7 @@ public:
 	inline MyRenderGraph2() : myvk_rg::RenderGraphBase(nullptr) {
 		auto format = VK_FORMAT_R32G32B32A32_SFLOAT;
 
-		auto lf_image = CreateResource<myvk_rg::LastFrameImage>({"lf"});
+		auto lf_image = CreateResource<myvk_rg::ManagedImage>({"lf"}, format);
 		auto src_pass = CreatePass<InputAttPass>({"src"}, lf_image->Alias(), format);
 
 		auto read1_pass = CreatePass<InputAttPass>({"read", 1}, src_pass->GetImageOutput(), format);
@@ -239,8 +230,6 @@ public:
 		                read3_pass->GetImageOutput(), read4_pass->GetImageOutput(), read5_pass->GetImageOutput()});
 
 		auto write_pass = CreatePass<ImageWPass>({"write"}, combined_image->Alias());
-
-		lf_image->SetPointedAlias(write_pass->GetImageOutput());
 
 		AddResult({"final"}, write_pass->GetImageOutput());
 
@@ -305,9 +294,7 @@ TEST_SUITE("Default Executor") {
 			    return p_resource->GetGlobalKey().Format() + ";" +
 			           std::to_string(Dependency::GetResourceRootID(p_resource));
 		    },
-		    [](const Dependency::ResourceEdge &e) {
-			    return e == Dependency::ResourceEdge::kSubResource ? "SUB" : "LF";
-		    });
+		    [](const Dependency::ResourceEdge &e) { return "SUB"; });
 
 		{
 			printf("Pass Less:\n");
@@ -343,7 +330,7 @@ TEST_SUITE("Default Executor") {
 		    Metadata::Create({.render_graph = *render_graph, .collection = collection, .dependency = dependency});
 
 		printf("ALLOC:\n");
-		for (const ResourceBase *p_resource : metadata.GetAllocResources()) {
+		for (const ResourceBase *p_resource : dependency.GetRootResources()) {
 			printf("%s, ", p_resource->GetGlobalKey().Format().c_str());
 			p_resource->Visit(overloaded(
 			    [](const myvk_rg::interface::ImageBase *p_image) {
@@ -359,7 +346,7 @@ TEST_SUITE("Default Executor") {
 			printf("\n");
 		}
 		printf("View:\n");
-		for (const ResourceBase *p_resource : metadata.GetViewResources()) {
+		for (const ResourceBase *p_resource : dependency.GetResources()) {
 			printf("%s, ", p_resource->GetGlobalKey().Format().c_str());
 			p_resource->Visit(overloaded(
 			    [](const myvk_rg::interface::ImageBase *p_image) {
