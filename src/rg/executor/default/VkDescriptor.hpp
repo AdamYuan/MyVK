@@ -11,6 +11,8 @@
 #include "../Hash.hpp"
 #include "../VkHelper.hpp"
 
+#include <span>
+
 namespace myvk_rg_executor {
 
 class VkDescriptor {
