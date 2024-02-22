@@ -27,6 +27,8 @@ Ptr<AccelerationStructure> AccelerationStructure::Create(const Ptr<BufferBase> &
 	ret->m_buffer = buffer;
 	ret->m_accel_struct = accel_struct;
 	ret->m_device_address = device_address;
+	ret->m_offset = create_info.offset;
+	ret->m_size = create_info.size;
 	return ret;
 }
 

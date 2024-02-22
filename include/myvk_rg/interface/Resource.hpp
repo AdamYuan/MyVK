@@ -1,7 +1,7 @@
 #ifndef MYVK_RG_RESOURCE_HPP
 #define MYVK_RG_RESOURCE_HPP
 
-#include <myvk/Buffer.hpp>
+#include <myvk/BufferBase.hpp>
 #include <myvk/CommandBuffer.hpp>
 #include <myvk/FrameManager.hpp>
 #include <myvk/ImageView.hpp>
@@ -50,6 +50,7 @@ inline constexpr ResourceState GetResourceState(ResourceClass res_class) {
 struct BufferView {
 	myvk::Ptr<myvk::BufferBase> buffer;
 	VkDeviceSize offset, size;
+	myvk::Ptr<myvk::DeviceObjectBase> data;
 	inline auto operator<=>(const BufferView &) const = default;
 };
 
@@ -136,10 +137,10 @@ template <typename Derived> class ExternalResourceInfo {
 private:
 	VkPipelineStageFlags2 m_src_stages{VK_PIPELINE_STAGE_2_NONE}, m_dst_stages{VK_PIPELINE_STAGE_2_NONE};
 	VkAccessFlags2 m_src_accesses{VK_ACCESS_2_NONE}, m_dst_accesses{VK_ACCESS_2_NONE};
-	const ExternalSyncType m_sync_type{ExternalSyncType::kCustom};
+	ExternalSyncType m_sync_type{ExternalSyncType::kCustom};
 
 public:
-	ExternalResourceInfo(ExternalSyncType sync_type) : m_sync_type{sync_type} {}
+	ExternalResourceInfo() {}
 	inline VkPipelineStageFlags2 GetSrcPipelineStages() const { return m_src_stages; }
 	inline void SetSrcPipelineStages(VkPipelineStageFlags2 src_stages) {
 		if (m_src_stages != src_stages) {
@@ -169,6 +170,12 @@ public:
 		}
 	}
 	inline ExternalSyncType GetSyncType() const { return m_sync_type; }
+	inline void SetSyncType(ExternalSyncType sync_type) {
+		if (m_sync_type != sync_type) {
+			m_sync_type = sync_type;
+			static_cast<ObjectBase *>(static_cast<Derived *>(this))->EmitEvent(Event::kExternalSyncChanged);
+		}
+	}
 };
 class ExternalImageBase : public ImageBase,
                           public ImageAttachmentInfo<ExternalImageBase>,
@@ -179,8 +186,7 @@ public:
 
 	virtual const myvk::Ptr<myvk::ImageView> &GetVkImageView() const = 0;
 
-	inline ExternalImageBase(Parent parent, ExternalSyncType sync_type)
-	    : ImageBase(parent, ResourceState::kExternal), ExternalResourceInfo<ExternalImageBase>(sync_type) {}
+	inline ExternalImageBase(Parent parent) : ImageBase(parent, ResourceState::kExternal) {}
 	inline ~ExternalImageBase() override = default;
 
 private:
@@ -213,8 +219,7 @@ public:
 	inline static VkImageLayout GetSrcLayout() { return VK_IMAGE_LAYOUT_UNDEFINED; }
 	inline static VkImageLayout GetDstLayout() { return VK_IMAGE_LAYOUT_UNDEFINED; }
 
-	inline ExternalBufferBase(Parent parent, ExternalSyncType sync_type)
-	    : BufferBase(parent, ResourceState::kExternal), ExternalResourceInfo<ExternalBufferBase>(sync_type) {}
+	inline ExternalBufferBase(Parent parent) : BufferBase(parent, ResourceState::kExternal) {}
 	inline ~ExternalBufferBase() override = default;
 };
 

@@ -59,7 +59,6 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 	case Event::kBufferResized:
 	case Event::kImageResized:
 	case Event::kRenderAreaChanged:
-	case Event::kExternalStaticUpdate:
 		m_compile_flags |= kMetadata;
 		break;
 	case Event::kBufferMapTypeChanged:
@@ -74,6 +73,7 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 	case Event::kExternalImageLayoutChanged:
 	case Event::kExternalAccessChanged:
 	case Event::kExternalStageChanged:
+	case Event::kExternalSyncChanged:
 	case Event::kImageLoadOpChanged:
 		m_compile_flags |= kVkCommand;
 		break;

@@ -30,8 +30,7 @@ enum class Event {
 	kExternalStageChanged,
 	kExternalAccessChanged,
 	kExternalImageLayoutChanged,
-
-	kExternalStaticUpdate
+	kExternalSyncChanged,
 };
 
 }

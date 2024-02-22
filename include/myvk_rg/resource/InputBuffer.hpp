@@ -9,11 +9,13 @@ private:
 	BufferView m_buffer_view;
 
 public:
-	inline InputBuffer(myvk_rg::Parent parent, BufferView buffer_view)
-	    : myvk_rg::ExternalBufferBase(parent, ExternalSyncType::kLastFrame) {
+	inline InputBuffer(myvk_rg::Parent parent, BufferView buffer_view) : myvk_rg::ExternalBufferBase(parent) {
 		SetBufferView(std::move(buffer_view));
+		SetSyncType(ExternalSyncType::kLastFrame);
 	}
-	inline InputBuffer(myvk_rg::Parent parent) : myvk_rg::ExternalBufferBase(parent, ExternalSyncType::kLastFrame) {}
+	inline InputBuffer(myvk_rg::Parent parent) : myvk_rg::ExternalBufferBase(parent) {
+		SetSyncType(ExternalSyncType::kLastFrame);
+	}
 	inline ~InputBuffer() final = default;
 	inline void SetBufferView(BufferView buffer_view) { m_buffer_view = std::move(buffer_view); }
 	inline const BufferView &GetBufferView() const final { return m_buffer_view; }

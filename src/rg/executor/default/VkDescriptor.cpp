@@ -6,25 +6,43 @@
 #include "VkRunner.hpp" // For IsExtChanged
 
 #include <list>
+#include <myvk/AccelerationStructure.hpp>
 
 namespace myvk_rg_executor {
 
 struct DescriptorWriter {
 	std::vector<VkWriteDescriptorSet> writes;
+	std::list<VkWriteDescriptorSetAccelerationStructureKHR> as_writes;
 	std::list<VkDescriptorImageInfo> image_infos;
 	std::list<VkDescriptorBufferInfo> buffer_infos;
 
 	inline void PushBufferWrite(const myvk::Ptr<myvk::DescriptorSet> &set, DescriptorIndex index,
 	                            const BufferView &buffer_view, const InputBase *p_input) {
-		buffer_infos.push_back(
-		    {.buffer = buffer_view.buffer->GetHandle(), .offset = buffer_view.offset, .range = buffer_view.size});
-		writes.push_back({.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-		                  .dstSet = set->GetHandle(),
-		                  .dstBinding = index.binding,
-		                  .dstArrayElement = index.array_element,
-		                  .descriptorCount = 1u,
-		                  .descriptorType = UsageGetDescriptorType(p_input->GetUsage()),
-		                  .pBufferInfo = &buffer_infos.back()});
+		VkDescriptorType descriptor_type = UsageGetDescriptorType(p_input->GetUsage());
+		if (descriptor_type == VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR) {
+			auto accel_struct = std::dynamic_pointer_cast<myvk::AccelerationStructure>(buffer_view.data);
+			assert(accel_struct);
+			as_writes.push_back({.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+			                     .accelerationStructureCount = 1,
+			                     .pAccelerationStructures = &accel_struct->GetHandle()});
+			writes.push_back({.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			                  .pNext = &as_writes.back(),
+			                  .dstSet = set->GetHandle(),
+			                  .dstBinding = index.binding,
+			                  .dstArrayElement = index.array_element,
+			                  .descriptorCount = 1u,
+			                  .descriptorType = descriptor_type});
+		} else {
+			buffer_infos.push_back(
+			    {.buffer = buffer_view.buffer->GetHandle(), .offset = buffer_view.offset, .range = buffer_view.size});
+			writes.push_back({.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			                  .dstSet = set->GetHandle(),
+			                  .dstBinding = index.binding,
+			                  .dstArrayElement = index.array_element,
+			                  .descriptorCount = 1u,
+			                  .descriptorType = descriptor_type,
+			                  .pBufferInfo = &buffer_infos.back()});
+		}
 	}
 	inline void PushImageWrite(const myvk::Ptr<myvk::DescriptorSet> &set, DescriptorIndex index,
 	                           const myvk::Ptr<myvk::ImageView> &image_view, const InputBase *p_input) {
