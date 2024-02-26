@@ -50,7 +50,6 @@ public:
 	static const BufferView &GetBufferView(const InternalBuffer auto *p_buffer) {
 		return get_vk_alloc(p_buffer).buffer.buffer_view;
 	}
-	static void UpdateExternal(const Args &args);
 };
 
 } // namespace myvk_rg_executor

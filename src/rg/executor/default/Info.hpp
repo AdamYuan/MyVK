@@ -133,7 +133,6 @@ struct ResourceInfo {
 		VkMemoryRequirements vk_mem_reqs{};
 		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
 		VkDeviceSize mem_offset{};
-		bool ext_changed{};
 	} vk_allocation{};
 
 	// VkRunner

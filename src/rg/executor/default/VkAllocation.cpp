@@ -336,14 +336,7 @@ void VkAllocation::create_resource_views(const Args &args) {
 		};
 	};
 	for (const ResourceBase *p_resource : args.metadata.GetIntResources())
-		p_resource->Visit(overloaded(
-		    create_image_view, create_buffer_view,
-		    [](const ExternalImageBase *p_ext_image) {
-			    auto &vk_alloc = get_vk_alloc(p_ext_image);
-			    vk_alloc.image.myvk_image_view = p_ext_image->GetVkImageView();
-			    vk_alloc.ext_changed = true;
-		    },
-		    [](const ExternalBufferBase *p_ext_buffer) { auto &vk_alloc = get_vk_alloc(p_ext_buffer); }));
+		p_resource->Visit(overloaded(create_image_view, create_buffer_view, [](auto &&) {}));
 }
 
 } // namespace myvk_rg_executor
