@@ -61,9 +61,6 @@ void Executor::OnEvent(interface::ObjectBase *p_object, interface::Event event) 
 	case Event::kRenderAreaChanged:
 		m_compile_flags |= kMetadata;
 		break;
-	case Event::kBufferMapTypeChanged:
-		m_compile_flags |= kVkAllocation;
-		break;
 	case Event::kAttachmentChanged:
 		m_compile_flags |= kSchedule;
 		break;
