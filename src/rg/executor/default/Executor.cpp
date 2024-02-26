@@ -179,14 +179,8 @@ const myvk::Ptr<myvk::ImageView> &Executor::GetVkImageView(const interface::Comb
 const interface::BufferView &Executor::GetBufferView(const interface::ManagedBuffer *p_managed_buffer) {
 	return VkAllocation::GetBufferView(p_managed_buffer);
 }
-void *Executor::GetMappedData(const interface::ManagedBuffer *p_managed_buffer) {
-	return VkAllocation::GetMappedData(p_managed_buffer);
-}
 const interface::BufferView &Executor::GetBufferView(const interface::CombinedBuffer *p_combined_buffer) {
 	return VkAllocation::GetBufferView(p_combined_buffer);
-}
-void *Executor::GetMappedData(const interface::CombinedBuffer *p_combined_buffer) {
-	return VkAllocation::GetMappedData(p_combined_buffer);
 }
 
 uint32_t Executor::GetSubpass(const interface::PassBase *p_pass) { return Schedule::GetU32SubpassID(p_pass); }

@@ -97,7 +97,6 @@ struct ResourceInfo {
 			VkImageUsageFlags vk_usages{};
 		} image_alloc{};
 		struct {
-			myvk_rg::BufferMapType map_type{};
 			VkBufferUsageFlags vk_usages{};
 		} buffer_alloc;
 		struct {
@@ -130,7 +129,6 @@ struct ResourceInfo {
 		struct {
 			myvk::Ptr<myvk::BufferBase> myvk_buffer{};
 			BufferView buffer_view{};
-			void *mapped_ptr{};
 		} buffer{};
 		VkMemoryRequirements vk_mem_reqs{};
 		myvk::Ptr<RGMemoryAllocation> myvk_mem_alloc{};
