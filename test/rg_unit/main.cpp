@@ -78,7 +78,7 @@ private:
 			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->Alias());
 		}
 		inline ~GaussianBlurSubpass() final = default;
-		inline void CreatePipeline() final {}
+		inline myvk::Ptr<myvk::GraphicsPipeline> CreatePipeline() const final { return nullptr; }
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 		inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 	};
@@ -112,7 +112,7 @@ public:
 		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
 	inline ~DimPass() final = default;
-	inline void CreatePipeline() final {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreatePipeline() const final { return nullptr; }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 	inline void SetDim(float dim) { m_dim = dim; }
@@ -163,7 +163,7 @@ public:
 		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
 	inline ~InputAttPass() final = default;
-	inline void CreatePipeline() final {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreatePipeline() const final { return nullptr; }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 };
@@ -178,7 +178,7 @@ public:
 		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
 	inline ~SamplerPass() final = default;
-	inline void CreatePipeline() final {}
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreatePipeline() const final { return nullptr; }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 };
@@ -193,7 +193,7 @@ public:
 		                                                                                           out_image->Alias());
 	}
 	inline ~ImageRPass() final = default;
-	inline void CreatePipeline() final {}
+	inline myvk::Ptr<myvk::ComputePipeline> CreatePipeline() const final { return nullptr; }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 };
@@ -205,7 +205,7 @@ public:
 		                                                                                            image);
 	}
 	inline ~ImageWPass() final = default;
-	inline void CreatePipeline() final {}
+	inline myvk::Ptr<myvk::ComputePipeline> CreatePipeline() const final { return nullptr; }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
 };
@@ -216,7 +216,7 @@ public:
 		                                                                                             buffer);
 	}
 	inline ~BufferWPass() final = default;
-	inline void CreatePipeline() final {}
+	inline myvk::Ptr<myvk::ComputePipeline> CreatePipeline() const final { return nullptr; }
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {}
 	inline auto GetBufferOutput() { return MakeBufferOutput({"out"}); }
 };
