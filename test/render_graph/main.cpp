@@ -19,9 +19,6 @@ class GaussianBlurPass final : public myvk_rg::PassGroupBase {
 private:
 	template <const uint32_t ProgramSpv[], std::size_t ProgramSize>
 	class GaussianBlurSubpass final : public myvk_rg::GraphicsPassBase {
-	private:
-		myvk::Ptr<myvk::GraphicsPipeline> m_pipeline;
-
 	public:
 		inline GaussianBlurSubpass(myvk_rg::Parent parent, myvk_rg::Image image, VkFormat format)
 		    : myvk_rg::GraphicsPassBase(parent) {
@@ -33,7 +30,7 @@ private:
 			AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_img->Alias());
 		}
 		inline auto GetImageOutput() { return MakeImageOutput({"out"}); }
-		inline void CreatePipeline() final {
+		inline myvk::Ptr<myvk::GraphicsPipeline> CreatePipeline() const final {
 			auto pipeline_layout =
 			    myvk::PipelineLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), {GetVkDescriptorSetLayout()}, {});
 			myvk::GraphicsPipelineState pipeline_state = {};
@@ -60,12 +57,12 @@ private:
 			    vert_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT),
 			    frag_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT)};
 
-			m_pipeline = myvk::GraphicsPipeline::Create(pipeline_layout, GetVkRenderPass(), shader_stages,
-			                                            pipeline_state, GetSubpass());
+			return myvk::GraphicsPipeline::Create(pipeline_layout, GetVkRenderPass(), shader_stages, pipeline_state,
+			                                      GetSubpass());
 		}
 		inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
-			command_buffer->CmdBindPipeline(m_pipeline);
-			command_buffer->CmdBindDescriptorSets({GetVkDescriptorSet()}, m_pipeline);
+			command_buffer->CmdBindPipeline(GetVkPipeline());
+			command_buffer->CmdBindDescriptorSets({GetVkDescriptorSet()}, GetVkPipeline());
 			command_buffer->CmdDraw(3, 1, 0, 0);
 		}
 	};
@@ -91,8 +88,6 @@ public:
 
 class DimPass final : public myvk_rg::GraphicsPassBase {
 private:
-	myvk::Ptr<myvk::GraphicsPipeline> m_pipeline;
-
 	float m_dim{0.99f};
 
 public:
@@ -101,7 +96,7 @@ public:
 		auto out_image = CreateResource<myvk_rg::ManagedImage>({"out"}, format);
 		AddColorAttachmentInput<myvk_rg::Usage::kColorAttachmentW>(0, {"out"}, out_image->Alias());
 	}
-	inline void CreatePipeline() final {
+	inline myvk::Ptr<myvk::GraphicsPipeline> CreatePipeline() const final {
 		// Not the best solution, just to test INPUT_ATTACHMENT
 		auto pipeline_layout =
 		    myvk::PipelineLayout::Create(GetRenderGraphPtr()->GetDevicePtr(), {GetVkDescriptorSetLayout()},
@@ -134,13 +129,13 @@ public:
 		    vert_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT),
 		    frag_shader_module->GetPipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT)};
 
-		m_pipeline = myvk::GraphicsPipeline::Create(pipeline_layout, GetVkRenderPass(), shader_stages, pipeline_state,
-		                                            GetSubpass());
+		return myvk::GraphicsPipeline::Create(pipeline_layout, GetVkRenderPass(), shader_stages, pipeline_state,
+		                                      GetSubpass());
 	}
 	inline void CmdExecute(const myvk::Ptr<myvk::CommandBuffer> &command_buffer) const final {
-		command_buffer->CmdBindPipeline(m_pipeline);
-		command_buffer->CmdBindDescriptorSets({GetVkDescriptorSet()}, m_pipeline);
-		command_buffer->CmdPushConstants(m_pipeline->GetPipelineLayoutPtr(), VK_SHADER_STAGE_FRAGMENT_BIT, 0,
+		command_buffer->CmdBindPipeline(GetVkPipeline());
+		command_buffer->CmdBindDescriptorSets({GetVkDescriptorSet()}, GetVkPipeline());
+		command_buffer->CmdPushConstants(GetVkPipeline()->GetPipelineLayoutPtr(), VK_SHADER_STAGE_FRAGMENT_BIT, 0,
 		                                 sizeof(float), &m_dim);
 		command_buffer->CmdDraw(3, 1, 0, 0);
 	}
