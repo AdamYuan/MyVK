@@ -2,7 +2,7 @@
 #define MYVK_IMAGE_BASE_HPP
 
 #include "DeviceObjectBase.hpp"
-#include "volk.h"
+#include "SyncHelper.hpp"
 
 namespace myvk {
 class ImageBase : public DeviceObjectBase {
@@ -135,6 +135,28 @@ public:
 	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
 		return GetMemoryBarrier2(GetSubresourceRange(aspect_mask), src_stage_mask, src_access_mask, dst_stage_mask,
 		                         dst_access_mask, old_layout, new_layout, src_queue_family, dst_queue_family);
+	}
+
+	VkImageMemoryBarrier2 GetMemoryBarrier2(const VkImageSubresourceRange &region, //
+	                                        const ImageSyncState &src_sync_state, const ImageSyncState &dst_sync_state,
+	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
+	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
+		return GetMemoryBarrier2(region,                                                                     //
+		                         src_sync_state.stage_mask, GetWriteAccessMask2(src_sync_state.access_mask), //
+		                         dst_sync_state.stage_mask, dst_sync_state.access_mask,                      //
+		                         src_sync_state.layout, dst_sync_state.layout,                               //
+		                         src_queue_family, dst_queue_family);
+	}
+
+	VkImageMemoryBarrier2 GetMemoryBarrier2(VkImageAspectFlags aspect_mask, //
+	                                        const ImageSyncState &src_sync_state, const ImageSyncState &dst_sync_state,
+	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
+	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
+		return GetMemoryBarrier2(aspect_mask,                                                                //
+		                         src_sync_state.stage_mask, GetWriteAccessMask2(src_sync_state.access_mask), //
+		                         dst_sync_state.stage_mask, dst_sync_state.access_mask,                      //
+		                         src_sync_state.layout, dst_sync_state.layout,                               //
+		                         src_queue_family, dst_queue_family);
 	}
 
 	inline VkFramebufferAttachmentImageInfo GetFramebufferAttachmentImageInfo() const {

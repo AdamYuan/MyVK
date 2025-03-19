@@ -1,0 +1,72 @@
+#pragma once
+#ifndef MYVK_BARRIERHELPER_HPP
+#define MYVK_BARRIERHELPER_HPP
+
+#include "volk.h"
+
+namespace myvk {
+
+inline VkAccessFlags2 GetWriteAccessMask2(VkAccessFlags2 access_mask) {
+	constexpr VkAccessFlags2 kReadonlyAccessMask =
+	    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT | VK_ACCESS_2_INDEX_READ_BIT | VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT |
+	    VK_ACCESS_2_UNIFORM_READ_BIT | VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT | VK_ACCESS_2_SHADER_READ_BIT |
+	    VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+	    VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_HOST_READ_BIT | VK_ACCESS_2_MEMORY_READ_BIT |
+	    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_READ_BIT |
+	    VK_ACCESS_2_VIDEO_DECODE_READ_BIT_KHR | VK_ACCESS_2_VIDEO_ENCODE_READ_BIT_KHR |
+	    VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT_KHR | VK_ACCESS_2_INDEX_READ_BIT_KHR |
+	    VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT_KHR | VK_ACCESS_2_UNIFORM_READ_BIT_KHR |
+	    VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT_KHR | VK_ACCESS_2_SHADER_READ_BIT_KHR |
+	    VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT_KHR | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT_KHR |
+	    VK_ACCESS_2_TRANSFER_READ_BIT_KHR | VK_ACCESS_2_HOST_READ_BIT_KHR | VK_ACCESS_2_MEMORY_READ_BIT_KHR |
+	    VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR | VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR |
+	    VK_ACCESS_2_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT | VK_ACCESS_2_CONDITIONAL_RENDERING_READ_BIT_EXT |
+	    VK_ACCESS_2_COMMAND_PREPROCESS_READ_BIT_NV | VK_ACCESS_2_COMMAND_PREPROCESS_READ_BIT_EXT |
+	    VK_ACCESS_2_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR | VK_ACCESS_2_SHADING_RATE_IMAGE_READ_BIT_NV |
+	    VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_KHR | VK_ACCESS_2_ACCELERATION_STRUCTURE_READ_BIT_NV |
+	    VK_ACCESS_2_FRAGMENT_DENSITY_MAP_READ_BIT_EXT | VK_ACCESS_2_COLOR_ATTACHMENT_READ_NONCOHERENT_BIT_EXT |
+	    VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT | VK_ACCESS_2_INVOCATION_MASK_READ_BIT_HUAWEI |
+	    VK_ACCESS_2_SHADER_BINDING_TABLE_READ_BIT_KHR | VK_ACCESS_2_MICROMAP_READ_BIT_EXT |
+	    VK_ACCESS_2_OPTICAL_FLOW_READ_BIT_NV;
+	return access_mask & (~kReadonlyAccessMask);
+}
+
+struct BufferSyncState {
+	VkPipelineStageFlags2 stage_mask{};
+	VkAccessFlags2 access_mask{};
+
+	BufferSyncState &operator|=(const BufferSyncState &r) {
+		stage_mask |= r.stage_mask;
+		access_mask |= r.access_mask;
+		return *this;
+	}
+	BufferSyncState operator|(const BufferSyncState &r) const {
+		auto l = *this;
+		l |= r;
+		return l;
+	}
+};
+
+struct ImageSyncState {
+	VkPipelineStageFlags2 stage_mask{};
+	VkAccessFlags2 access_mask{};
+	VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
+
+	ImageSyncState &operator|=(const ImageSyncState &r) {
+		stage_mask |= r.stage_mask;
+		access_mask |= r.access_mask;
+		// assert(layout == VK_IMAGE_LAYOUT_UNDEFINED || r.layout == VK_IMAGE_LAYOUT_UNDEFINED || layout == r.layout);
+		if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
+			layout = r.layout;
+		return *this;
+	}
+	ImageSyncState operator|(const ImageSyncState &r) const {
+		auto l = *this;
+		l |= r;
+		return l;
+	}
+};
+
+} // namespace myvk
+
+#endif
