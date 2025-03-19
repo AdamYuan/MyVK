@@ -107,15 +107,15 @@ public:
 	                                      uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const;
 
 	VkImageMemoryBarrier2 GetMemoryBarrier2(const VkImageSubresourceRange &region, //
-	                                        VkPipelineStageFlags2 src_stage_mask, VkPipelineStageFlags2 dst_stage_mask,
-	                                        VkAccessFlags2 src_access_mask, VkAccessFlags2 dst_access_mask,
+	                                        VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+	                                        VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask,
 	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
 		return VkImageMemoryBarrier2{
 		    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
 		    .srcStageMask = src_stage_mask,
-		    .dstStageMask = dst_stage_mask,
 		    .srcAccessMask = src_access_mask,
+		    .dstStageMask = dst_stage_mask,
 		    .dstAccessMask = dst_access_mask,
 		    .srcQueueFamilyIndex = src_queue_family,
 		    .dstQueueFamilyIndex = dst_queue_family,
@@ -125,11 +125,11 @@ public:
 	}
 
 	VkImageMemoryBarrier2 GetMemoryBarrier2(VkImageAspectFlags aspect_mask, //
-	                                        VkPipelineStageFlags2 src_stage_mask, VkPipelineStageFlags2 dst_stage_mask,
-	                                        VkAccessFlags2 src_access_mask, VkAccessFlags2 dst_access_mask,
+	                                        VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+	                                        VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask,
 	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
-		return GetMemoryBarrier2(GetSubresourceRange(aspect_mask), src_stage_mask, dst_stage_mask, src_access_mask,
+		return GetMemoryBarrier2(GetSubresourceRange(aspect_mask), src_stage_mask, src_access_mask, dst_stage_mask,
 		                         dst_access_mask, src_queue_family, dst_queue_family);
 	}
 
