@@ -303,6 +303,14 @@ void CommandBuffer::CmdPushConstants(const Ptr<PipelineLayout> &pipeline_layout,
 	vkCmdPushConstants(m_command_buffer, pipeline_layout->GetHandle(), shader_stage, offset, size, data);
 }
 
+void CommandBuffer::CmdPushDescriptorSet(const Ptr<PipelineLayout> &pipeline_layout,
+                                         VkPipelineBindPoint pipeline_bind_point, uint32_t set,
+                                         const std::vector<DescriptorSetWrite> &writes) const {
+	auto vk_writes = DescriptorSetWrite::GetVkWriteDescriptorSets(writes);
+	vkCmdPushDescriptorSet(m_command_buffer, pipeline_bind_point, pipeline_layout->GetHandle(), set, vk_writes.size(),
+	                       vk_writes.data());
+}
+
 void CommandBuffer::CmdBlitImage(const Ptr<ImageBase> &src, const Ptr<ImageBase> &dst, const VkImageBlit &blit,
                                  VkFilter filter) const {
 	vkCmdBlitImage(m_command_buffer, src->GetHandle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, dst->GetHandle(),

@@ -87,6 +87,9 @@ public:
 	void CmdPushConstants(const Ptr<PipelineLayout> &pipeline_layout, VkShaderStageFlags shader_stage, uint32_t offset,
 	                      uint32_t size, const void *data) const;
 
+	void CmdPushDescriptorSet(const Ptr<PipelineLayout> &pipeline_layout, VkPipelineBindPoint pipeline_bind_point,
+	                          uint32_t set, const std::vector<DescriptorSetWrite> &writes) const;
+
 	void CmdCopy(const Ptr<BufferBase> &src, const Ptr<BufferBase> &dst,
 	             const std::vector<VkBufferCopy> &regions) const;
 
