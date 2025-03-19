@@ -12,8 +12,8 @@ DescriptorSetWrite DescriptorSetWrite::WriteBuffers(const Ptr<DescriptorSet> &de
 	    .dstSet = descriptor_set ? descriptor_set->GetHandle() : VK_NULL_HANDLE,
 	    .dstBinding = binding,
 	    .dstArrayElement = array_element,
-	    .descriptorType = type,
 	    .descriptorCount = (uint32_t)ret.buffer_infos.size(),
+	    .descriptorType = type,
 	    // .pBufferInfo = ret.buffer_infos.data(), // Ignored, will process in GetVkWriteDescriptorSet
 	};
 	return ret;
@@ -28,8 +28,8 @@ DescriptorSetWrite DescriptorSetWrite::WriteImages(const Ptr<DescriptorSet> &des
 	    .dstSet = descriptor_set ? descriptor_set->GetHandle() : VK_NULL_HANDLE,
 	    .dstBinding = binding,
 	    .dstArrayElement = array_element,
-	    .descriptorType = type,
 	    .descriptorCount = (uint32_t)ret.image_infos.size(),
+	    .descriptorType = type,
 	    // .pImageInfo = ret.image_infos.data(), // Ignored, will process in GetVkWriteDescriptorSet
 	};
 	return ret;
