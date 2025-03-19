@@ -109,6 +109,7 @@ public:
 	VkImageMemoryBarrier2 GetMemoryBarrier2(const VkImageSubresourceRange &region, //
 	                                        VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
 	                                        VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask,
+	                                        VkImageLayout old_layout, VkImageLayout new_layout,
 	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
 		return VkImageMemoryBarrier2{
@@ -117,6 +118,8 @@ public:
 		    .srcAccessMask = src_access_mask,
 		    .dstStageMask = dst_stage_mask,
 		    .dstAccessMask = dst_access_mask,
+		    .oldLayout = old_layout,
+		    .newLayout = new_layout,
 		    .srcQueueFamilyIndex = src_queue_family,
 		    .dstQueueFamilyIndex = dst_queue_family,
 		    .image = m_image,
@@ -127,10 +130,11 @@ public:
 	VkImageMemoryBarrier2 GetMemoryBarrier2(VkImageAspectFlags aspect_mask, //
 	                                        VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
 	                                        VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask,
+	                                        VkImageLayout old_layout, VkImageLayout new_layout,
 	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
 		return GetMemoryBarrier2(GetSubresourceRange(aspect_mask), src_stage_mask, src_access_mask, dst_stage_mask,
-		                         dst_access_mask, src_queue_family, dst_queue_family);
+		                         dst_access_mask, old_layout, new_layout, src_queue_family, dst_queue_family);
 	}
 
 	inline VkFramebufferAttachmentImageInfo GetFramebufferAttachmentImageInfo() const {
