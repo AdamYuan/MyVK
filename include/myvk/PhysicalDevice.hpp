@@ -18,22 +18,26 @@ struct PhysicalDeviceProperties {
 	VkPhysicalDeviceProperties vk10{};
 	VkPhysicalDeviceVulkan11Properties vk11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES, &vk12};
 	VkPhysicalDeviceVulkan12Properties vk12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES, &vk13};
-	VkPhysicalDeviceVulkan13Properties vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES};
+	VkPhysicalDeviceVulkan13Properties vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES, &vk14};
+	VkPhysicalDeviceVulkan14Properties vk14{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_PROPERTIES};
 	inline PhysicalDeviceProperties() = default;
 	inline PhysicalDeviceProperties(const PhysicalDeviceProperties &r)
-	    : vk10{r.vk10}, vk11{r.vk11}, vk12{r.vk12}, vk13{r.vk13} {
+	    : vk10{r.vk10}, vk11{r.vk11}, vk12{r.vk12}, vk13{r.vk13}, vk14{r.vk14} {
 		vk11.pNext = &vk12;
 		vk12.pNext = &vk13;
-		vk13.pNext = nullptr;
+		vk13.pNext = &vk14;
+		vk14.pNext = nullptr;
 	}
 	inline PhysicalDeviceProperties &operator=(const PhysicalDeviceProperties &r) {
 		vk10 = r.vk10;
 		vk11 = r.vk11;
 		vk12 = r.vk12;
 		vk13 = r.vk13;
+		vk14 = r.vk14;
 		vk11.pNext = &vk12;
 		vk12.pNext = &vk13;
-		vk13.pNext = nullptr;
+		vk13.pNext = &vk14;
+		vk14.pNext = nullptr;
 		return *this;
 	}
 };
@@ -41,22 +45,26 @@ struct PhysicalDeviceFeatures {
 	VkPhysicalDeviceFeatures vk10{};
 	VkPhysicalDeviceVulkan11Features vk11{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES, &vk12};
 	VkPhysicalDeviceVulkan12Features vk12{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES, &vk13};
-	VkPhysicalDeviceVulkan13Features vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+	VkPhysicalDeviceVulkan13Features vk13{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES, &vk14};
+	VkPhysicalDeviceVulkan14Features vk14{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES};
 	inline PhysicalDeviceFeatures() = default;
 	inline PhysicalDeviceFeatures(const PhysicalDeviceFeatures &r)
-	    : vk10{r.vk10}, vk11{r.vk11}, vk12{r.vk12}, vk13{r.vk13} {
+	    : vk10{r.vk10}, vk11{r.vk11}, vk12{r.vk12}, vk13{r.vk13}, vk14{r.vk14} {
 		vk11.pNext = &vk12;
 		vk12.pNext = &vk13;
-		vk13.pNext = nullptr;
+		vk13.pNext = &vk14;
+		vk14.pNext = nullptr;
 	}
 	inline PhysicalDeviceFeatures &operator=(const PhysicalDeviceFeatures &r) {
 		vk10 = r.vk10;
 		vk11 = r.vk11;
 		vk12 = r.vk12;
 		vk13 = r.vk13;
+		vk14 = r.vk14;
 		vk11.pNext = &vk12;
 		vk12.pNext = &vk13;
-		vk13.pNext = nullptr;
+		vk13.pNext = &vk14;
+		vk14.pNext = nullptr;
 		return *this;
 	}
 };
