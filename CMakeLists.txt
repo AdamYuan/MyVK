@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 project(MyVK)
 
-option(MYVK_TESTING "Testing" ON)
+set(MYVK_TESTING OFF)
 
 set(CMAKE_CXX_STANDARD 20)
 
