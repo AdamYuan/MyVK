@@ -286,6 +286,23 @@ void CommandBuffer::CmdPipelineBarrier(VkPipelineStageFlags src_stage, VkPipelin
 	                     image_memory_barriers.data());
 }
 
+void CommandBuffer::CmdPipelineBarrier2(const std::vector<VkMemoryBarrier2> &memory_barriers,
+                                        const std::vector<VkBufferMemoryBarrier2> &buffer_memory_barriers,
+                                        const std::vector<VkImageMemoryBarrier2> &image_memory_barriers,
+                                        VkDependencyFlags dependency_flags) const {
+	VkDependencyInfo dependency_info = {
+	    .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+	    .dependencyFlags = dependency_flags,
+	    .memoryBarrierCount = (uint32_t)memory_barriers.size(),
+	    .pMemoryBarriers = memory_barriers.data(),
+	    .bufferMemoryBarrierCount = (uint32_t)buffer_memory_barriers.size(),
+	    .pBufferMemoryBarriers = buffer_memory_barriers.data(),
+	    .imageMemoryBarrierCount = (uint32_t)image_memory_barriers.size(),
+	    .pImageMemoryBarriers = image_memory_barriers.data(),
+	};
+	vkCmdPipelineBarrier2(m_command_buffer, &dependency_info);
+}
+
 void CommandBuffer::CmdBindIndexBuffer(const Ptr<BufferBase> &buffer, VkDeviceSize offset, VkIndexType type) const {
 	vkCmdBindIndexBuffer(m_command_buffer, buffer->GetHandle(), offset, type);
 }

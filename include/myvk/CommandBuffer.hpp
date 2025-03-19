@@ -134,6 +134,11 @@ public:
 	                        const std::vector<VkBufferMemoryBarrier> &buffer_memory_barriers,
 	                        const std::vector<VkImageMemoryBarrier> &image_memory_barriers) const;
 
+	void CmdPipelineBarrier2(const std::vector<VkMemoryBarrier2> &memory_barriers,
+	                         const std::vector<VkBufferMemoryBarrier2> &buffer_memory_barriers,
+	                         const std::vector<VkImageMemoryBarrier2> &image_memory_barriers,
+	                         VkDependencyFlags dependency_flags = 0) const;
+
 	void CmdBlitImage(const Ptr<ImageBase> &src, const Ptr<ImageBase> &dst, const VkImageBlit &blit,
 	                  VkFilter filter) const;
 
