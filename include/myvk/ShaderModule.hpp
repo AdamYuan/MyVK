@@ -48,7 +48,8 @@ public:
 
 	const Ptr<Device> &GetDevicePtr() const override { return m_device_ptr; }
 
-	VkPipelineShaderStageCreateInfo GetPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage) const;
+	VkPipelineShaderStageCreateInfo GetPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage,
+	                                                                 VkPipelineShaderStageCreateFlags flags = 0) const;
 
 	~ShaderModule() override;
 };
