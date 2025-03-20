@@ -31,9 +31,11 @@ inline VkAccessFlags2 GetWriteAccessMask2(VkAccessFlags2 access_mask) {
 	return access_mask & (~kReadonlyAccessMask);
 }
 
+inline bool IsAccessMaskReadOnly2(VkAccessFlags2 access_mask) { return GetWriteAccessMask2(access_mask) == 0; }
+
 struct BufferSyncState {
-	VkPipelineStageFlags2 stage_mask{};
-	VkAccessFlags2 access_mask{};
+	VkPipelineStageFlags2 stage_mask{VK_PIPELINE_STAGE_2_NONE};
+	VkAccessFlags2 access_mask{VK_ACCESS_2_NONE};
 
 	BufferSyncState &operator|=(const BufferSyncState &r) {
 		stage_mask |= r.stage_mask;
@@ -48,8 +50,8 @@ struct BufferSyncState {
 };
 
 struct ImageSyncState {
-	VkPipelineStageFlags2 stage_mask{};
-	VkAccessFlags2 access_mask{};
+	VkPipelineStageFlags2 stage_mask{VK_PIPELINE_STAGE_2_NONE};
+	VkAccessFlags2 access_mask{VK_ACCESS_2_NONE};
 	VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
 
 	ImageSyncState &operator|=(const ImageSyncState &r) {
