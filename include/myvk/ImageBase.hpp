@@ -113,7 +113,7 @@ public:
 	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
 		return VkImageMemoryBarrier2{
-		    .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+		    .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
 		    .srcStageMask = src_stage_mask,
 		    .srcAccessMask = src_access_mask,
 		    .dstStageMask = dst_stage_mask,
