@@ -7,7 +7,7 @@ Ptr<Instance> Instance::Create(const std::vector<const char *> &f_extensions, bo
 	auto ret = std::make_shared<Instance>();
 
 	VkApplicationInfo app_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
-	app_info.apiVersion = VK_API_VERSION_1_3;
+	app_info.apiVersion = VK_API_VERSION_1_4;
 
 	VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
 	create_info.pApplicationInfo = &app_info;
