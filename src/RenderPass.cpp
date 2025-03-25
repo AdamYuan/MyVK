@@ -194,7 +194,7 @@ RenderPassState::SubpassAttachmentHandle RenderPassState::SubpassAttachmentHandl
 	return *this;
 }
 
-void RenderPassState2::SetAttachment(uint32_t id, const AttachmentInfo &info) {
+RenderPassState2 &RenderPassState2::SetAttachment(uint32_t id, const AttachmentInfo &info) {
 	auto &attachment = attachments[id];
 	attachment.format = info.format;
 	attachment.samples = info.samples;
@@ -204,8 +204,9 @@ void RenderPassState2::SetAttachment(uint32_t id, const AttachmentInfo &info) {
 	attachment.storeOp = info.store.op;
 	attachment.stencilStoreOp = info.store.stencilOp;
 	attachment.finalLayout = info.store.layout;
+	return *this;
 }
-void RenderPassState2::SetSubpass(uint32_t id, const SubpassInfo &info) {
+RenderPassState2 &RenderPassState2::SetSubpass(uint32_t id, const SubpassInfo &info) {
 	auto &subpass = subpasses[id];
 	auto &attachment = subpass_attachments[id];
 	subpass.pipelineBindPoint = info.pipeline_bind_point;
@@ -260,8 +261,9 @@ void RenderPassState2::SetSubpass(uint32_t id, const SubpassInfo &info) {
 		return std::nullopt;
 	}();
 	attachment.preserve_attachment_refs = info.preserve_attachment_refs;
+	return *this;
 }
-void RenderPassState2::SetDependency(uint32_t id, const DependencyInfo &info) {
+RenderPassState2 &RenderPassState2::SetDependency(uint32_t id, const DependencyInfo &info) {
 	auto &dependency = dependencies[id];
 	auto &barrier = dependency_barriers[id];
 	dependency.srcSubpass = info.src.subpass;
@@ -271,6 +273,7 @@ void RenderPassState2::SetDependency(uint32_t id, const DependencyInfo &info) {
 	barrier.dstStageMask = info.dst.sync.stage_mask;
 	barrier.dstAccessMask = info.dst.sync.access_mask;
 	dependency.dependencyFlags = info.dependency_flags;
+	return *this;
 }
 VkRenderPassCreateInfo2 RenderPassState2::GetRenderPassCreateInfo() const {
 	assert(dependency_barriers.size() == GetDependencyCount());

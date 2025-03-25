@@ -234,34 +234,37 @@ struct RenderPassState2 {
 	mutable std::vector<VkSubpassDependency2> dependencies;
 	std::vector<VkMemoryBarrier2> dependency_barriers; // Same size as dependencies
 
-	void SetAttachmentCount(uint32_t count) {
+	RenderPassState2 &SetAttachmentCount(uint32_t count) {
 		attachments.resize(count, VkAttachmentDescription2{
 		                              .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
 		                          });
+		return *this;
 	}
 	uint32_t GetAttachmentCount() const { return attachments.size(); }
-	void SetAttachment(uint32_t id, const AttachmentInfo &info);
+	RenderPassState2 &SetAttachment(uint32_t id, const AttachmentInfo &info);
 
-	void SetSubpassCount(uint32_t count) {
+	RenderPassState2 &SetSubpassCount(uint32_t count) {
 		subpasses.resize(count, VkSubpassDescription2{
 		                            .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
 		                            .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 		                        });
 		subpass_attachments.resize(count);
+		return *this;
 	}
 	uint32_t GetSubpassCount() const { return subpasses.size(); }
-	void SetSubpass(uint32_t id, const SubpassInfo &info);
+	RenderPassState2 &SetSubpass(uint32_t id, const SubpassInfo &info);
 
-	void SetDependencyCount(uint32_t count) {
+	RenderPassState2 &SetDependencyCount(uint32_t count) {
 		dependencies.resize(count, VkSubpassDependency2{
 		                               .sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2,
 		                           });
 		dependency_barriers.resize(count, VkMemoryBarrier2{
 		                                      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
 		                                  });
+		return *this;
 	}
 	uint32_t GetDependencyCount() const { return dependencies.size(); }
-	void SetDependency(uint32_t id, const DependencyInfo &info);
+	RenderPassState2 &SetDependency(uint32_t id, const DependencyInfo &info);
 
 	VkRenderPassCreateInfo2 GetRenderPassCreateInfo() const;
 };
