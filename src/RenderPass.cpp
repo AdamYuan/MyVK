@@ -1,5 +1,6 @@
 #include "myvk/RenderPass.hpp"
 
+#include <algorithm>
 #include <cassert>
 
 namespace myvk {
@@ -193,36 +194,114 @@ RenderPassState::SubpassAttachmentHandle RenderPassState::SubpassAttachmentHandl
 	return *this;
 }
 
+void RenderPassState2::SetAttachment(uint32_t id, const AttachmentInfo &info) {
+	auto &attachment = attachments[id];
+	attachment.format = info.format;
+	attachment.samples = info.samples;
+	attachment.loadOp = info.load.op;
+	attachment.stencilLoadOp = info.load.stencilOp;
+	attachment.initialLayout = info.load.layout;
+	attachment.storeOp = info.store.op;
+	attachment.stencilStoreOp = info.store.stencilOp;
+	attachment.finalLayout = info.store.layout;
+}
+void RenderPassState2::SetSubpass(uint32_t id, const SubpassInfo &info) {
+	auto &subpass = subpasses[id];
+	auto &attachment = subpass_attachments[id];
+	subpass.pipelineBindPoint = info.pipeline_bind_point;
+	attachment.input_attachment_refs = [&info] {
+		std::vector<VkAttachmentReference2> refs;
+		refs.reserve(info.input_attachment_refs.size());
+		for (auto &ref : info.input_attachment_refs) {
+			refs.push_back({
+			    .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+			    .attachment = ref.attachment,
+			    .layout = ref.layout,
+			    .aspectMask = ref.aspect_mask,
+			});
+		}
+		return refs;
+	}();
+	attachment.color_attachment_refs = [&info] {
+		std::vector<VkAttachmentReference2> refs;
+		refs.reserve(info.color_attachment_refs.size());
+		for (auto &ref : info.color_attachment_refs) {
+			refs.push_back({
+			    .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+			    .attachment = ref.attachment,
+			    .layout = ref.layout,
+			});
+		}
+		return refs;
+	}();
+	attachment.resolve_attachment_refs = [&info] {
+		std::vector<VkAttachmentReference2> refs;
+		if (std::any_of(info.color_attachment_refs.begin(), info.color_attachment_refs.end(),
+		                [](const auto &ref) { return ref.resolveAttachment != VK_ATTACHMENT_UNUSED; })) {
+			refs.reserve(info.color_attachment_refs.size());
+			for (auto &ref : info.color_attachment_refs) {
+				refs.push_back({
+				    .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+				    .attachment = ref.resolveAttachment,
+				    .layout = ref.resolveLayout,
+				});
+			}
+		}
+		return refs;
+	}();
+	attachment.opt_depth_stencil_attachment_ref = [&info]() -> std::optional<VkAttachmentReference2> {
+		const auto &opt_ref = info.opt_depth_stencil_attachment_ref;
+		if (opt_ref.has_value())
+			return VkAttachmentReference2{
+			    .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+			    .attachment = opt_ref->attachment,
+			    .layout = opt_ref->layout,
+			};
+		return std::nullopt;
+	}();
+	attachment.preserve_attachment_refs = info.preserve_attachment_refs;
+}
+void RenderPassState2::SetDependency(uint32_t id, const DependencyInfo &info) {
+	auto &dependency = dependencies[id];
+	auto &barrier = dependency_barriers[id];
+	dependency.srcSubpass = info.src.subpass;
+	barrier.srcStageMask = info.src.sync.stage_mask;
+	barrier.srcAccessMask = info.src.sync.access_mask;
+	dependency.dstSubpass = info.dst.subpass;
+	barrier.dstStageMask = info.dst.sync.stage_mask;
+	barrier.dstAccessMask = info.dst.sync.access_mask;
+	dependency.dependencyFlags = info.dependency_flags;
+}
 VkRenderPassCreateInfo2 RenderPassState2::GetRenderPassCreateInfo() const {
 	assert(dependency_barriers.size() == GetDependencyCount());
-	assert(subpass_infos.size() == GetSubpassCount());
+	assert(subpass_attachments.size() == GetSubpassCount());
 
 	for (uint32_t subpass_id = 0; subpass_id < GetSubpassCount(); ++subpass_id) {
 		auto &subpass = subpasses[subpass_id];
-		const auto &subpass_info = subpass_infos[subpass_id];
+		const auto &subpass_att = subpass_attachments[subpass_id];
 
 		// Input Attachments
-		subpass.inputAttachmentCount = subpass_info.input_attachment_refs.size();
-		subpass.pInputAttachments = subpass_info.input_attachment_refs.data();
+		subpass.inputAttachmentCount = subpass_att.input_attachment_refs.size();
+		subpass.pInputAttachments = subpass_att.input_attachment_refs.data();
 
 		// Color (+ Resolve) Attachments
-		subpass.colorAttachmentCount = subpass_info.color_attachment_refs.size();
-		subpass.pColorAttachments = subpass_info.color_attachment_refs.data();
+		subpass.colorAttachmentCount = subpass_att.color_attachment_refs.size();
+		subpass.pColorAttachments = subpass_att.color_attachment_refs.data();
 		subpass.pResolveAttachments =
-		    subpass_info.resolve_attachment_refs.empty() ? nullptr : subpass_info.resolve_attachment_refs.data();
+		    subpass_att.resolve_attachment_refs.empty() ? nullptr : subpass_att.resolve_attachment_refs.data();
 
 		if (subpass.pResolveAttachments) {
-			assert(subpass_info.resolve_attachment_refs.size() == subpass.colorAttachmentCount);
+			assert(subpass_att.resolve_attachment_refs.size() == subpass.colorAttachmentCount);
 		}
 
 		// Depth-Stencil Attachment
-		subpass.pDepthStencilAttachment = subpass_info.opt_depth_stencil_attachment_ref.has_value()
-		                                      ? &subpass_info.opt_depth_stencil_attachment_ref.value()
+		subpass.pDepthStencilAttachment = subpass_att.opt_depth_stencil_attachment_ref.has_value()
+		                                      ? &subpass_att.opt_depth_stencil_attachment_ref.value()
 		                                      : nullptr;
 
 		// Preserve Attachments
-		subpass.preserveAttachmentCount = subpass_info.preserve_attachment_refs.size();
-		subpass.pPreserveAttachments = subpass_info.preserve_attachment_refs.data();
+		subpass.preserveAttachmentCount = subpass_att.preserve_attachment_refs.size();
+		subpass.pPreserveAttachments = subpass_att.preserve_attachment_refs.data();
 	}
 
 	for (uint32_t dependency_id = 0; dependency_id < GetDependencyCount(); ++dependency_id) {

@@ -2,6 +2,7 @@
 #define MYVK_RENDER_PASS_HPP
 
 #include "DeviceObjectBase.hpp"
+#include "SyncHelper.hpp"
 #include "volk.h"
 #include <memory>
 
@@ -31,7 +32,7 @@ public:
 	~RenderPass() override;
 };
 
-[[deprecated]] class RenderPassState {
+class [[deprecated]] RenderPassState {
 public:
 	class SubpassAttachmentHandle {
 	private:
@@ -179,38 +180,59 @@ public:
 
 struct RenderPassState2 {
 	struct SubpassInfo {
-		std::vector<VkAttachmentReference2> input_attachment_refs;
-		std::vector<VkAttachmentReference2> color_attachment_refs;
-		std::vector<VkAttachmentReference2> resolve_attachment_refs; // Empty or Same size as color_attachment_refs
-		std::optional<VkAttachmentReference2> opt_depth_stencil_attachment_ref;
+		struct InputAttachmentRef {
+			uint32_t attachment;
+			VkImageLayout layout;
+			VkImageAspectFlags aspect_mask;
+		};
+		struct ColorAttachmentRef {
+			uint32_t attachment{};
+			VkImageLayout layout{};
+			uint32_t resolveAttachment{VK_ATTACHMENT_UNUSED};
+			VkImageLayout resolveLayout{};
+		};
+		struct AttachmentRef {
+			uint32_t attachment;
+			VkImageLayout layout;
+		};
+		VkPipelineBindPoint pipeline_bind_point{VK_PIPELINE_BIND_POINT_GRAPHICS};
+		std::vector<InputAttachmentRef> input_attachment_refs;
+		std::vector<ColorAttachmentRef> color_attachment_refs;
+		std::optional<AttachmentRef> opt_depth_stencil_attachment_ref;
 		std::vector<uint32_t> preserve_attachment_refs;
 	};
 	struct DependencyInfo {
-		struct {
-			uint32_t subpass;
-			VkPipelineStageFlags2 stage_mask;
-			VkAccessFlags2 access_mask;
+		struct Sync {
+			uint32_t subpass{};
+			MemorySyncState sync{};
 		} src{}, dst{};
 		VkDependencyFlags dependency_flags{VK_DEPENDENCY_BY_REGION_BIT};
 	};
 	struct AttachmentInfo {
 		VkFormat format{};
 		VkSampleCountFlagBits samples{VK_SAMPLE_COUNT_1_BIT};
-		struct {
+		struct Load {
 			VkAttachmentLoadOp op{VK_ATTACHMENT_LOAD_OP_DONT_CARE}, stencilOp{VK_ATTACHMENT_LOAD_OP_DONT_CARE};
 			VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
 		} load{};
-		struct {
+		struct Store {
 			VkAttachmentStoreOp op{VK_ATTACHMENT_STORE_OP_DONT_CARE}, stencilOp{VK_ATTACHMENT_STORE_OP_DONT_CARE};
 			VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
 		} store{};
 	};
 
+	struct SubpassAttachment {
+		std::vector<VkAttachmentReference2> input_attachment_refs;
+		std::vector<VkAttachmentReference2> color_attachment_refs;
+		std::vector<VkAttachmentReference2> resolve_attachment_refs; // Empty or Same size as color_attachment_refs
+		std::optional<VkAttachmentReference2> opt_depth_stencil_attachment_ref;
+		std::vector<uint32_t> preserve_attachment_refs;
+	};
 	std::vector<VkAttachmentDescription2> attachments;
 	mutable std::vector<VkSubpassDescription2> subpasses;
-	std::vector<SubpassInfo> subpass_infos; // Same size as subpass_descriptions
+	std::vector<SubpassAttachment> subpass_attachments; // Same size as subpasses
 	mutable std::vector<VkSubpassDependency2> dependencies;
-	std::vector<VkMemoryBarrier2> dependency_barriers; // Same size as subpass_dependencies
+	std::vector<VkMemoryBarrier2> dependency_barriers; // Same size as dependencies
 
 	void SetAttachmentCount(uint32_t count) {
 		attachments.resize(count, VkAttachmentDescription2{
@@ -218,41 +240,17 @@ struct RenderPassState2 {
 		                          });
 	}
 	uint32_t GetAttachmentCount() const { return attachments.size(); }
-	void SetAttachment(uint32_t id, const AttachmentInfo &info) {
-		auto &attachment = attachments[id];
-		attachment.format = info.format;
-		attachment.samples = info.samples;
-		attachment.loadOp = info.load.op;
-		attachment.stencilLoadOp = info.load.stencilOp;
-		attachment.initialLayout = info.load.layout;
-		attachment.storeOp = info.store.op;
-		attachment.stencilStoreOp = info.store.stencilOp;
-		attachment.finalLayout = info.store.layout;
-	}
-	AttachmentInfo GetAttachment(uint32_t id) const {
-		const auto &attachment = attachments[id];
-		return AttachmentInfo{
-		    .format = attachment.format,
-		    .samples = attachment.samples,
-		    .load = {.op = attachment.loadOp,
-		             .stencilOp = attachment.stencilLoadOp,
-		             .layout = attachment.initialLayout},
-		    .store = {.op = attachment.storeOp,
-		              .stencilOp = attachment.stencilStoreOp,
-		              .layout = attachment.finalLayout},
-		};
-	}
+	void SetAttachment(uint32_t id, const AttachmentInfo &info);
 
 	void SetSubpassCount(uint32_t count) {
 		subpasses.resize(count, VkSubpassDescription2{
 		                            .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
 		                            .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 		                        });
-		subpass_infos.resize(count);
+		subpass_attachments.resize(count);
 	}
 	uint32_t GetSubpassCount() const { return subpasses.size(); }
-	void SetSubpass(uint32_t id, SubpassInfo info) { subpass_infos[id] = std::move(info); }
-	const SubpassInfo &GetSubpass(uint32_t id) const { return subpass_infos[id]; }
+	void SetSubpass(uint32_t id, const SubpassInfo &info);
 
 	void SetDependencyCount(uint32_t count) {
 		dependencies.resize(count, VkSubpassDependency2{
@@ -263,30 +261,7 @@ struct RenderPassState2 {
 		                                  });
 	}
 	uint32_t GetDependencyCount() const { return dependencies.size(); }
-	void SetDependency(uint32_t id, const DependencyInfo &info) {
-		auto &dependency = dependencies[id];
-		auto &barrier = dependency_barriers[id];
-		dependency.srcSubpass = info.src.subpass;
-		barrier.srcStageMask = info.src.stage_mask;
-		barrier.srcAccessMask = info.src.access_mask;
-		dependency.dstSubpass = info.dst.subpass;
-		barrier.dstStageMask = info.dst.stage_mask;
-		barrier.dstAccessMask = info.dst.access_mask;
-		dependency.dependencyFlags = info.dependency_flags;
-	}
-	DependencyInfo GetDependency(uint32_t id) const {
-		auto &dependency = dependencies[id];
-		auto &barrier = dependency_barriers[id];
-		return DependencyInfo{
-		    .src = {.subpass = dependency.srcSubpass,
-		            .stage_mask = barrier.srcStageMask,
-		            .access_mask = barrier.srcAccessMask},
-		    .dst = {.subpass = dependency.dstSubpass,
-		            .stage_mask = barrier.dstStageMask,
-		            .access_mask = barrier.dstAccessMask},
-		    .dependency_flags = dependency.dependencyFlags,
-		};
-	}
+	void SetDependency(uint32_t id, const DependencyInfo &info);
 
 	VkRenderPassCreateInfo2 GetRenderPassCreateInfo() const;
 };
