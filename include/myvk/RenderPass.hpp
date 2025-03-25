@@ -206,7 +206,7 @@ struct RenderPassState2 {
 			uint32_t subpass{};
 			MemorySyncState sync{};
 		} src{}, dst{};
-		VkDependencyFlags dependency_flags{VK_DEPENDENCY_BY_REGION_BIT};
+		VkDependencyFlags dependency_flags{};
 	};
 	struct AttachmentInfo {
 		VkFormat format{};
@@ -242,6 +242,10 @@ struct RenderPassState2 {
 	}
 	uint32_t GetAttachmentCount() const { return attachments.size(); }
 	RenderPassState2 &SetAttachment(uint32_t id, const AttachmentInfo &info);
+	RenderPassState2 &SetAttachment(uint32_t id, VkFormat format, const AttachmentInfo::Load &load,
+	                                const AttachmentInfo::Store &store) {
+		return SetAttachment(id, {.format = format, .samples = VK_SAMPLE_COUNT_1_BIT, .load = load, .store = store});
+	}
 
 	RenderPassState2 &SetSubpassCount(uint32_t count) {
 		subpasses.resize(count, VkSubpassDescription2{
@@ -265,6 +269,20 @@ struct RenderPassState2 {
 	}
 	uint32_t GetDependencyCount() const { return dependencies.size(); }
 	RenderPassState2 &SetDependency(uint32_t id, const DependencyInfo &info);
+	RenderPassState2 &SetFramebufferDependency(uint32_t id, const DependencyInfo::Sync &src,
+	                                           const DependencyInfo::Sync &dst) {
+		return SetDependency(id, {.src = src, .dst = dst, .dependency_flags = VK_DEPENDENCY_BY_REGION_BIT});
+	}
+	RenderPassState2 &SetSrcExternalDependency(uint32_t id, const MemorySyncState &srcMemorySync,
+	                                           const DependencyInfo::Sync &dst) {
+		return SetDependency(
+		    id, {.src = {.subpass = VK_SUBPASS_EXTERNAL, .sync = srcMemorySync}, .dst = dst, .dependency_flags = 0});
+	}
+	RenderPassState2 &SetDstExternalDependency(uint32_t id, const DependencyInfo::Sync &src,
+	                                           const MemorySyncState &dstMemorySync) {
+		return SetDependency(
+		    id, {.src = src, .dst = {.subpass = VK_SUBPASS_EXTERNAL, .sync = dstMemorySync}, .dependency_flags = 0});
+	}
 
 	VkRenderPassCreateInfo2 GetRenderPassCreateInfo() const;
 };
