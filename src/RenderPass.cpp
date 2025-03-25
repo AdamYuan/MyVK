@@ -24,6 +24,9 @@ Ptr<RenderPass> RenderPass::Create(const Ptr<Device> &device, const RenderPassSt
 	state.PopRenderPassCreateInfo(&info);
 	return Create(device, info);
 }
+Ptr<RenderPass> RenderPass::Create(const Ptr<Device> &device, const RenderPassState2 &state) {
+	return Create(device, state.GetRenderPassCreateInfo());
+}
 
 RenderPass::~RenderPass() {
 	if (m_render_pass)
@@ -188,6 +191,55 @@ RenderPassState::SubpassAttachmentHandle RenderPassState::SubpassAttachmentHandl
 	m_state_ptr->insert_subpass_dependency(m_state_ptr->get_subpass(src_subpass_str), m_subpass, src_stage, use_stage,
 	                                       src_access, use_access, dependency_flag);
 	return *this;
+}
+
+VkRenderPassCreateInfo2 RenderPassState2::GetRenderPassCreateInfo() const {
+	assert(dependency_barriers.size() == GetDependencyCount());
+	assert(subpass_infos.size() == GetSubpassCount());
+
+	for (uint32_t subpass_id = 0; subpass_id < GetSubpassCount(); ++subpass_id) {
+		auto &subpass = subpasses[subpass_id];
+		const auto &subpass_info = subpass_infos[subpass_id];
+
+		// Input Attachments
+		subpass.inputAttachmentCount = subpass_info.input_attachment_refs.size();
+		subpass.pInputAttachments = subpass_info.input_attachment_refs.data();
+
+		// Color (+ Resolve) Attachments
+		subpass.colorAttachmentCount = subpass_info.color_attachment_refs.size();
+		subpass.pColorAttachments = subpass_info.color_attachment_refs.data();
+		subpass.pResolveAttachments =
+		    subpass_info.resolve_attachment_refs.empty() ? nullptr : subpass_info.resolve_attachment_refs.data();
+
+		if (subpass.pResolveAttachments) {
+			assert(subpass_info.resolve_attachment_refs.size() == subpass.colorAttachmentCount);
+		}
+
+		// Depth-Stencil Attachment
+		subpass.pDepthStencilAttachment = subpass_info.opt_depth_stencil_attachment_ref.has_value()
+		                                      ? &subpass_info.opt_depth_stencil_attachment_ref.value()
+		                                      : nullptr;
+
+		// Preserve Attachments
+		subpass.preserveAttachmentCount = subpass_info.preserve_attachment_refs.size();
+		subpass.pPreserveAttachments = subpass_info.preserve_attachment_refs.data();
+	}
+
+	for (uint32_t dependency_id = 0; dependency_id < GetDependencyCount(); ++dependency_id) {
+		// According to https://registry.khronos.org/VulkanSC/specs/1.0-extensions/man/html/VkSubpassDependency2.html
+		// pNext of VkSubpassDependency2 can only be VkMemoryBarrier2
+		dependencies[dependency_id].pNext = dependency_barriers.data() + dependency_id;
+	}
+
+	return VkRenderPassCreateInfo2{
+	    .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2,
+	    .attachmentCount = GetAttachmentCount(),
+	    .pAttachments = attachments.data(),
+	    .subpassCount = GetSubpassCount(),
+	    .pSubpasses = subpasses.data(),
+	    .dependencyCount = GetDependencyCount(),
+	    .pDependencies = dependencies.data(),
+	};
 }
 
 } // namespace myvk
