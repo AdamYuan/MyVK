@@ -45,6 +45,8 @@ public:
 
 	uint32_t GetArrayLayers() const { return m_array_layers; }
 
+	VkImageAspectFlags GetAllAspects() const { return GetFormatImageAspects(m_format); }
+
 	inline static uint32_t QueryMipLevel(uint32_t w) { return simple_ctz(w); }
 	inline static uint32_t QueryMipLevel(const VkExtent2D &size) { return simple_ctz(size.width | size.height); }
 	inline static uint32_t QueryMipLevel(const VkExtent3D &size) {
@@ -157,6 +159,12 @@ public:
 		                         dst_sync_state.stage_mask, dst_sync_state.access_mask,                      //
 		                         src_sync_state.layout, dst_sync_state.layout,                               //
 		                         src_queue_family, dst_queue_family);
+	}
+
+	VkImageMemoryBarrier2 GetMemoryBarrier2(const ImageSyncState &src_sync_state, const ImageSyncState &dst_sync_state,
+	                                        uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
+	                                        uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
+		return GetMemoryBarrier2(GetAllAspects(), src_sync_state, dst_sync_state, src_queue_family, dst_queue_family);
 	}
 
 	inline VkFramebufferAttachmentImageInfo GetFramebufferAttachmentImageInfo() const {
