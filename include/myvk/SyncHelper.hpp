@@ -53,6 +53,22 @@ inline constexpr bool IsAccessMaskReadOnly2(VkAccessFlags2 access_mask) {
 	return GetWriteAccessMask2(access_mask) == 0;
 }
 
+struct MemorySyncState {
+	VkPipelineStageFlags2 stage_mask{VK_PIPELINE_STAGE_2_NONE};
+	VkAccessFlags2 access_mask{VK_ACCESS_2_NONE};
+
+	constexpr MemorySyncState &operator|=(const MemorySyncState &r) {
+		stage_mask |= r.stage_mask;
+		access_mask |= r.access_mask;
+		return *this;
+	}
+	constexpr MemorySyncState operator|(const MemorySyncState &r) const {
+		auto l = *this;
+		l |= r;
+		return l;
+	}
+};
+
 struct BufferSyncState {
 	VkPipelineStageFlags2 stage_mask{VK_PIPELINE_STAGE_2_NONE};
 	VkAccessFlags2 access_mask{VK_ACCESS_2_NONE};
@@ -178,6 +194,44 @@ inline constexpr VkAccessFlags2 GetAttachmentStoreOpAccessMask2(VkImageAspectFla
 	                                       store_op) |
 	       GetAttachmentStoreOpAccessMask2(aspects & VK_IMAGE_ASPECT_STENCIL_BIT, stencil_store_op);
 }
+
+// MemorySyncState functions, for Subpass Dependency
+
+inline constexpr MemorySyncState GetAttachmentLoadOpSync(VkImageAspectFlags aspects, VkAttachmentLoadOp load_op) {
+	return {.stage_mask = GetAttachmentLoadOpStageMask2(aspects, load_op),
+	        .access_mask = GetAttachmentLoadOpAccessMask2(aspects, load_op)};
+}
+inline constexpr MemorySyncState GetAttachmentLoadOpSync(VkFormat format, VkAttachmentLoadOp load_op) {
+	return GetAttachmentLoadOpSync(GetFormatImageAspects(format), load_op);
+}
+inline constexpr MemorySyncState GetAttachmentLoadOpSync(VkImageAspectFlags aspects, VkAttachmentLoadOp load_op,
+                                                         VkAttachmentLoadOp stencil_load_op) {
+	return {.stage_mask = GetAttachmentLoadOpStageMask2(aspects, load_op, stencil_load_op),
+	        .access_mask = GetAttachmentLoadOpAccessMask2(aspects, load_op, stencil_load_op)};
+}
+inline constexpr MemorySyncState GetAttachmentLoadOpSync(VkFormat format, VkAttachmentLoadOp load_op,
+                                                         VkAttachmentLoadOp stencil_load_op) {
+	return GetAttachmentLoadOpSync(GetFormatImageAspects(format), load_op, stencil_load_op);
+}
+
+inline constexpr MemorySyncState GetAttachmentStoreOpSync(VkImageAspectFlags aspects, VkAttachmentStoreOp store_op) {
+	return {.stage_mask = GetAttachmentStoreOpStageMask2(aspects, store_op),
+	        .access_mask = GetAttachmentStoreOpAccessMask2(aspects, store_op)};
+}
+inline constexpr MemorySyncState GetAttachmentStoreOpSync(VkFormat format, VkAttachmentStoreOp store_op) {
+	return GetAttachmentStoreOpSync(GetFormatImageAspects(format), store_op);
+}
+inline constexpr MemorySyncState GetAttachmentStoreOpSync(VkImageAspectFlags aspects, VkAttachmentStoreOp store_op,
+                                                          VkAttachmentStoreOp stencil_store_op) {
+	return {.stage_mask = GetAttachmentStoreOpStageMask2(aspects, store_op, stencil_store_op),
+	        .access_mask = GetAttachmentStoreOpAccessMask2(aspects, store_op, stencil_store_op)};
+}
+inline constexpr MemorySyncState GetAttachmentStoreOpSync(VkFormat format, VkAttachmentStoreOp store_op,
+                                                          VkAttachmentStoreOp stencil_store_op) {
+	return GetAttachmentStoreOpSync(GetFormatImageAspects(format), store_op, stencil_store_op);
+}
+
+// ImageSyncState functions, for vkCmdPipelineBarrier2
 
 inline constexpr ImageSyncState GetAttachmentLoadOpSync(VkImageAspectFlags aspects, VkAttachmentLoadOp load_op,
                                                         VkImageLayout initial_layout) {
