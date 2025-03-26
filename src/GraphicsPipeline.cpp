@@ -25,7 +25,7 @@ Ptr<GraphicsPipeline> GraphicsPipeline::Create(const Ptr<PipelineLayout> &pipeli
 	ret->m_render_pass_ptr = render_pass;
 
 	VkGraphicsPipelineCreateInfo new_info = create_info;
-	new_info.renderPass = render_pass->GetHandle();
+	new_info.renderPass = render_pass ? render_pass->GetHandle() : VK_NULL_HANDLE;
 	new_info.layout = pipeline_layout->GetHandle();
 
 	if (vkCreateGraphicsPipelines(pipeline_layout->GetDevicePtr()->GetHandle(),
@@ -44,7 +44,7 @@ Ptr<GraphicsPipeline> GraphicsPipeline::Create(const Ptr<PipelineLayout> &pipeli
 
 	VkGraphicsPipelineCreateInfo create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	create_info.renderPass = render_pass->GetHandle();
+	create_info.renderPass = render_pass ? render_pass->GetHandle() : VK_NULL_HANDLE;
 	create_info.layout = pipeline_layout->GetHandle();
 	create_info.stageCount = shader_stages.size();
 	create_info.pStages = shader_stages.data();
