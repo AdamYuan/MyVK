@@ -57,6 +57,7 @@ struct MemorySyncState {
 	VkPipelineStageFlags2 stage_mask{VK_PIPELINE_STAGE_2_NONE};
 	VkAccessFlags2 access_mask{VK_ACCESS_2_NONE};
 
+	constexpr bool operator==(const MemorySyncState &) const = default;
 	constexpr MemorySyncState &operator|=(const MemorySyncState &r) {
 		stage_mask |= r.stage_mask;
 		access_mask |= r.access_mask;
@@ -67,12 +68,14 @@ struct MemorySyncState {
 		l |= r;
 		return l;
 	}
+	constexpr MemorySyncState GetWrite() const { return {stage_mask, GetWriteAccessMask2(access_mask)}; }
 };
 
 struct BufferSyncState {
 	VkPipelineStageFlags2 stage_mask{VK_PIPELINE_STAGE_2_NONE};
 	VkAccessFlags2 access_mask{VK_ACCESS_2_NONE};
 
+	constexpr bool operator==(const BufferSyncState &) const = default;
 	constexpr BufferSyncState &operator|=(const BufferSyncState &r) {
 		stage_mask |= r.stage_mask;
 		access_mask |= r.access_mask;
@@ -83,6 +86,7 @@ struct BufferSyncState {
 		l |= r;
 		return l;
 	}
+	constexpr BufferSyncState GetWrite() const { return {stage_mask, GetWriteAccessMask2(access_mask)}; }
 };
 
 struct ImageSyncState {
@@ -90,6 +94,7 @@ struct ImageSyncState {
 	VkAccessFlags2 access_mask{VK_ACCESS_2_NONE};
 	VkImageLayout layout{VK_IMAGE_LAYOUT_UNDEFINED};
 
+	constexpr bool operator==(const ImageSyncState &) const = default;
 	constexpr ImageSyncState &operator|=(const ImageSyncState &r) {
 		stage_mask |= r.stage_mask;
 		access_mask |= r.access_mask;
@@ -103,7 +108,35 @@ struct ImageSyncState {
 		l |= r;
 		return l;
 	}
+	constexpr ImageSyncState GetWrite() const { return {stage_mask, GetWriteAccessMask2(access_mask), layout}; }
 };
+
+namespace concepts {
+template <typename T>
+concept SyncState =
+    std::same_as<T, MemorySyncState> || std::same_as<T, BufferSyncState> || std::same_as<T, ImageSyncState>;
+}
+
+template <concepts::SyncState To_T, concepts::SyncState From_T> constexpr To_T SyncStateCast(const From_T &from) {
+	if constexpr (std::same_as<From_T, To_T>)
+		return from;
+	else {
+		return To_T{
+		    .stage_mask = from.stage_mask,
+		    .access_mask = from.access_mask,
+		};
+	}
+}
+template <concepts::SyncState From_T>
+constexpr ImageSyncState SyncStateCast(const From_T &from, VkImageLayout layout)
+requires(!std::same_as<From_T, ImageSyncState>)
+{
+	return ImageSyncState{
+	    .stage_mask = from.stage_mask,
+	    .access_mask = from.access_mask,
+	    .layout = layout,
+	};
+}
 
 // Spec 8.5. Render Pass Load Operations
 inline constexpr VkPipelineStageFlags2 GetAttachmentLoadOpStageMask2(VkImageAspectFlags aspects,
@@ -195,6 +228,17 @@ inline constexpr VkAccessFlags2 GetAttachmentStoreOpAccessMask2(VkImageAspectFla
 	       GetAttachmentStoreOpAccessMask2(aspects & VK_IMAGE_ASPECT_STENCIL_BIT, stencil_store_op);
 }
 
+// Spec 8.7. Render Pass Multisample Resolve Operations
+inline constexpr VkPipelineStageFlags2 GetAttachmentResolveStageMask2() {
+	return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+}
+// Multi-Sample Src
+inline constexpr VkAccessFlags2 GetAttachmentResolveSrcAccessMask2() { return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT; }
+// Single-Sample Dst
+inline constexpr VkAccessFlags2 GetAttachmentResolveDstAccessMask2() {
+	return VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+}
+
 // MemorySyncState functions, for Subpass Dependency
 
 inline constexpr MemorySyncState GetAttachmentLoadOpSync(VkImageAspectFlags aspects, VkAttachmentLoadOp load_op) {
@@ -229,6 +273,12 @@ inline constexpr MemorySyncState GetAttachmentStoreOpSync(VkImageAspectFlags asp
 inline constexpr MemorySyncState GetAttachmentStoreOpSync(VkFormat format, VkAttachmentStoreOp store_op,
                                                           VkAttachmentStoreOp stencil_store_op) {
 	return GetAttachmentStoreOpSync(GetFormatImageAspects(format), store_op, stencil_store_op);
+}
+inline constexpr MemorySyncState GetAttachmentResolveSrcSync() {
+	return {.stage_mask = GetAttachmentResolveStageMask2(), .access_mask = GetAttachmentResolveSrcAccessMask2()};
+}
+inline constexpr MemorySyncState GetAttachmentResolveDstSync() {
+	return {.stage_mask = GetAttachmentResolveStageMask2(), .access_mask = GetAttachmentResolveDstAccessMask2()};
 }
 
 // ImageSyncState functions, for vkCmdPipelineBarrier2
@@ -277,6 +327,16 @@ inline constexpr ImageSyncState GetAttachmentStoreOpSync(VkFormat format, VkAtta
                                                          VkAttachmentStoreOp stencil_store_op,
                                                          VkImageLayout final_layout) {
 	return GetAttachmentStoreOpSync(GetFormatImageAspects(format), store_op, stencil_store_op, final_layout);
+}
+inline constexpr ImageSyncState GetAttachmentResolveSrcSync(VkImageLayout layout) {
+	return {.stage_mask = GetAttachmentResolveStageMask2(),
+	        .access_mask = GetAttachmentResolveSrcAccessMask2(),
+	        .layout = layout};
+}
+inline constexpr ImageSyncState GetAttachmentResolveDstSync(VkImageLayout layout) {
+	return {.stage_mask = GetAttachmentResolveStageMask2(),
+	        .access_mask = GetAttachmentResolveDstAccessMask2(),
+	        .layout = layout};
 }
 
 } // namespace myvk
