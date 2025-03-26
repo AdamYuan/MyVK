@@ -109,18 +109,19 @@ public:
 	                                         const BufferSyncState &dst_sync_state,
 	                                         uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                         uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
-		return GetMemoryBarrier2(region, src_sync_state.stage_mask, GetWriteAccessMask2(src_sync_state.access_mask),
-		                         dst_sync_state.stage_mask, dst_sync_state.access_mask, src_queue_family,
-		                         dst_queue_family);
+		return GetMemoryBarrier2(region,                                                //
+		                         src_sync_state.stage_mask, src_sync_state.access_mask, //
+		                         dst_sync_state.stage_mask, dst_sync_state.access_mask, //
+		                         src_queue_family, dst_queue_family);
 	}
 
 	VkBufferMemoryBarrier2 GetMemoryBarrier2(const BufferSyncState &src_sync_state,
 	                                         const BufferSyncState &dst_sync_state,
 	                                         uint32_t src_queue_family = VK_QUEUE_FAMILY_IGNORED,
 	                                         uint32_t dst_queue_family = VK_QUEUE_FAMILY_IGNORED) const {
-		return GetMemoryBarrier2(src_sync_state.stage_mask, GetWriteAccessMask2(src_sync_state.access_mask),
-		                         dst_sync_state.stage_mask, dst_sync_state.access_mask, src_queue_family,
-		                         dst_queue_family);
+		return GetMemoryBarrier2(src_sync_state.stage_mask, src_sync_state.access_mask, //
+		                         dst_sync_state.stage_mask, dst_sync_state.access_mask, //
+		                         src_queue_family, dst_queue_family);
 	}
 };
 } // namespace myvk
