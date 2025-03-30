@@ -47,7 +47,7 @@ struct PhysicalDeviceFeatures {
 	    : vk10{r.vk10}, vk11{r.vk11}, vk12{r.vk12}, vk13{r.vk13} {
 		vk11.pNext = &vk12;
 		vk12.pNext = &vk13;
-		vk13.pNext = nullptr;
+		// vk13.pNext = nullptr;
 	}
 	inline PhysicalDeviceFeatures &operator=(const PhysicalDeviceFeatures &r) {
 		vk10 = r.vk10;
@@ -59,6 +59,7 @@ struct PhysicalDeviceFeatures {
 		vk13.pNext = nullptr;
 		return *this;
 	}
+	void SetPNext(void *p_next) { vk13.pNext = p_next; }
 };
 class PhysicalDevice : public Base {
 private:
