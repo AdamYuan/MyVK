@@ -39,6 +39,9 @@ struct DescriptorSetWrite {
 	static DescriptorSetWrite WriteStorageImage(const Ptr<DescriptorSet> &descriptor_set,
 	                                            const Ptr<ImageView> &image_view, uint32_t binding,
 	                                            uint32_t array_element = 0);
+	static DescriptorSetWrite WriteSampledImage(const Ptr<DescriptorSet> &descriptor_set,
+	                                            const Ptr<ImageView> &image_view, uint32_t binding,
+	                                            uint32_t array_element = 0);
 	static DescriptorSetWrite WriteInputAttachment(const Ptr<DescriptorSet> &descriptor_set,
 	                                               const Ptr<ImageView> &image_view, uint32_t binding,
 	                                               uint32_t array_element = 0);

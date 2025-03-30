@@ -80,6 +80,16 @@ DescriptorSetWrite DescriptorSetWrite::WriteStorageImage(const Ptr<DescriptorSet
 	                   }},
 	                   VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, binding, array_element);
 }
+DescriptorSetWrite DescriptorSetWrite::WriteSampledImage(const Ptr<DescriptorSet> &descriptor_set,
+                                                         const Ptr<ImageView> &image_view, uint32_t binding,
+                                                         uint32_t array_element) {
+	return WriteImages(descriptor_set,
+	                   {VkDescriptorImageInfo{
+	                       .imageView = image_view->GetHandle(),
+	                       .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+	                   }},
+	                   VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, binding, array_element);
+}
 DescriptorSetWrite DescriptorSetWrite::WriteInputAttachment(const Ptr<DescriptorSet> &descriptor_set,
                                                             const Ptr<ImageView> &image_view, uint32_t binding,
                                                             uint32_t array_element) {
