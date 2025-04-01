@@ -30,7 +30,6 @@ public:
 	                                VkMemoryPropertyFlags memory_properties,
 	                                const std::vector<Ptr<Queue>> &access_queues = {});
 	inline void *GetMemoryHandle() const { return m_mem_handle; }
-	inline VkDeviceMemory GetDeviceMemoryHandle() const { return m_device_memory; }
 
 	inline const Ptr<Device> &GetDevicePtr() const override { return m_device_ptr; }
 };
