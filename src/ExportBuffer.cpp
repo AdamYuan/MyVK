@@ -39,17 +39,21 @@ ExportBuffer::~ExportBuffer() {
 	}
 }
 
-Ptr<ExportBuffer> ExportBuffer::Create(const Ptr<Device> &device, VkDeviceSize size, VkBufferUsageFlags usage,
-                                       VkMemoryPropertyFlags memory_properties,
-                                       const std::vector<Ptr<Queue>> &access_queues) {
-	auto ret = std::make_shared<ExportBuffer>();
-	ret->m_device_ptr = device;
-	ret->m_size = size;
-	ret->m_usage = usage;
+ExportBuffer::Handle ExportBuffer::CreateHandle(const Ptr<Device> &device, VkDeviceSize size, VkBufferUsageFlags usage,
+                                                VkMemoryPropertyFlags memory_properties,
+                                                const std::vector<Ptr<Queue>> &access_queues) {
+	Handle ret{};
+
+	const auto destroy_handle = [&device, &ret] {
+		if (ret.buffer != VK_NULL_HANDLE)
+			vkDestroyBuffer(device->GetHandle(), ret.buffer, nullptr);
+		if (ret.device_memory != VK_NULL_HANDLE)
+			vkFreeMemory(device->GetHandle(), ret.device_memory, nullptr);
+	};
 
 	// Create Buffer
 	VkExternalMemoryHandleTypeFlagBits ext_handle_type = GetMemHandleType();
-	ret->m_ext_handle_type = ext_handle_type;
+	ret.ext_handle_type = ext_handle_type;
 	VkExternalMemoryBufferCreateInfo external_create_info = {
 	    .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO,
 	    .handleTypes = (VkExternalMemoryHandleTypeFlags)ext_handle_type,
@@ -72,11 +76,13 @@ Ptr<ExportBuffer> ExportBuffer::Create(const Ptr<Device> &device, VkDeviceSize s
 		buffer_create_info.pQueueFamilyIndices = queue_families.data();
 	}
 
-	if (vkCreateBuffer(device->GetHandle(), &buffer_create_info, nullptr, &ret->m_buffer) != VK_SUCCESS)
-		return nullptr;
+	if (vkCreateBuffer(device->GetHandle(), &buffer_create_info, nullptr, &ret.buffer) != VK_SUCCESS) {
+		destroy_handle();
+		return {};
+	}
 
 	VkMemoryRequirements mem_requirements;
-	vkGetBufferMemoryRequirements(device->GetHandle(), ret->m_buffer, &mem_requirements);
+	vkGetBufferMemoryRequirements(device->GetHandle(), ret.buffer, &mem_requirements);
 
 	// Create Allocation
 #ifdef _WIN64
@@ -106,15 +112,19 @@ Ptr<ExportBuffer> ExportBuffer::Create(const Ptr<Device> &device, VkDeviceSize s
 	alloc_info.allocationSize = mem_requirements.size;
 	auto opt_memory_type_index =
 	    device->GetPhysicalDevicePtr()->FindMemoryType(mem_requirements.memoryTypeBits, memory_properties);
-	if (!opt_memory_type_index)
-		return nullptr;
+	if (!opt_memory_type_index) {
+		destroy_handle();
+		return {};
+	}
 	alloc_info.memoryTypeIndex = *opt_memory_type_index;
 
-	if (vkAllocateMemory(device->GetHandle(), &alloc_info, nullptr, &ret->m_device_memory) != VK_SUCCESS)
-		return nullptr;
+	if (vkAllocateMemory(device->GetHandle(), &alloc_info, nullptr, &ret.device_memory) != VK_SUCCESS) {
+		destroy_handle();
+		return {};
+	}
 
 	// Bind Buffer
-	vkBindBufferMemory(device->GetHandle(), ret->m_buffer, ret->m_device_memory, 0);
+	vkBindBufferMemory(device->GetHandle(), ret.buffer, ret.device_memory, 0);
 
 	// Get Memory Handle
 #ifdef _WIN64
@@ -132,13 +142,35 @@ Ptr<ExportBuffer> ExportBuffer::Create(const Ptr<Device> &device, VkDeviceSize s
 	int fd = -1;
 	VkMemoryGetFdInfoKHR mem_get_fd_info = {
 	    .sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR,
-	    .memory = ret->m_device_memory,
+	    .memory = ret.device_memory,
 	    .handleType = ext_handle_type,
 	};
-	if (vkGetMemoryFdKHR(device->GetHandle(), &mem_get_fd_info, &fd) != VK_SUCCESS)
-		return nullptr;
-	ret->m_mem_handle = (void *)(uintptr_t)fd;
+	if (vkGetMemoryFdKHR(device->GetHandle(), &mem_get_fd_info, &fd) != VK_SUCCESS) {
+		destroy_handle();
+		return {};
+	}
+	ret.mem_handle = (void *)(uintptr_t)fd;
 #endif
+
+	return ret;
+}
+
+Ptr<ExportBuffer> ExportBuffer::Create(const Ptr<Device> &device, VkDeviceSize size, VkBufferUsageFlags usage,
+                                       VkMemoryPropertyFlags memory_properties,
+                                       const std::vector<Ptr<Queue>> &access_queues) {
+	auto handle = CreateHandle(device, size, usage, memory_properties, access_queues);
+	if (!handle.IsValid())
+		return nullptr;
+
+	auto ret = std::make_shared<ExportBuffer>();
+	ret->m_device_ptr = device;
+	ret->m_size = size;
+	ret->m_usage = usage;
+
+	ret->m_ext_handle_type = handle.ext_handle_type;
+	ret->m_buffer = handle.buffer;
+	ret->m_device_memory = handle.device_memory;
+	ret->m_mem_handle = handle.mem_handle;
 
 	return ret;
 }

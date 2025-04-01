@@ -7,6 +7,19 @@
 namespace myvk {
 
 class ExportBuffer final : public BufferBase {
+public:
+	struct Handle {
+		VkBuffer buffer{VK_NULL_HANDLE};
+		VkDeviceMemory device_memory{VK_NULL_HANDLE};
+		VkExternalMemoryHandleTypeFlagBits ext_handle_type{};
+		void *mem_handle{nullptr};
+		bool IsValid() const { return buffer && device_memory && ext_handle_type && mem_handle; }
+		explicit operator bool() const { return IsValid(); }
+	};
+	static Handle CreateHandle(const Ptr<Device> &device, VkDeviceSize size, VkBufferUsageFlags usage,
+	                           VkMemoryPropertyFlags memory_properties,
+	                           const std::vector<Ptr<Queue>> &access_queues = {});
+
 private:
 	Ptr<Device> m_device_ptr;
 	VkDeviceMemory m_device_memory{VK_NULL_HANDLE};
