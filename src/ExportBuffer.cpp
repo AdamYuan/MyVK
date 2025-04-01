@@ -1,5 +1,6 @@
 #include <myvk/ExportBuffer.hpp>
 
+#include <myvk/ExternalMemoryUtil.hpp>
 #include <myvk/Queue.hpp>
 #include <set>
 
@@ -10,23 +11,6 @@
 #endif /* _WIN64 */
 
 namespace myvk {
-
-inline static VkExternalMemoryHandleTypeFlagBits GetMemHandleType() {
-#ifdef _WIN64
-	return IsWindows8Point1OrGreater() ? VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_BIT
-	                                   : VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_WIN32_KMT_BIT;
-#else
-	return VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
-#endif
-}
-
-const char *ExportBuffer::GetExternalMemoryExtensionName() {
-#ifdef _WIN64
-	return VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME;
-#else
-	return VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME;
-#endif
-}
 
 ExportBuffer::~ExportBuffer() {
 	if (m_buffer != VK_NULL_HANDLE) {
@@ -52,8 +36,7 @@ ExportBuffer::Handle ExportBuffer::CreateHandle(const Ptr<Device> &device, VkDev
 	};
 
 	// Create Buffer
-	VkExternalMemoryHandleTypeFlagBits ext_handle_type = GetMemHandleType();
-	ret.ext_handle_type = ext_handle_type;
+	VkExternalMemoryHandleTypeFlagBits ext_handle_type = GetExternalMemoryHandleType();
 	VkExternalMemoryBufferCreateInfo external_create_info = {
 	    .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO,
 	    .handleTypes = (VkExternalMemoryHandleTypeFlags)ext_handle_type,
@@ -167,7 +150,6 @@ Ptr<ExportBuffer> ExportBuffer::Create(const Ptr<Device> &device, VkDeviceSize s
 	ret->m_size = size;
 	ret->m_usage = usage;
 
-	ret->m_ext_handle_type = handle.ext_handle_type;
 	ret->m_buffer = handle.buffer;
 	ret->m_device_memory = handle.device_memory;
 	ret->m_mem_handle = handle.mem_handle;
