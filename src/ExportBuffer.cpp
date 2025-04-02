@@ -23,17 +23,17 @@ ExportBuffer::~ExportBuffer() {
 	}
 }
 
+void ExportBuffer::DestroyHandle(const Ptr<Device> &device, Handle handle) {
+	if (handle.buffer != VK_NULL_HANDLE)
+		vkDestroyBuffer(device->GetHandle(), handle.buffer, nullptr);
+	if (handle.device_memory != VK_NULL_HANDLE)
+		vkFreeMemory(device->GetHandle(), handle.device_memory, nullptr);
+}
+
 ExportBuffer::Handle ExportBuffer::CreateHandle(const Ptr<Device> &device, VkDeviceSize size, VkBufferUsageFlags usage,
                                                 VkMemoryPropertyFlags memory_properties,
                                                 const std::vector<Ptr<Queue>> &access_queues) {
 	Handle ret{};
-
-	const auto destroy_handle = [&device, &ret] {
-		if (ret.buffer != VK_NULL_HANDLE)
-			vkDestroyBuffer(device->GetHandle(), ret.buffer, nullptr);
-		if (ret.device_memory != VK_NULL_HANDLE)
-			vkFreeMemory(device->GetHandle(), ret.device_memory, nullptr);
-	};
 
 	// Create Buffer
 	VkExternalMemoryHandleTypeFlagBits ext_handle_type = GetExternalMemoryHandleType();
@@ -60,7 +60,7 @@ ExportBuffer::Handle ExportBuffer::CreateHandle(const Ptr<Device> &device, VkDev
 	}
 
 	if (vkCreateBuffer(device->GetHandle(), &buffer_create_info, nullptr, &ret.buffer) != VK_SUCCESS) {
-		destroy_handle();
+		DestroyHandle(device, ret);
 		return {};
 	}
 
@@ -96,13 +96,13 @@ ExportBuffer::Handle ExportBuffer::CreateHandle(const Ptr<Device> &device, VkDev
 	auto opt_memory_type_index =
 	    device->GetPhysicalDevicePtr()->FindMemoryType(mem_requirements.memoryTypeBits, memory_properties);
 	if (!opt_memory_type_index) {
-		destroy_handle();
+		DestroyHandle(device, ret);
 		return {};
 	}
 	alloc_info.memoryTypeIndex = *opt_memory_type_index;
 
 	if (vkAllocateMemory(device->GetHandle(), &alloc_info, nullptr, &ret.device_memory) != VK_SUCCESS) {
-		destroy_handle();
+		DestroyHandle(device, ret);
 		return {};
 	}
 
@@ -129,7 +129,7 @@ ExportBuffer::Handle ExportBuffer::CreateHandle(const Ptr<Device> &device, VkDev
 	    .handleType = ext_handle_type,
 	};
 	if (vkGetMemoryFdKHR(device->GetHandle(), &mem_get_fd_info, &fd) != VK_SUCCESS) {
-		destroy_handle();
+		DestroyHandle(device, ret);
 		return {};
 	}
 	ret.mem_handle = (void *)(uintptr_t)fd;

@@ -18,6 +18,7 @@ public:
 	static Handle CreateHandle(const Ptr<Device> &device, VkDeviceSize size, VkBufferUsageFlags usage,
 	                           VkMemoryPropertyFlags memory_properties,
 	                           const std::vector<Ptr<Queue>> &access_queues = {});
+	static void DestroyHandle(const Ptr<Device> &device, Handle handle);
 
 private:
 	Ptr<Device> m_device_ptr;
