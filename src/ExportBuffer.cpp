@@ -45,7 +45,6 @@ public:
 
 WindowsSecurityAttributes::WindowsSecurityAttributes() {
 	m_winPSecurityDescriptor = (PSECURITY_DESCRIPTOR)calloc(1, SECURITY_DESCRIPTOR_MIN_LENGTH + 2 * sizeof(void **));
-	assert(m_winPSecurityDescriptor != (PSECURITY_DESCRIPTOR)NULL);
 
 	PSID *ppSID = (PSID *)((PBYTE)m_winPSecurityDescriptor + SECURITY_DESCRIPTOR_MIN_LENGTH);
 	PACL *ppACL = (PACL *)((PBYTE)ppSID + sizeof(PSID *));
@@ -175,12 +174,12 @@ ExportBuffer::Handle ExportBuffer::CreateHandle(const Ptr<Device> &device, VkDev
 	VkMemoryGetWin32HandleInfoKHR mem_get_win32_handle_info = {};
 	mem_get_win32_handle_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_WIN32_HANDLE_INFO_KHR;
 	mem_get_win32_handle_info.pNext = nullptr;
-	mem_get_win32_handle_info.memory = ret->m_device_memory;
+	mem_get_win32_handle_info.memory = ret.device_memory;
 	mem_get_win32_handle_info.handleType = ext_handle_type;
 	if (vkGetMemoryWin32HandleKHR(device->GetHandle(), &mem_get_win32_handle_info, &handle) != VK_SUCCESS) {
 		throw std::runtime_error("Failed to retrieve handle for buffer!");
 	}
-	ret->m_mem_handle = (void *)handle;
+	ret.mem_handle = (void *)handle;
 #else
 	int fd = -1;
 	VkMemoryGetFdInfoKHR mem_get_fd_info = {
