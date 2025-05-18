@@ -6,6 +6,8 @@
 #ifndef MYVK_EXTERNALMEMORYUTIL_HPP
 #define MYVK_EXTERNALMEMORYUTIL_HPP
 
+#include "volk.h"
+
 namespace myvk {
 
 constexpr VkExternalMemoryHandleTypeFlagBits GetExternalMemoryHandleType() {
