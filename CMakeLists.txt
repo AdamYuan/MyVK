@@ -45,30 +45,6 @@ add_library(myvk::vulkan ALIAS MyVK_Vulkan)
 target_include_directories(MyVK_Vulkan PUBLIC include)
 target_link_libraries(MyVK_Vulkan PUBLIC MyVK_Dep_Vulkan)
 
-add_library(MyVK_RenderGraph STATIC
-        src/rg/interface/Alias.cpp
-        src/rg/interface/Resource.cpp
-        src/rg/interface/Pass.cpp
-        src/rg/interface/Input.cpp
-        src/rg/interface/Object.cpp
-
-        src/rg/executor/default/Executor.cpp
-        src/rg/executor/default/Collection.cpp
-        src/rg/executor/default/Dependency.cpp
-        src/rg/executor/default/Metadata.cpp
-        src/rg/executor/default/VkAllocation.cpp
-        src/rg/executor/default/Schedule.cpp
-        src/rg/executor/default/VkCommand.cpp
-        src/rg/executor/default/VkDescriptor.cpp
-        src/rg/executor/default/VkRunner.cpp
-)
-add_library(myvk::rg ALIAS MyVK_RenderGraph)
-target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_ENABLE_RG)
-target_link_libraries(MyVK_RenderGraph PUBLIC MyVK_Vulkan)
-if (MYVK_TESTING)
-    target_compile_definitions(MyVK_RenderGraph PUBLIC MYVK_RG_DEBUG)
-endif ()
-
 add_library(MyVK_GLFW STATIC
         src/glfw/Surface.cpp
         src/glfw/Swapchain.cpp
